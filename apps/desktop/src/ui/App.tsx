@@ -1,6 +1,7 @@
 import { type FormEvent, type ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Banknote, ChefHat, LayoutDashboard, LogOut, ReceiptText, Settings, ShoppingBag, Utensils, Users, AlertTriangle, CheckCircle, Clock, TrendingUp, DollarSign, ShoppingCart, Target, MoreVertical } from 'lucide-react';
 import { api } from './api.js';
+import { supabase } from './supabase.ts';
 import type { Order, Product, RestaurantTable } from './types.js';
 import { printReceipt } from './receipt';
 
@@ -99,7 +100,7 @@ export function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [currentCompany, setCurrentCompany] = useState<any>(null);
-  const [loginEmail, setLoginEmail] = useState('admin@sistema.local');
+  const [loginEmail, setLoginEmail] = useState('super@sistema.local');
   const [loginPassword, setLoginPassword] = useState('admin');
   const [loginError, setLoginError] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
@@ -680,14 +681,7 @@ export function App() {
   };
 
   const requestUpdateCompany = async (companyId: string, payload: any) => {
-    return fetch(`${import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3333'}/auth/super/company/${companyId}/update`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${api.getToken()}` },
-      body: JSON.stringify(payload)
-    }).then(async (res) => {
-      if (!res.ok) throw new Error(`Erro ${res.status}`);
-      return res.json();
-    });
+    return api.updateCompanyAsSuperAdmin(companyId, payload);
   };
 
   const exportCompaniesCSV = () => {
@@ -874,10 +868,10 @@ export function App() {
   const getPixBrCode = (pixKey: string, amount: number, txid: string, merchantName: string, merchantCity: string) => {
     const sanitizedMerchantName = merchantName.trim().substring(0, 25).toUpperCase();
     const sanitizedMerchantCity = merchantCity.trim().substring(0, 15).toUpperCase() || 'SAO PAULO';
-    const txidValue = txid.trim().substring(0, 25) || '***';
+    const txidValue = txid.replace(/[^A-Za-z0-9]/g, '').substring(0, 25) || '***';
     const payloadWithoutCrc = [
       formatPixField('00', '01'),
-      formatPixField('01', '12'),
+      formatPixField('01', '11'),
       formatPixField('26', `${formatPixField('00', 'BR.GOV.BCB.PIX')}${formatPixField('01', pixKey)}`),
       formatPixField('52', '0000'),
       formatPixField('53', '986'),
@@ -1011,13 +1005,13 @@ export function App() {
         change: 0,
         paymentMethod: 'PIX'
       });
-      await loadData();
+      await reloadTablesAndOrders();
       setShowPixModal(false);
       setShowCloseModal(false);
       setPixPaymentStatus('PAGO');
     } catch (err) {
       console.error('Erro ao fechar comanda após Pix', err);
-      alert('Erro ao encerrar comanda após confirmação do PIX. Veja o console.');
+      alert('Erro ao encerrar comanda: ' + ((err as any)?.message ?? String(err)));
     }
   };
 
@@ -1034,7 +1028,7 @@ export function App() {
       setShowPixModal(true);
     } catch (err) {
       console.error('Erro ao iniciar pagamento PIX', err);
-      alert('Falha ao iniciar pagamento PIX. Veja o console.');
+      alert('Falha ao iniciar pagamento PIX: ' + ((err as any)?.message ?? String(err)));
     }
   };
 
@@ -1089,7 +1083,7 @@ export function App() {
         paymentMethod: closePaymentMethod
       });
 
-      await loadData();
+      await reloadTablesAndOrders();
       setShowCloseModal(false);
     } catch (err) {
       // eslint-disable-next-line no-console
@@ -1283,22 +1277,21 @@ export function App() {
     return tableStatusLabel[table.status] || table.status;
   };
 
-  // Check if user is already logged in
+  // Check if user is already logged in (session persisted by Supabase)
   useEffect(() => {
-    const token = api.getToken();
-    if (token) {
-      api.me().then((response) => {
-        if (response.user) {
-          setCurrentUser(response.user);
-          setCurrentCompany(response.company ?? null);
-          setIsAuthenticated(true);
-        } else {
-          api.setToken(null);
-        }
-      }).catch(() => {
-        api.setToken(null);
-      });
-    }
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session) {
+        api.me().then((response) => {
+          if (response.user) {
+            setCurrentUser(response.user);
+            setCurrentCompany(response.company ?? null);
+            setIsAuthenticated(true);
+          }
+        }).catch(() => {
+          // session exists but user load failed — stay on login screen
+        });
+      }
+    });
   }, []);
 
   // Listen for unauthorized events emitted by the API layer (e.g. token expired or invalid)
@@ -1394,47 +1387,46 @@ export function App() {
     setLoginPassword('');
   };
 
-  const loadData = async () => {
-    let health;
-    try {
-      health = await api.health();
-      setApiStatus(health.status === 'ok' ? 'online' : 'offline');
-    } catch (error) {
-      setApiStatus('offline');
-      return;
-    }
-
-    const hasKitchenAccess = role ? ['COZINHA', 'CAIXA', 'GERENTE', 'SUPER', 'ADMIN'].includes(role) : false;
-    const hasCashAccess = role ? ['CAIXA', 'FINANCEIRO', 'GERENTE', 'SUPER', 'ADMIN'].includes(role) : false;
-
+  // Recarrega apenas mesas + pedidos (mais frequente — após criar/fechar pedido)
+  const reloadTablesAndOrders = async () => {
     const hasOrdersAccess = role ? ['GARCOM', 'CAIXA', 'GERENTE', 'FINANCEIRO', 'ESTOQUE', 'SUPER', 'ADMIN'].includes(role) : false;
+    const hasKitchenAccess = role ? ['COZINHA', 'CAIXA', 'GERENTE', 'SUPER', 'ADMIN'].includes(role) : false;
 
-    const [tablesResult, productsResult, ordersResult, kitchenResult, cashResult, reportResult] = await Promise.allSettled([
+    const [tablesResult, ordersResult, kitchenResult] = await Promise.allSettled([
       api.tables(),
-      api.products(),
       hasOrdersAccess ? api.orders() : Promise.resolve([] as Order[]),
       hasKitchenAccess ? api.kitchenQueue() : Promise.resolve([] as Order[]),
-      hasCashAccess ? api.cashRegisterCurrent() : Promise.resolve(null),
-      hasReportAccess ? api.reportSummary(reportPeriod) : Promise.resolve(null)
     ]);
 
-    if (tablesResult.status === 'fulfilled') {
-      setTables(tablesResult.value);
-    }
-    if (productsResult.status === 'fulfilled') {
-      setProducts(productsResult.value);
-    }
-    if (ordersResult.status === 'fulfilled') {
-      setOrders(ordersResult.value);
-    }
-    if (kitchenResult.status === 'fulfilled') {
-      setKitchenOrders(kitchenResult.value);
-    }
-    if (cashResult.status === 'fulfilled') {
-      setCashRegister(cashResult.value ?? null);
-    }
-    if (reportResult.status === 'fulfilled') {
-      setReportSummary(reportResult.value ?? null);
+    if (tablesResult.status === 'fulfilled') setTables(tablesResult.value);
+    if (ordersResult.status === 'fulfilled') setOrders(ordersResult.value);
+    if (kitchenResult.status === 'fulfilled') setKitchenOrders(kitchenResult.value);
+  };
+
+  const loadData = async () => {
+    const hasKitchenAccess = role ? ['COZINHA', 'CAIXA', 'GERENTE', 'SUPER', 'ADMIN'].includes(role) : false;
+    const hasCashAccess = role ? ['CAIXA', 'FINANCEIRO', 'GERENTE', 'SUPER', 'ADMIN'].includes(role) : false;
+    const hasOrdersAccess = role ? ['GARCOM', 'CAIXA', 'GERENTE', 'FINANCEIRO', 'ESTOQUE', 'SUPER', 'ADMIN'].includes(role) : false;
+
+    try {
+      const [tablesResult, productsResult, ordersResult, kitchenResult, cashResult, reportResult] = await Promise.allSettled([
+        api.tables(),
+        api.products(),
+        hasOrdersAccess ? api.orders() : Promise.resolve([] as Order[]),
+        hasKitchenAccess ? api.kitchenQueue() : Promise.resolve([] as Order[]),
+        hasCashAccess ? api.cashRegisterCurrent() : Promise.resolve(null),
+        hasReportAccess ? api.reportSummary(reportPeriod) : Promise.resolve(null)
+      ]);
+
+      setApiStatus('online');
+      if (tablesResult.status === 'fulfilled') setTables(tablesResult.value);
+      if (productsResult.status === 'fulfilled') setProducts(productsResult.value);
+      if (ordersResult.status === 'fulfilled') setOrders(ordersResult.value);
+      if (kitchenResult.status === 'fulfilled') setKitchenOrders(kitchenResult.value);
+      if (cashResult.status === 'fulfilled') setCashRegister(cashResult.value ?? null);
+      if (reportResult.status === 'fulfilled') setReportSummary(reportResult.value ?? null);
+    } catch {
+      setApiStatus('offline');
     }
   };
 
@@ -1499,13 +1491,17 @@ export function App() {
     }
 
     await api.createOrder(selectedTable.id, [{ productId, quantity: 1 }]);
-    await loadData();
+    await reloadTablesAndOrders();
   };
 
   const advanceOrder = async (order: Order) => {
-    const nextStatus = order.status === 'ENVIADO' ? 'EM_PREPARO' : order.status === 'EM_PREPARO' ? 'PRONTO' : 'ENTREGUE';
-    await api.updateOrderStatus(order.id, nextStatus);
-    await loadData();
+    try {
+      const nextStatus = order.status === 'ENVIADO' ? 'EM_PREPARO' : order.status === 'EM_PREPARO' ? 'PRONTO' : 'ENTREGUE';
+      await api.updateOrderStatus(order.id, nextStatus);
+      await reloadTablesAndOrders();
+    } catch (err: any) {
+      alert('Erro ao avançar pedido: ' + (err?.message ?? String(err)));
+    }
   };
 
   const createProduct = async (event: FormEvent<HTMLFormElement>) => {
@@ -1573,7 +1569,7 @@ export function App() {
                   type="email"
                   value={loginEmail}
                   onChange={(e) => setLoginEmail(e.target.value)}
-                  placeholder="admin@sistema.local"
+                  placeholder="super@sistema.local"
                   style={{
                     width: '100%',
                     padding: '10px',
@@ -1637,7 +1633,7 @@ export function App() {
             </form>
 
             <p style={{ fontSize: '12px', color: '#52625b', marginTop: '16px', textAlign: 'center' }}>
-              Demo: use admin@sistema.local / 159753
+              Demo: use super@sistema.local / Herick159@
             </p>
           </div>
         </div>
@@ -1884,26 +1880,32 @@ export function App() {
         </div>
       )}
       {showPixModal && pixPayload && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'grid', placeItems: 'center', zIndex: 80 }} onClick={() => setShowPixModal(false)}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'grid', placeItems: 'center', zIndex: 80 }}>
           <div style={{ width: 'min(420px, 96%)', background: '#fff', borderRadius: 8, padding: 20, textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
             <h3>Pagamento PIX</h3>
-            <p style={{ fontSize: 13 }}>Aponte a câmera para o QR code abaixo para pagar com PIX.</p>
+            <p style={{ fontSize: 13 }}>Apresente o QR code ao cliente. Após confirmar o recebimento no seu banco, clique em <strong>Confirmar PIX recebido</strong>.</p>
             <div style={{ marginTop: 12 }}>
-              <img src={pixQrUrl ?? undefined} alt="PIX QR" style={{ width: 300, height: 300 }} />
+              <img src={pixQrUrl ?? undefined} alt="PIX QR" style={{ width: 260, height: 260 }} />
             </div>
-            <div style={{ marginTop: 12, fontSize: 12, wordBreak: 'break-word' }}>{pixPayload}</div>
-            <div style={{ marginTop: 12, fontSize: 12, color: '#333' }}>
-              Status do pagamento: <strong>{pixPaymentStatus ?? 'PENDENTE'}</strong>
-            </div>
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 12 }}>
-              <button type="button" className="primary-button" onClick={() => {
+            <div style={{ marginTop: 8, fontSize: 11, wordBreak: 'break-word', color: '#666' }}>{pixPayload}</div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 16, flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className="primary-button"
+                onClick={() => {
+                  if (pixPendingTabId && pixAmount != null) {
+                    void finishPixClose(pixPendingTabId, pixAmount);
+                  }
+                }}
+              >
+                Confirmar PIX recebido
+              </button>
+              <button type="button" className="secondary-button" onClick={() => {
                 navigator.clipboard.writeText(pixPayload ?? '');
                 alert('Payload PIX copiado.');
-              }}>Copiar payload</button>
-              <button type="button" className="secondary-button" onClick={() => {
-                setShowPixModal(false);
-              }}>
-                Fechar
+              }}>Copiar Pix Copia e Cola</button>
+              <button type="button" className="secondary-button" onClick={() => setShowPixModal(false)}>
+                Cancelar
               </button>
             </div>
           </div>

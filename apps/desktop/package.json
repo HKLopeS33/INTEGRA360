@@ -49,18 +49,33 @@
     ],
     "win": {
       "target": [
-        "dir"
-      ]
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "requestedExecutionLevel": "requireAdministrator"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Sistema Shawarma",
+      "installerLanguages": ["pt_BR"],
+      "language": "1046",
+      "license": false,
+      "uninstallDisplayName": "Sistema Shawarma"
     },
     "mac": {
       "target": [
-        "dir"
+        "dmg"
       ],
       "icon": "assets/icon.icns"
     },
     "linux": {
       "target": [
-        "dir"
+        "AppImage"
       ],
       "icon": "assets/icon.png"
     }

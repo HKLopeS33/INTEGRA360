@@ -23,7 +23,7 @@ VALUES (
   'user_super_admin',
   'Super Administrador',
   'super@shawarma.local',
-  'admin',
+  'admin1',
   'SUPER',
   true,
   false,

@@ -4,23 +4,15 @@
   "private": true,
   "description": "Sistema local com integracao web para gestao de restaurante.",
   "workspaces": [
-    "apps/*",
-    "packages/*"
+    "apps/*"
   ],
   "scripts": {
     "dev": "npm run dev --workspace @sistema/desktop",
-    "dev:api": "npm run dev --workspace @sistema/api-local",
     "dev:desktop": "npm run dev --workspace @sistema/desktop",
-    "build": "npm run build --workspaces",
+    "build": "npm run build --workspace @sistema/desktop && npm run build:desktop",
     "build:desktop": "npm run build:electron --workspace @sistema/desktop",
     "lint": "npm run lint --workspaces --if-present",
-    "typecheck": "npm run typecheck --workspaces --if-present",
-    "db:generate": "npm run db:generate --workspace @sistema/database",
-    "db:migrate": "npm run db:migrate --workspace @sistema/database",
-    "db:migrate:supabase": "npm run db:migrate:supabase --workspace @sistema/database",
-    "db:deploy:supabase": "npm run db:deploy:supabase --workspace @sistema/database",
-    "db:seed": "npm run db:seed --workspace @sistema/database",
-    "db:studio": "npm run db:studio --workspace @sistema/database"
+    "typecheck": "npm run typecheck --workspaces --if-present"
   },
   "engines": {
     "node": ">=22"

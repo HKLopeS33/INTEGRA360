@@ -27,8 +27,8 @@ function runCommand(cmd, args = []) {
 
 async function checkAppBuilt() {
   try {
-    const files = await readdir(path.join(distAppDir, 'win-unpacked'));
-    return files.some(f => f.includes('Sistema Shawarma.exe'));
+    const files = await readdir(distAppDir);
+    return files.some(f => f.endsWith('.exe') || f.includes('win-unpacked'));
   } catch {
     return false;
   }
@@ -62,8 +62,9 @@ async function build() {
       }
     }
 
-    console.log('✅ Build complete! App is ready in dist-app/win-unpacked/');
-    console.log('📍 Executable: dist-app/win-unpacked/Sistema Shawarma.exe');
+    console.log('✅ Build completo!');
+    console.log('📍 Instalador: dist-app/Sistema Shawarma Setup 0.1.0.exe');
+    console.log('   Envie esse único arquivo para o cliente instalar.');
   } catch (error) {
     console.error('❌ Build failed:', error.message);
     process.exit(1);
