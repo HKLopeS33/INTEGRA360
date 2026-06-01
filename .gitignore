@@ -10,5 +10,4 @@ build/
 *.db-journal
 *.sqlite
 *.sqlite-journal
-apps/desktop
 coverage/

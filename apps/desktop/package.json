@@ -1,0 +1,68 @@
+{
+  "name": "@sistema/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/main.js",
+  "description": "Desktop application for Sistema Shawarma restaurant management",
+  "author": "Sistema Shawarma",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 5173",
+    "build": "tsc --noEmit && vite build",
+    "build:electron": "node build-app.mjs",
+    "build:app": "electron-builder --publish never",
+    "build:app:dir": "electron-builder --dir",
+    "preview": "vite preview --host 127.0.0.1 --port 4173",
+    "electron:dev": "electron .",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint \"src/**/*.{ts,tsx}\""
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "^4.5.1",
+    "lucide-react": "^0.511.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.1.6",
+    "@types/react-dom": "^19.1.5",
+    "electron": "36.4.0",
+    "electron-builder": "^25.1.8",
+    "eslint": "^9.28.0",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5"
+  },
+  "build": {
+    "appId": "com.sistemashawarma.app",
+    "productName": "Sistema Shawarma",
+    "directories": {
+      "output": "dist-app",
+      "buildResources": "assets"
+    },
+    "files": [
+      "dist/**/*",
+      "dist/main.js",
+      "dist/preload.js",
+      "electron/main.js",
+      "electron/preload.js"
+    ],
+    "win": {
+      "target": [
+        "dir"
+      ]
+    },
+    "mac": {
+      "target": [
+        "dir"
+      ],
+      "icon": "assets/icon.icns"
+    },
+    "linux": {
+      "target": [
+        "dir"
+      ],
+      "icon": "assets/icon.png"
+    }
+  }
+}

@@ -1,0 +1,419 @@
+:root {
+  color: #18201d;
+  background: #eef2ef;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+button {
+  font: inherit;
+}
+
+.app-shell {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+}
+
+.app-shell.authenticated {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  place-items: unset;
+}
+
+.app-shell.login-screen {
+  display: grid;
+  place-items: center;
+}
+
+.sidebar {
+  background: #16211d;
+  color: #f4f7f2;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  padding: 24px;
+}
+
+.brand {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+}
+
+.brand-mark {
+  align-items: center;
+  background: #f1c44e;
+  border-radius: 8px;
+  color: #18201d;
+  display: flex;
+  font-size: 22px;
+  font-weight: 800;
+  height: 44px;
+  justify-content: center;
+  width: 44px;
+}
+
+.brand span,
+.eyebrow {
+  color: #789088;
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.nav-list {
+  display: grid;
+  gap: 8px;
+}
+
+.nav-item,
+.logout-button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  gap: 10px;
+  min-height: 44px;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.nav-item.active,
+.nav-item:hover,
+.logout-button:hover {
+  background: #24342e;
+}
+
+.logout-button {
+  margin-top: auto;
+}
+
+.workspace {
+  padding: 28px;
+}
+
+.topbar {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: 30px;
+}
+
+h2 {
+  font-size: 20px;
+}
+
+.connection {
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 800;
+  padding: 8px 12px;
+}
+
+.connection.online {
+  background: #d9f3df;
+  color: #17612a;
+}
+
+.connection.offline {
+  background: #ffe2df;
+  color: #8b231b;
+}
+
+.content-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(520px, 1.2fr) minmax(360px, 0.8fr);
+}
+
+.module-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.module-grid.two-columns {
+  grid-template-columns: minmax(320px, 0.8fr) minmax(420px, 1.2fr);
+}
+
+.panel {
+  background: #ffffff;
+  border: 1px solid #dbe3de;
+  border-radius: 8px;
+  padding: 18px;
+}
+
+.tables-panel {
+  min-height: 520px;
+}
+
+.kitchen-panel {
+  grid-column: 1 / -1;
+}
+
+.panel-header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.tables-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+}
+
+.table-tile {
+  border: 2px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  display: grid;
+  gap: 8px;
+  min-height: 116px;
+  padding: 14px;
+  text-align: left;
+}
+
+.table-tile.livre {
+  background: #4caf50;
+  color: #ffffff;
+}
+
+.table-tile.amarelo {
+  background: #ffc107;
+  color: #000000;
+}
+
+.table-tile.vermelho {
+  background: #f44336;
+  color: #ffffff;
+}
+
+.table-tile.ocupada {
+  background: #f44336;
+  color: #ffffff;
+}
+
+.table-tile.pronto {
+  background: #ffc107;
+  color: #000000;
+}
+
+.table-tile.reservada {
+  background: #fff2cf;
+}
+
+.table-tile.fechando_conta {
+  background: #e2ebff;
+}
+
+.table-tile.selected {
+  border-color: #18201d;
+  border-width: 3px;
+}
+
+.table-tile span,
+.table-tile small,
+.product-row small,
+.order-card span {
+  color: inherit;
+}
+
+.primary-button,
+.secondary-button,
+.order-card button,
+.kitchen-row button {
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 800;
+  min-height: 40px;
+  padding: 9px 12px;
+}
+
+.primary-button {
+  background: #f1c44e;
+  color: #18201d;
+}
+
+.secondary-button,
+.order-card button,
+.kitchen-row button {
+  background: #e9efeb;
+  color: #18201d;
+}
+
+.product-list,
+.kitchen-list {
+  display: grid;
+  gap: 10px;
+}
+
+.product-row {
+  align-items: center;
+  background: #f8faf8;
+  border: 1px solid #dbe3de;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  min-height: 72px;
+  padding: 12px;
+  text-align: left;
+}
+
+.product-row.static {
+  cursor: default;
+}
+
+.product-row span {
+  display: grid;
+  gap: 4px;
+}
+
+.order-summary {
+  border-top: 1px solid #dbe3de;
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+  padding-top: 16px;
+}
+
+.order-card,
+.kitchen-row {
+  align-items: center;
+  background: #f8faf8;
+  border: 1px solid #dbe3de;
+  border-radius: 8px;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  min-height: 58px;
+  padding: 12px;
+}
+
+.order-card div,
+.kitchen-row {
+  min-width: 0;
+}
+
+.order-card div {
+  display: grid;
+  gap: 3px;
+}
+
+.kitchen-row span {
+  color: #42504a;
+  flex: 1;
+}
+
+.metric-panel {
+  align-content: start;
+  display: grid;
+  gap: 8px;
+  min-height: 160px;
+}
+
+.metric-panel strong {
+  font-size: 34px;
+}
+
+.action-list,
+.settings-list,
+.product-form {
+  display: grid;
+  gap: 12px;
+}
+
+.product-form label {
+  color: #42504a;
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.product-form input,
+.product-form textarea {
+  background: #f8faf8;
+  border: 1px solid #cfd9d3;
+  border-radius: 8px;
+  color: #18201d;
+  font: inherit;
+  min-height: 42px;
+  padding: 10px 12px;
+  resize: vertical;
+}
+
+.product-form input:focus,
+.product-form textarea:focus {
+  border-color: #18201d;
+  outline: 2px solid #f1c44e;
+}
+
+.form-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.settings-list label {
+  align-items: center;
+  background: #f8faf8;
+  border: 1px solid #dbe3de;
+  border-radius: 8px;
+  display: flex;
+  gap: 10px;
+  min-height: 48px;
+  padding: 10px 12px;
+}
+
+.catalog-list {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+@media (max-width: 1100px) {
+  .app-shell.authenticated {
+    grid-template-columns: 92px 1fr;
+  }
+
+  .brand div:last-child,
+  .nav-item,
+  .logout-button {
+    font-size: 0;
+  }
+
+  .content-grid,
+  .module-grid.two-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+}
