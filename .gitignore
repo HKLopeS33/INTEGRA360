@@ -1,0 +1,14 @@
+node_modules/
+dist/
+build/
+.vite/
+.turbo/
+*.log
+.env
+.env.local
+*.db
+*.db-journal
+*.sqlite
+*.sqlite-journal
+apps/desktop
+coverage/

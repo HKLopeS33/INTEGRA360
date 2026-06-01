@@ -1,0 +1,289 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider          = "postgresql"
+  url               = env("DATABASE_URL")
+  shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
+}
+
+model Company {
+  id            String            @id @default(cuid())
+  name          String
+  cnpj          String            @unique
+  email         String            @unique
+  phone         String?
+  address       String?
+  city          String?
+  state         String?
+  country       String?           @default("BR")
+  pixKey        String?
+  active        Boolean           @default(true)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  auditLogs     AuditLog[]
+  cashRegisters CashRegister[]
+  categories    Category[]
+  orders        Order[]
+  payments      PaymentRecord[]
+  products      Product[]
+  tables        RestaurantTable[]
+  subscription  Subscription?
+  tabs          Tab[]
+  users         User[]            @relation("CompanyUsers")
+}
+
+model Subscription {
+  id          String             @id @default(cuid())
+  companyId   String             @unique
+  status      SubscriptionStatus @default(ATIVO)
+  monthlyFee  Decimal            @default(0)
+  expiresAt   DateTime
+  lastRenewed DateTime           @default(now())
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  lastLoginAt DateTime?
+  company     Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+}
+
+model PaymentRecord {
+  id          String        @id @default(cuid())
+  companyId   String
+  amount      Decimal
+  status      PaymentStatus @default(PENDENTE)
+  dueDate     DateTime
+  paidAt      DateTime?
+  renewalDate DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  company     Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id                 String         @id @default(cuid())
+  name               String
+  email              String         @unique
+  passwordHash       String
+  role               UserRole
+  active             Boolean        @default(true)
+  mustChangePassword Boolean        @default(false)
+  companyId          String?
+  managerId          String?
+  lastLoginAt        DateTime?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  auditLogs          AuditLog[]     @relation("UserAudit")
+  cashClosed         CashRegister[] @relation("CashClosedBy")
+  cashOpened         CashRegister[] @relation("CashOpenedBy")
+  orders             Order[]
+  tabsOpened         Tab[]          @relation("TabOpenedBy")
+  company            Company?       @relation("CompanyUsers", fields: [companyId], references: [id])
+  manager            User?          @relation("UserManager", fields: [managerId], references: [id])
+  subordinates       User[]         @relation("UserManager")
+}
+
+model RestaurantTable {
+  id        String      @id @default(cuid())
+  companyId String
+  number    Int
+  name      String
+  capacity  Int
+  status    TableStatus @default(LIVRE)
+  active    Boolean     @default(true)
+  company   Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  tabs      Tab[]
+
+  @@unique([companyId, number])
+}
+
+model Tab {
+  id                 String          @id @default(cuid())
+  companyId          String
+  tableId            String
+  openedById         String
+  status             TabStatus       @default(ABERTA)
+  openedAt           DateTime        @default(now())
+  closedAt           DateTime?
+  receiptNumber      Int?
+  receiptGeneratedAt DateTime?
+  subtotal           Decimal         @default(0)
+  discount           Decimal         @default(0)
+  serviceFee         Decimal         @default(0)
+  total              Decimal         @default(0)
+  orders             Order[]
+  payments           Payment[]
+  company            Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  openedBy           User            @relation("TabOpenedBy", fields: [openedById], references: [id])
+  table              RestaurantTable @relation(fields: [tableId], references: [id])
+}
+
+model Category {
+  id        String    @id @default(cuid())
+  companyId String
+  name      String
+  sort      Int       @default(0)
+  active    Boolean   @default(true)
+  company   Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  products  Product[]
+
+  @@unique([companyId, name])
+}
+
+model Product {
+  id                 String      @id @default(cuid())
+  companyId          String
+  categoryId         String
+  name               String
+  description        String?
+  price              Decimal
+  cost               Decimal     @default(0)
+  internalCode       String?
+  barcode            String?
+  preparationMinutes Int         @default(0)
+  available          Boolean     @default(true)
+  active             Boolean     @default(true)
+  orderItems         OrderItem[]
+  category           Category    @relation(fields: [categoryId], references: [id])
+  company            Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, internalCode])
+}
+
+model Order {
+  id        String      @id @default(cuid())
+  companyId String
+  tabId     String
+  userId    String
+  status    OrderStatus @default(ENVIADO)
+  origin    String      @default("mesa")
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  company   Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  tab       Tab         @relation(fields: [tabId], references: [id])
+  user      User        @relation(fields: [userId], references: [id])
+  items     OrderItem[]
+}
+
+model OrderItem {
+  id        String      @id @default(cuid())
+  orderId   String
+  productId String
+  quantity  Int
+  unitPrice Decimal
+  note      String?
+  status    OrderStatus @default(ENVIADO)
+  createdAt DateTime    @default(now())
+  order     Order       @relation(fields: [orderId], references: [id])
+  product   Product     @relation(fields: [productId], references: [id])
+}
+
+model CashRegister {
+  id            String             @id @default(cuid())
+  companyId     String
+  openedById    String
+  closedById    String?
+  openedAt      DateTime           @default(now())
+  closedAt      DateTime?
+  initialAmount Decimal            @default(0)
+  closingAmount Decimal?
+  status        CashRegisterStatus @default(ABERTO)
+  closedBy      User?              @relation("CashClosedBy", fields: [closedById], references: [id])
+  company       Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  openedBy      User               @relation("CashOpenedBy", fields: [openedById], references: [id])
+  payments      Payment[]
+}
+
+model Payment {
+  id             String        @id @default(cuid())
+  tabId          String
+  cashRegisterId String
+  method         PaymentMethod
+  amount         Decimal
+  status         String        @default("confirmado")
+  createdAt      DateTime      @default(now())
+  cashRegister   CashRegister  @relation(fields: [cashRegisterId], references: [id])
+  tab            Tab           @relation(fields: [tabId], references: [id])
+}
+
+model SyncEvent {
+  id          String    @id @default(cuid())
+  type        String
+  payloadJson String
+  createdAt   DateTime  @default(now())
+  syncedAt    DateTime?
+  attempts    Int       @default(0)
+  error       String?
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  companyId String
+  action    String
+  entity    String
+  entityId  String?
+  dataJson  String?
+  createdAt DateTime @default(now())
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user      User?    @relation("UserAudit", fields: [userId], references: [id])
+}
+
+enum UserRole {
+  ADMIN
+  SUPER
+  GERENTE
+  CAIXA
+  GARCOM
+  COZINHA
+  ESTOQUE
+  FINANCEIRO
+}
+
+enum TableStatus {
+  LIVRE
+  OCUPADA
+  RESERVADA
+  FECHANDO_CONTA
+}
+
+enum TabStatus {
+  ABERTA
+  FECHANDO
+  FECHADA
+  CANCELADA
+}
+
+enum OrderStatus {
+  ENVIADO
+  EM_PREPARO
+  PRONTO
+  ENTREGUE
+  CANCELADO
+}
+
+enum PaymentMethod {
+  DINHEIRO
+  CREDITO
+  DEBITO
+  PIX
+  VOUCHER
+}
+
+enum CashRegisterStatus {
+  ABERTO
+  FECHADO
+}
+
+enum SubscriptionStatus {
+  ATIVO
+  EXPIRADO
+  SUSPENSO
+  CANCELADO
+}
+
+enum PaymentStatus {
+  PENDENTE
+  PAGO
+  INADIMPLENTE
+}

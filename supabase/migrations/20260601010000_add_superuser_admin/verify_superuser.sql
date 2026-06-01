@@ -1,0 +1,1 @@
+select id, email, role, active, "companyId" from "User" where email = 'super@shawarma.local' or role = 'SUPER' order by email;
