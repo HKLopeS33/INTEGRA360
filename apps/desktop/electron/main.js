@@ -3,6 +3,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { writeFile } from 'node:fs/promises';
+import { autoUpdater } from 'electron-updater';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const devUrl = process.env.VITE_DEV_SERVER_URL ?? 'http://127.0.0.1:5173';
@@ -24,7 +25,7 @@ const createWindow = () => {
   if (!app.isPackaged) {
     void window.loadURL(devUrl);
     window.webContents.openDevTools();
-    return;
+    return window;
   }
 
   // In packaged mode, load from dist/index.html
@@ -36,7 +37,6 @@ const createWindow = () => {
   
   void window.loadFile(indexPath).catch(err => {
     console.error('[Electron] Failed to load index.html:', err);
-    // Fallback: show error message
     window.webContents.loadURL(`data:text/html;charset=utf-8,
       <html><body style="background: #f0f0f0; font-family: monospace; padding: 20px;">
         <h2>Error loading application</h2>
@@ -47,6 +47,8 @@ const createWindow = () => {
       </body></html>
     `);
   });
+
+  return window;
 };
 
 ipcMain.handle('save-report-pdf', async (event, html) => {
@@ -102,7 +104,42 @@ ipcMain.handle('preview-report-pdf', async (event, html) => {
   return { canceled: false, filePath: tempPath };
 });
 
-app.whenReady().then(createWindow);
+// ── Auto-updater ──────────────────────────────────────────────
+function setupAutoUpdater(win) {
+  if (!app.isPackaged) return; // só roda no app empacotado
+
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on('update-available', (info) => {
+    win.webContents.send('update-available', info.version);
+  });
+
+  autoUpdater.on('update-downloaded', () => {
+    const choice = dialog.showMessageBoxSync(win, {
+      type: 'info',
+      title: 'Atualização disponível',
+      message: `Uma nova versão foi baixada.\nDeseja reiniciar agora para instalar?`,
+      buttons: ['Reiniciar agora', 'Depois'],
+      defaultId: 0
+    });
+    if (choice === 0) autoUpdater.quitAndInstall();
+  });
+
+  autoUpdater.on('error', (err) => {
+    console.error('[AutoUpdater] erro:', err?.message ?? err);
+  });
+
+  // Verifica atualizações ao iniciar e a cada 2 horas
+  autoUpdater.checkForUpdates().catch(() => {});
+  setInterval(() => autoUpdater.checkForUpdates().catch(() => {}), 2 * 60 * 60 * 1000);
+}
+// ──────────────────────────────────────────────────────────────
+
+app.whenReady().then(() => {
+  const win = createWindow();
+  setupAutoUpdater(win);
+});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
