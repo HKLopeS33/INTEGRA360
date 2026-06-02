@@ -36,30 +36,64 @@ function padLeft(str: string, len: number) {
   return ' '.repeat(len - str.length) + str;
 }
 
+// 58mm térmico — ~32 caracteres por linha em 12px Courier
+const LINE_WIDTH = 32;
+
 export function generateThermalHTML(data: ReceiptData) {
   const now = data.date ? new Date(data.date) : new Date();
   const dateStr = `${now.toLocaleDateString('pt-BR')} ${now.toLocaleTimeString('pt-BR')}`;
 
-  const company = (data.companyName ?? 'MERCADO DO ZÉ').toUpperCase();
-  const cnpj = data.cnpj ?? 'CNPJ: 00.000.000/0001-00';
-  const address = data.address ?? 'Rua das Compras, 123 — Floresta/PE';
-  const phone = data.phone ?? 'Fone: (87) 3333-0000';
-  const receiptNo = data.receiptNumber ? String(data.receiptNumber).padStart(6, '0') : '000000';
-  const consumer = (data.consumer ?? 'CONSUMIDOR FINAL').toUpperCase();
+  const company = (data.companyName ?? 'ESTABELECIMENTO').toUpperCase();
+  const cnpj    = data.cnpj ?? '';
+  const address = data.address ?? '';
+  const phone   = data.phone ?? '';
+  const receiptNo = data.receiptNumber
+    ? String(data.receiptNumber).padStart(6, '0')
+    : '000000';
+  const tableName = data.tableName ? `MESA: ${data.tableName.toUpperCase()}` : '';
+
+  // Itens: nome (max 18), qtd (3), total (9) — total 32
+  const NAME_W  = 18;
+  const QTY_W   = 3;
+  const TOTAL_W = 9;
 
   const itemsLines = data.items
     .map((item) => {
-      const name = item.name.length > 22 ? `${item.name.slice(0, 19)}...` : item.name;
-      const qty = String(item.quantity);
-      const unit = formatCurrency(item.unitPrice).replace('R$\u00A0', 'R$ ');
-      const total = formatCurrency(item.total).replace('R$\u00A0', 'R$ ');
-      return `${padRight(name, 22)} ${padLeft(qty, 3)} ${padLeft(unit, 8)} ${padLeft(total, 8)}`;
+      const rawName = item.name.length > NAME_W
+        ? `${item.name.slice(0, NAME_W - 2)}..`
+        : item.name;
+      const name  = padRight(rawName, NAME_W);
+      const qty   = padLeft(String(item.quantity), QTY_W);
+      const total = padLeft(
+        formatCurrency(item.total).replace('R$ ', 'R$'),
+        TOTAL_W
+      );
+      return `${name} ${qty} ${total}`;
     })
     .join('\n');
 
-  const paymentText = data.paymentMethod ?? 'DINHEIRO';
-  const changeText = data.change != null ? formatCurrency(data.change).replace('R$\u00A0', 'R$ ') : 'R$ 0,00';
-  const totalText = formatCurrency(data.total).replace('R$\u00A0', 'R$ ');
+  // Linha de subtítulo da tabela
+  const headerLine = `${padRight('PRODUTO', NAME_W)} QTD${padLeft('TOTAL', TOTAL_W + 1)}`;
+
+  const sep = '-'.repeat(LINE_WIDTH);
+
+  const paymentText = (data.paymentMethod ?? 'DINHEIRO').toUpperCase();
+  const totalText   = formatCurrency(data.total).replace('R$ ', 'R$');
+  const paidText    = data.paid != null
+    ? formatCurrency(data.paid).replace('R$ ', 'R$')
+    : null;
+  const changeText  = data.change != null
+    ? formatCurrency(data.change).replace('R$ ', 'R$')
+    : null;
+
+  const totalLine  = `${padRight('TOTAL', LINE_WIDTH - totalText.length)}${totalText}`;
+  const payLine    = `${padRight('PAGAMENTO', LINE_WIDTH - paymentText.length)}${paymentText}`;
+  const paidLine   = paidText
+    ? `${padRight('RECEBIDO', LINE_WIDTH - paidText.length)}${paidText}`
+    : '';
+  const changeLine = changeText
+    ? `${padRight('TROCO', LINE_WIDTH - changeText.length)}${changeText}`
+    : '';
 
   return `<!doctype html>
 <html>
@@ -68,53 +102,77 @@ export function generateThermalHTML(data: ReceiptData) {
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Comprovante</title>
   <style>
-    body { font-family: 'Courier New', Courier, monospace; margin: 0; padding: 10px; color: #000; background: #fff; }
-    .ticket { width: 80mm; max-width: 80mm; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 12px;
+      line-height: 1.5;
+      color: #000;
+      background: #fff;
+      padding: 4px 6px;
+      width: 58mm;
+    }
+    .ticket { width: 100%; }
     .center { text-align: center; }
-    .separator { border-top: 1px dashed #000; margin: 8px 0; }
-    .company { font-size: 14px; font-weight: 700; letter-spacing: 1px; margin-bottom: 4px; }
-    .muted { font-size: 10px; line-height: 1.4; }
-    .line { white-space: pre; font-size: 10px; line-height: 1.4; }
-    .footer { font-size: 9px; line-height: 1.4; text-align: center; margin-top: 10px; }
-    .barcode { font-family: monospace; letter-spacing: 2px; margin: 8px 0 0; }
-    @media print { body { margin: 0; } .ticket { width: 80mm; padding: 0; } }
+    .right  { text-align: right; }
+    .sep    { border-top: 1px dashed #000; margin: 5px 0; }
+    .sep-solid { border-top: 1px solid #000; margin: 5px 0; }
+    .company  { font-size: 13px; font-weight: 700; letter-spacing: 1px; margin-bottom: 3px; }
+    .info     { font-size: 11px; line-height: 1.45; }
+    .pre      { white-space: pre; font-size: 11.5px; line-height: 1.5; }
+    .bold     { font-weight: 700; }
+    .footer   { font-size: 10.5px; line-height: 1.5; text-align: center; margin-top: 8px; }
+    @media print {
+      html, body { width: 58mm; margin: 0; padding: 2px 4px; }
+      .ticket { width: 58mm; }
+    }
   </style>
 </head>
 <body>
   <div class="ticket">
+
     <div class="center company">${company}</div>
-    <div class="center muted">${cnpj}</div>
-    <div class="center muted">${address}</div>
-    <div class="center muted">${phone}</div>
-    <div class="separator"></div>
-    <div class="muted"><strong>CUPOM FISCAL Nº ${receiptNo}</strong></div>
-    <div class="muted">DATA/HORA: ${dateStr}</div>
-    <div class="muted">${consumer}</div>
-    <div class="separator"></div>
-    <div class="line">PRODUTO                 QTD  VL.UN    TOTAL</div>
-    <div class="separator"></div>
-    <div class="line">${itemsLines}</div>
-    <div class="separator"></div>
-    <div class="line">TOTAL${padLeft(totalText, 36)}</div>
-    <div class="line">PAGAMENTO${padLeft(paymentText, 28)}</div>
-    <div class="line">TROCO${padLeft(changeText, 33)}</div>
-    <div class="separator"></div>
+    ${cnpj    ? `<div class="center info">${cnpj}</div>` : ''}
+    ${address ? `<div class="center info">${address}</div>` : ''}
+    ${phone   ? `<div class="center info">${phone}</div>` : ''}
+
+    <div class="sep-solid"></div>
+
+    <div class="info"><span class="bold">CUPOM Nº</span> ${receiptNo}</div>
+    <div class="info"><span class="bold">DATA:</span> ${dateStr}</div>
+    ${tableName ? `<div class="info"><span class="bold">${tableName}</span></div>` : ''}
+
+    <div class="sep"></div>
+
+    <div class="pre bold">${headerLine}</div>
+    <div class="sep"></div>
+    <div class="pre">${itemsLines}</div>
+    <div class="sep-solid"></div>
+
+    <div class="pre bold">${totalLine}</div>
+    <div class="sep"></div>
+    <div class="pre">${payLine}</div>
+    ${paidLine   ? `<div class="pre">${paidLine}</div>`   : ''}
+    ${changeLine ? `<div class="pre bold">${changeLine}</div>` : ''}
+
+    <div class="sep-solid"></div>
+
     <div class="footer">
       Obrigado pela preferência!<br>
-      Volte sempre!<br>
-      <div class="barcode">||||| ${String(receiptNo).slice(-5)} |||||</div>
-      00000${String(receiptNo)}<br>
-      <em>DOCUMENTO SEM VALIDADE FISCAL OFICIAL</em>
+      Volte sempre!<br><br>
+      <span style="letter-spacing:3px">||||| ${String(receiptNo).slice(-5)} |||||</span><br>
+      <em style="font-size:10px">SEM VALOR FISCAL</em>
     </div>
+
   </div>
-  <script>window.onload=function(){setTimeout(()=>window.print(),200)}</script>
+  <script>window.onload = function(){ setTimeout(() => window.print(), 250); }</script>
 </body>
 </html>`;
 }
 
 export function printReceipt(data: ReceiptData) {
   const html = generateThermalHTML(data);
-  const w = window.open('', '_blank', 'width=420,height=800');
+  const w = window.open('', '_blank', 'width=300,height=700');
   if (!w) return;
   w.document.open();
   w.document.write(html);

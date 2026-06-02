@@ -1872,7 +1872,16 @@ export function App() {
                     key={opt.value}
                     type="button"
                     className={`close-modal-pay-btn${closePaymentMethod === opt.value ? ' active' : ''}`}
-                    onClick={() => setClosePaymentMethod(opt.value)}
+                    onClick={() => {
+                      setClosePaymentMethod(opt.value);
+                      // Abre QR automaticamente ao selecionar PIX
+                      if (opt.value === 'PIX' && storePixKey) {
+                        const payload = getPixBrCode(storePixKey, total, tabId, storeName, storeAddress || 'SÃO PAULO');
+                        setPixPayload(payload);
+                        setPixQrUrl(getQrCodeSrc(payload));
+                        setShowPixModal(true);
+                      }
+                    }}
                   >
                     <span className="close-modal-pay-icon">{opt.icon}</span>
                     <span>{opt.label}</span>
@@ -1909,6 +1918,12 @@ export function App() {
               </div>
 
               {/* Seção PIX */}
+              {closePaymentMethod === 'PIX' && !storePixKey && (
+                <div className="close-modal-pix" style={{ background: '#fff7e6', border: '1.5px solid #fde68a' }}>
+                  <div className="close-modal-pix-label" style={{ color: '#92400e' }}>⚠️ Chave PIX não configurada</div>
+                  <p style={{ fontSize: 13, color: '#92400e' }}>Acesse Configurações → Chave PIX para habilitar.</p>
+                </div>
+              )}
               {closePaymentMethod === 'PIX' && storePixKey && (
                 <div className="close-modal-pix">
                   <div className="close-modal-pix-label">⚡ Pagamento via PIX</div>
