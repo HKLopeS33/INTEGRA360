@@ -27,7 +27,7 @@ function runCommand(cmd, args = []) {
 async function checkUnpacked() {
   try {
     const files = await readdir(unpackedDir);
-    return files.some(f => f.includes('Sistema Shawarma.exe'));
+    return files.some(f => f.includes('Integra360.exe') || f.includes('.exe'));
   } catch {
     return false;
   }
@@ -44,7 +44,7 @@ async function checkNsisInstaller() {
 
 async function createZip() {
   // Usa PowerShell para criar o ZIP (disponível em qualquer Windows 10+)
-  const zipPath = path.join(distAppDir, 'SistemaShawarma-portable.zip');
+  const zipPath = path.join(distAppDir, 'Integra360-portable.zip');
   console.log('📦 Criando pacote portátil (ZIP)...');
   await runCommand('powershell', [
     '-NoProfile', '-Command',
@@ -85,7 +85,7 @@ async function build() {
       const zipPath = await createZip();
       console.log('\n✅ Build completo!');
       console.log(`📍 Pacote portátil: ${zipPath}`);
-      console.log('   Envie o ZIP para o cliente, ele extrai e executa "Sistema Shawarma.exe" dentro da pasta.\n');
+      console.log('   Envie o ZIP para o cliente, ele extrai e executa "Integra360.exe" dentro da pasta.\n');
     }
   } catch (error) {
     console.error('❌ Build falhou:', error.message);
