@@ -276,6 +276,7 @@ export function App() {
   const [storeCnpj, setStoreCnpj] = useState('');
   const [storeAddress, setStoreAddress] = useState('');
   const [storePhone, setStorePhone] = useState('');
+  const [storeCity, setStoreCity] = useState('');
   const [storePixKey, setStorePixKey] = useState('');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -354,6 +355,7 @@ export function App() {
     setStoreCnpj(localStorage.getItem('storeCnpj') ?? '');
     setStoreAddress(localStorage.getItem('storeAddress') ?? '');
     setStorePhone(localStorage.getItem('storePhone') ?? '');
+    setStoreCity(localStorage.getItem('storeCity') ?? '');
   }, [currentUser]);
 
   useEffect(() => {
@@ -720,6 +722,7 @@ export function App() {
     localStorage.setItem('storeCnpj', storeCnpj);
     localStorage.setItem('storeAddress', storeAddress);
     localStorage.setItem('storePhone', storePhone);
+    localStorage.setItem('storeCity', storeCity);
     showToast('Configurações salvas.', 'success');
   };
 
@@ -990,20 +993,47 @@ export function App() {
     return crc & 0xffff;
   };
 
+  // Remove acentos e caracteres não-ASCII (requisito do Banco Central para o payload PIX)
+  const removeAccents = (str: string) =>
+    str.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\x20-\x7E]/g, '');
+
+  // Normaliza chave PIX:
+  // - Telefone (ex: 87999710850 ou (87) 99971-0850) → +5587999710850
+  // - Email, CPF, CNPJ, EVP → mantém como está (só limpa espaços)
+  const normalizePixKey = (key: string): string => {
+    const clean = key.trim();
+    // Verifica se é telefone: só dígitos, 10 ou 11 chars (sem +55 ainda)
+    const onlyDigits = clean.replace(/\D/g, '');
+    if (/^\d{10,11}$/.test(onlyDigits) && !clean.startsWith('+')) {
+      return `+55${onlyDigits}`;
+    }
+    // Já tem +55
+    if (clean.startsWith('+55') && /^\+55\d{10,11}$/.test(clean)) {
+      return clean;
+    }
+    // Email, CPF (11 dígitos tratados como CPF), CNPJ, EVP — retorna como está
+    return clean;
+  };
+
   const getPixBrCode = (pixKey: string, amount: number, txid: string, merchantName: string, merchantCity: string) => {
-    const sanitizedMerchantName = merchantName.trim().substring(0, 25).toUpperCase();
-    const sanitizedMerchantCity = merchantCity.trim().substring(0, 15).toUpperCase() || 'SAO PAULO';
-    const txidValue = txid.replace(/[^A-Za-z0-9]/g, '').substring(0, 25) || '***';
+    const normalizedKey = normalizePixKey(pixKey);
+    // Remove acentos e limita tamanhos conforme spec do Banco Central
+    const sanitizedName = removeAccents(merchantName.trim()).substring(0, 25).toUpperCase() || 'ESTABELECIMENTO';
+    // Usa só a cidade (não o endereço completo) — pega primeira parte antes de vírgula
+    const cityOnly = (merchantCity || 'SAO PAULO').split(',')[0].split('-')[0].trim();
+    const sanitizedCity = removeAccents(cityOnly).substring(0, 15).toUpperCase() || 'SAO PAULO';
+    const txidValue = txid.replace(/[^A-Za-z0-9]/g, '').substring(0, 25) || 'INTEGRA360';
+
     const payloadWithoutCrc = [
       formatPixField('00', '01'),
-      formatPixField('01', '11'),
-      formatPixField('26', `${formatPixField('00', 'BR.GOV.BCB.PIX')}${formatPixField('01', pixKey)}`),
+      formatPixField('01', '12'),   // 12 = QR dinâmico (recomendado pelo BC para valor fixo)
+      formatPixField('26', `${formatPixField('00', 'BR.GOV.BCB.PIX')}${formatPixField('01', normalizedKey)}`),
       formatPixField('52', '0000'),
       formatPixField('53', '986'),
       formatPixField('54', amount.toFixed(2)),
       formatPixField('58', 'BR'),
-      formatPixField('59', sanitizedMerchantName),
-      formatPixField('60', sanitizedMerchantCity),
+      formatPixField('59', sanitizedName),
+      formatPixField('60', sanitizedCity),
       formatPixField('62', formatPixField('05', txidValue)),
       '6304'
     ].join('');
@@ -1152,7 +1182,7 @@ export function App() {
       setPixPaymentStatus('PENDENTE');
       setPixAmount(response.amount);
       setPixPendingTabId(tabId);
-      const payload = getPixBrCode(storePixKey, response.amount, response.paymentId ?? tabId, storeName, storeAddress || 'SAO PAULO');
+      const payload = getPixBrCode(storePixKey, response.amount, response.paymentId ?? tabId, storeName, storeCity || 'SAO PAULO');
       setPixPayload(payload);
       setPixQrUrl(getQrCodeSrc(payload));
       setShowPixModal(true);
@@ -1897,7 +1927,7 @@ export function App() {
                       setClosePaymentMethod(opt.value);
                       // Abre QR automaticamente ao selecionar PIX
                       if (opt.value === 'PIX' && storePixKey) {
-                        const payload = getPixBrCode(storePixKey, total, tabId, storeName, storeAddress || 'SÃO PAULO');
+                        const payload = getPixBrCode(storePixKey, total, tabId, storeName, storeCity || 'SAO PAULO');
                         setPixPayload(payload);
                         setPixQrUrl(getQrCodeSrc(payload));
                         setPixPendingTabId(tabId);
@@ -1952,7 +1982,7 @@ export function App() {
                   <div className="close-modal-pix-label">⚡ Pagamento via PIX</div>
                   <div className="close-modal-pix-actions">
                     <button type="button" className="secondary-button" onClick={() => {
-                      const payload = getPixBrCode(storePixKey, total, tabId, storeName, storeAddress || 'SÃO PAULO');
+                      const payload = getPixBrCode(storePixKey, total, tabId, storeName, storeCity || 'SAO PAULO');
                       setPixPayload(payload);
                       setPixQrUrl(getQrCodeSrc(payload));
                       setShowPixModal(true);
@@ -1960,7 +1990,7 @@ export function App() {
                       Exibir QR Code — {formatCurrency(total)}
                     </button>
                     <button type="button" className="secondary-button" onClick={() => {
-                      const payload = getPixBrCode(storePixKey, total, tabId, storeName, storeAddress || 'SÃO PAULO');
+                      const payload = getPixBrCode(storePixKey, total, tabId, storeName, storeCity || 'SAO PAULO');
                       navigator.clipboard.writeText(payload);
                       showToast('Payload PIX copiado.', 'success');
                     }}>
@@ -4149,7 +4179,11 @@ export function App() {
               </label>
               <label>
                 Endereço
-                <input value={storeAddress} onChange={(e) => setStoreAddress(e.target.value)} placeholder="Rua, número - Cidade/Estado" />
+                <input value={storeAddress} onChange={(e) => setStoreAddress(e.target.value)} placeholder="Rua, número - Bairro" />
+              </label>
+              <label>
+                Cidade <span style={{ fontSize: 11, color: '#789088', fontWeight: 400 }}>(usada no QR PIX — obrigatório)</span>
+                <input value={storeCity} onChange={(e) => setStoreCity(e.target.value)} placeholder="Ex: Recife" />
               </label>
               <label>
                 Telefone
