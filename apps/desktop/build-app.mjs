@@ -1,17 +1,22 @@
 #!/usr/bin/env node
-import { copyFile, mkdir, readdir, readFile } from 'node:fs/promises';
+import { copyFile, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 
-// Carrega .env automaticamente para injetar tokens no build
+// Carrega .env automaticamente para injetar tokens no build (suporta CRLF do Windows)
 async function loadEnv() {
   try {
     const envPath = path.join(path.dirname(fileURLToPath(import.meta.url)), '.env');
     const content = await readFile(envPath, 'utf8');
-    for (const line of content.split('\n')) {
-      const match = line.match(/^([^#=][^=]*)=(.*)$/);
-      if (match) process.env[match[1].trim()] = match[2].trim();
+    for (const rawLine of content.split('\n')) {
+      const line = rawLine.replace(/\r/g, '').trim();
+      if (!line || line.startsWith('#')) continue;
+      const eqIdx = line.indexOf('=');
+      if (eqIdx < 1) continue;
+      const key = line.slice(0, eqIdx).trim();
+      const val = line.slice(eqIdx + 1).trim();
+      if (key && !process.env[key]) process.env[key] = val;
     }
   } catch { /* .env opcional */ }
 }
@@ -70,9 +75,23 @@ async function build() {
     console.log('📦 Compilando com Vite...');
     await runCommand('npx', ['vite', 'build']);
 
-    console.log('📋 Copiando arquivos Electron para dist...');
+    console.log('📋 Copiando e injetando tokens nos arquivos Electron...');
     await mkdir(distDir, { recursive: true });
-    await copyFile(path.join(__dirname, 'electron/main.js'), path.join(distDir, 'main.js'));
+
+    // Injeta o GH_UPDATER_TOKEN diretamente no main.js antes de empacotar.
+    // process.env não existe no app empacotado — o token precisa estar no código.
+    let mainJs = await readFile(path.join(__dirname, 'electron/main.js'), 'utf8');
+    const updaterToken = process.env.GH_UPDATER_TOKEN || '';
+    mainJs = mainJs.replace(
+      'process.env.GH_UPDATER_TOKEN',
+      JSON.stringify(updaterToken)
+    );
+    if (updaterToken) {
+      console.log('✅ GH_UPDATER_TOKEN injetado no main.js');
+    } else {
+      console.warn('⚠️  GH_UPDATER_TOKEN não encontrado — auto-update para repo privado não funcionará');
+    }
+    await writeFile(path.join(distDir, 'main.js'), mainJs);
     await copyFile(path.join(__dirname, 'electron/preload.js'), path.join(distDir, 'preload.js'));
 
     console.log('🔨 Empacotando com electron-builder...');
