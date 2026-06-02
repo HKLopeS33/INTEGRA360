@@ -14,7 +14,7 @@ function runCommand(cmd, args = []) {
     const proc = spawn(cmd, args, {
       stdio: 'inherit',
       shell: true,
-      env: { ...process.env, USE_HARD_LINKS: 'false', CSC_IDENTITY_AUTO_DISCOVERY: 'false', CSC_LINK: '' }
+      env: { ...process.env, VITE_BUILD_ELECTRON: 'true', USE_HARD_LINKS: 'false', CSC_IDENTITY_AUTO_DISCOVERY: 'false', CSC_LINK: '' }
     });
     proc.on('exit', code => {
       if (code === 0) resolve();
