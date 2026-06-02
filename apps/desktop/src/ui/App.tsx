@@ -221,6 +221,9 @@ export function App() {
   const [kitchenOrders, setKitchenOrders] = useState<Order[]>([]);
   const [selectedTableId, setSelectedTableId] = useState<string>('mesa_1');
   const [apiStatus, setApiStatus] = useState<'online' | 'offline'>('offline');
+  const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'error'>('idle');
+  const [updateVersion, setUpdateVersion] = useState<string | null>(null);
+  const [updateProgress, setUpdateProgress] = useState<number>(0);
   const [activeModule, setActiveModule] = useState<ActiveModule>('mesas');
   const [newProductName, setNewProductName] = useState('');
   const [newProductDescription, setNewProductDescription] = useState('');
@@ -1495,6 +1498,37 @@ export function App() {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Escuta eventos do auto-updater após a splash para mostrar botão na topbar
+  useEffect(() => {
+    const sistema = (window as any).sistema;
+    if (!sistema?.onUpdaterStatus) return;
+    const unsub = sistema.onUpdaterStatus((data: any) => {
+      switch (data.event) {
+        case 'checking-for-update':
+          setUpdateStatus('checking');
+          break;
+        case 'update-available':
+          setUpdateStatus('available');
+          setUpdateVersion(data.version ?? null);
+          break;
+        case 'download-progress':
+          setUpdateStatus('downloading');
+          setUpdateProgress(data.percent ?? 0);
+          break;
+        case 'update-downloaded':
+          setUpdateStatus('ready');
+          break;
+        case 'update-not-available':
+          setUpdateStatus('idle');
+          break;
+        case 'error':
+          setUpdateStatus('error');
+          break;
+      }
+    });
+    return () => { try { unsub?.(); } catch { /* */ } };
+  }, []);
+
   // Listen for unauthorized events emitted by the API layer (e.g. token expired or invalid)
   useEffect(() => {
     const onUnauthorized = (e: Event) => {
@@ -2140,7 +2174,49 @@ export function App() {
             <span className="eyebrow">{moduleConfig[activeModule].eyebrow}</span>
             <h1>{moduleConfig[activeModule].title}</h1>
           </div>
-          <div className={`connection ${apiStatus}`}>{apiStatus === 'online' ? 'API online' : 'API offline'}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {/* Botão de atualização — só aparece no Electron */}
+            {(window as any).sistema?.checkForUpdates && (() => {
+              if (updateStatus === 'ready') return (
+                <button
+                  type="button"
+                  onClick={() => (window as any).sistema.installUpdate()}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#16211d', color: '#f1c44e', border: '1.5px solid #f1c44e', borderRadius: 8, padding: '5px 12px', fontSize: 12, fontWeight: 700, cursor: 'pointer', animation: 'pulse 2s infinite' }}
+                >
+                  ⬇ Instalar v{updateVersion ?? 'nova'} agora
+                </button>
+              );
+              if (updateStatus === 'available') return (
+                <button
+                  type="button"
+                  onClick={() => (window as any).sistema.installUpdate()}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#fffbeb', color: '#92400e', border: '1.5px solid #f1c44e', borderRadius: 8, padding: '5px 12px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
+                >
+                  ⬇ Atualização disponível {updateVersion ? `v${updateVersion}` : ''}
+                </button>
+              );
+              if (updateStatus === 'downloading') return (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#eff6ff', border: '1.5px solid #93c5fd', borderRadius: 8, padding: '5px 12px', fontSize: 12, fontWeight: 600, color: '#1e40af' }}>
+                  ⏬ Baixando... {updateProgress}%
+                </div>
+              );
+              if (updateStatus === 'checking') return (
+                <div style={{ fontSize: 12, color: '#789088' }}>Verificando atualizações...</div>
+              );
+              // idle — botão discreto para verificar manualmente
+              return (
+                <button
+                  type="button"
+                  onClick={() => { setUpdateStatus('checking'); void (window as any).sistema.checkForUpdates(); }}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#789088', padding: '4px 8px', borderRadius: 6 }}
+                  title="Verificar atualizações"
+                >
+                  ✓ v{APP_VERSION}
+                </button>
+              );
+            })()}
+            <div className={`connection ${apiStatus}`}>{apiStatus === 'online' ? 'API online' : 'API offline'}</div>
+          </div>
         </header>
 
         {activeModule === 'mesas' && (

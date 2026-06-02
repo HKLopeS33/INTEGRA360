@@ -105,6 +105,16 @@ ipcMain.handle('preview-report-pdf', async (event, html) => {
   return { canceled: false, filePath: tempPath };
 });
 
+// IPC handlers para controle manual do updater pelo renderer
+ipcMain.handle('updater-check', () => {
+  if (!app.isPackaged) return { status: 'dev' };
+  return autoUpdater.checkForUpdates().catch((e) => ({ error: e?.message }));
+});
+
+ipcMain.handle('updater-install', () => {
+  autoUpdater.quitAndInstall();
+});
+
 // ── Auto-updater ──────────────────────────────────────────────
 function setupAutoUpdater(win) {
   if (!app.isPackaged) {
