@@ -36,7 +36,7 @@ function padLeft(str: string, len: number) {
   return ' '.repeat(len - str.length) + str;
 }
 
-// 58mm térmico — ~32 caracteres por linha em 12px Courier
+// 58mm térmico — ~32 caracteres por linha em 13px Courier
 const LINE_WIDTH = 32;
 
 export function generateThermalHTML(data: ReceiptData) {
@@ -102,29 +102,31 @@ export function generateThermalHTML(data: ReceiptData) {
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Comprovante</title>
   <style>
+    /* Controla exatamente o tamanho do papel e margens na impressora */
+    @page {
+      size: 58mm auto;
+      margin: 2mm 1mm;
+    }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
+    html, body {
+      width: 56mm;
       font-family: 'Courier New', Courier, monospace;
-      font-size: 12px;
+      font-size: 13px;
       line-height: 1.5;
       color: #000;
       background: #fff;
-      padding: 4px 6px;
-      width: 58mm;
     }
     .ticket { width: 100%; }
     .center { text-align: center; }
-    .right  { text-align: right; }
-    .sep    { border-top: 1px dashed #000; margin: 5px 0; }
-    .sep-solid { border-top: 1px solid #000; margin: 5px 0; }
-    .company  { font-size: 13px; font-weight: 700; letter-spacing: 1px; margin-bottom: 3px; }
-    .info     { font-size: 11px; line-height: 1.45; }
-    .pre      { white-space: pre; font-size: 11.5px; line-height: 1.5; }
-    .bold     { font-weight: 700; }
-    .footer   { font-size: 10.5px; line-height: 1.5; text-align: center; margin-top: 8px; }
+    .sep       { border-top: 1px dashed #000; margin: 4px 0; }
+    .sep-solid { border-top: 1px solid  #000; margin: 4px 0; }
+    .company { font-size: 14px; font-weight: 700; letter-spacing: 1px; margin-bottom: 2px; }
+    .info    { font-size: 12px; line-height: 1.4; }
+    .pre     { white-space: pre; font-size: 12.5px; line-height: 1.45; }
+    .bold    { font-weight: 700; }
+    .footer  { font-size: 11px; line-height: 1.5; text-align: center; margin-top: 6px; }
     @media print {
-      html, body { width: 58mm; margin: 0; padding: 2px 4px; }
-      .ticket { width: 58mm; }
+      html, body { width: 56mm; }
     }
   </style>
 </head>
@@ -172,7 +174,7 @@ export function generateThermalHTML(data: ReceiptData) {
 
 export function printReceipt(data: ReceiptData) {
   const html = generateThermalHTML(data);
-  const w = window.open('', '_blank', 'width=300,height=700');
+  const w = window.open('', '_blank', 'width=240,height=700,toolbar=no,menubar=no');
   if (!w) return;
   w.document.open();
   w.document.write(html);
