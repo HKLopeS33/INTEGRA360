@@ -37,8 +37,26 @@ function run(cmd, args = [], cwd = __dirname) {
   });
 }
 
+async function loadEnv() {
+  try {
+    const envPath = resolve(__dirname, 'apps/desktop/.env');
+    const content = readFileSync(envPath, 'utf-8');
+    for (const line of content.split('\n')) {
+      const match = line.match(/^([^#=][^=]*)=(.*)$/);
+      if (match) process.env[match[1].trim()] = match[2].trim();
+    }
+    if (process.env.GH_TOKEN) console.log('✅ GH_TOKEN carregado do .env');
+    else console.warn('⚠️  GH_TOKEN não encontrado no .env — publish pode falhar');
+  } catch {
+    console.warn('⚠️  .env não encontrado — certifique-se de que GH_TOKEN está no ambiente');
+  }
+}
+
 async function main() {
   console.log(`\n🚀 Release Integra360 v${version}\n`);
+
+  // 0. Carrega tokens do .env
+  await loadEnv();
 
   // 1. Atualiza versões
   updateVersion(resolve(__dirname, 'package.json'), version);
