@@ -1,10 +1,9 @@
 [build]
-  base    = "apps/desktop"
-  command = "npm run build"
+  command = "npm install && npm run build --workspace @sistema/desktop"
   publish = "apps/desktop/dist"
 
 [build.environment]
-  NODE_VERSION = "20"
+  NODE_VERSION = "22"
 
 [[redirects]]
   from   = "/*"
