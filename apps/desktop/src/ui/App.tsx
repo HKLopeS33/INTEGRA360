@@ -1087,6 +1087,7 @@ export function App() {
   const [pixAmount, setPixAmount] = useState<number | null>(null);
   const [pixPendingTabId, setPixPendingTabId] = useState<string | null>(null);
   const [showPixModal, setShowPixModal] = useState(false);
+  const [confirmingPix, setConfirmingPix] = useState(false);
 
   const closeCloseModal = () => {
     setShowCloseModal(false);
@@ -1100,6 +1101,7 @@ export function App() {
   };
 
   const finishPixClose = async (tabId: string, total: number) => {
+    setConfirmingPix(true);
     try {
       const closeResult = await api.closeTab(tabId, 'PIX', total);
       const tableOrders = selectedTableOrders;
@@ -1132,9 +1134,12 @@ export function App() {
       setShowPixModal(false);
       setShowCloseModal(false);
       setPixPaymentStatus('PAGO');
+      showToast('Pagamento PIX confirmado!', 'success');
     } catch (err) {
       console.error('Erro ao fechar comanda após Pix', err);
       showToast('Erro ao encerrar comanda: ' + ((err as any)?.message ?? String(err)), 'error');
+    } finally {
+      setConfirmingPix(false);
     }
   };
 
@@ -1893,6 +1898,8 @@ export function App() {
                         const payload = getPixBrCode(storePixKey, total, tabId, storeName, storeAddress || 'SÃO PAULO');
                         setPixPayload(payload);
                         setPixQrUrl(getQrCodeSrc(payload));
+                        setPixPendingTabId(tabId);
+                        setPixAmount(total);
                         setShowPixModal(true);
                       }
                     }}
@@ -2019,13 +2026,15 @@ export function App() {
               <button
                 type="button"
                 className="primary-button"
+                disabled={confirmingPix}
                 onClick={() => {
                   if (pixPendingTabId && pixAmount != null) {
                     void finishPixClose(pixPendingTabId, pixAmount);
                   }
                 }}
+                style={{ opacity: confirmingPix ? 0.7 : 1, minWidth: 200 }}
               >
-                Confirmar PIX recebido
+                {confirmingPix ? 'Encerrando comanda...' : 'Confirmar PIX recebido'}
               </button>
               <button type="button" className="secondary-button" onClick={() => {
                 navigator.clipboard.writeText(pixPayload ?? '');
