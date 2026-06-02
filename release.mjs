@@ -46,14 +46,20 @@ async function loadEnv() {
   try {
     const envPath = resolve(__dirname, 'apps/desktop/.env');
     const content = readFileSync(envPath, 'utf-8');
-    for (const line of content.split('\n')) {
-      const match = line.match(/^([^#=][^=]*)=(.*)$/);
-      if (match) process.env[match[1].trim()] = match[2].trim();
+    // Remove \r para compatibilidade com arquivos CRLF (Windows)
+    for (const rawLine of content.split('\n')) {
+      const line = rawLine.replace(/\r/g, '');
+      if (!line || line.startsWith('#')) continue;
+      const eqIdx = line.indexOf('=');
+      if (eqIdx < 1) continue;
+      const key = line.slice(0, eqIdx).trim();
+      const val = line.slice(eqIdx + 1).trim();
+      if (key && !process.env[key]) process.env[key] = val; // não sobrescreve vars já definidas no shell
     }
-    if (process.env.GH_TOKEN) console.log('✅ GH_TOKEN carregado do .env');
-    else console.warn('⚠️  GH_TOKEN não encontrado no .env — publish pode falhar');
+    if (process.env.GH_TOKEN) console.log('✅ GH_TOKEN carregado');
+    else console.warn('⚠️  GH_TOKEN não encontrado — defina com: $env:GH_TOKEN="ghp_..."');
   } catch {
-    console.warn('⚠️  .env não encontrado — certifique-se de que GH_TOKEN está no ambiente');
+    console.warn('⚠️  .env não encontrado — usando variáveis do ambiente');
   }
 }
 
