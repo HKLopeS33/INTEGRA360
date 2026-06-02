@@ -31,6 +31,147 @@ button {
 .app-shell.login-screen {
   display: grid;
   place-items: center;
+  min-height: 100dvh;
+  background: #eef2ef;
+}
+
+/* ── Login page ── */
+.login-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 100dvh;
+  padding: 24px 16px;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 420px;
+  background: #ffffff;
+  border: 1px solid #dbe3de;
+  border-radius: 16px;
+  padding: 40px 36px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.07);
+}
+
+.login-brand {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.login-brand-mark {
+  width: 56px;
+  height: 56px;
+  background: #f1c44e;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  font-size: 26px;
+  font-weight: 800;
+  margin: 0 auto 16px;
+  color: #18201d;
+}
+
+.login-title {
+  margin: 0 0 6px;
+  font-size: 26px;
+  font-weight: 700;
+  color: #18201d;
+}
+
+.login-subtitle {
+  margin: 0;
+  color: #52625b;
+  font-size: 14px;
+}
+
+.login-form {
+  display: grid;
+  gap: 18px;
+}
+
+.login-field {
+  display: grid;
+  gap: 7px;
+}
+
+.login-field label {
+  font-weight: 600;
+  font-size: 14px;
+  color: #18201d;
+}
+
+.login-field input {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1.5px solid #dbe3de;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 15px;
+  color: #18201d;
+  background: #f9fbf9;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  box-sizing: border-box;
+}
+
+.login-field input:focus {
+  outline: none;
+  border-color: #f1c44e;
+  box-shadow: 0 0 0 3px rgba(241, 196, 78, 0.18);
+  background: #fff;
+}
+
+.login-field input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.login-error {
+  background: #fff1f2;
+  border: 1.5px solid #fda4af;
+  border-radius: 8px;
+  padding: 10px 14px;
+  color: #9b1c2c;
+  font-size: 14px;
+}
+
+.login-button {
+  width: 100%;
+  background: #f1c44e;
+  border: none;
+  border-radius: 8px;
+  padding: 14px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #18201d;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+  margin-top: 4px;
+}
+
+.login-button:hover:not(:disabled) {
+  background: #e8b83a;
+}
+
+.login-button:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.login-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+@media (max-width: 480px) {
+  .login-card {
+    padding: 32px 20px;
+    border-radius: 12px;
+  }
+
+  .login-title {
+    font-size: 22px;
+  }
 }
 
 .sidebar {

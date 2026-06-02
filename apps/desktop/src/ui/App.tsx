@@ -103,8 +103,8 @@ export function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [currentCompany, setCurrentCompany] = useState<any>(null);
-  const [loginEmail, setLoginEmail] = useState('super@sistema.local');
-  const [loginPassword, setLoginPassword] = useState('admin');
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
@@ -1550,110 +1550,49 @@ export function App() {
   if (!isAuthenticated) {
     return (
       <main className="app-shell login-screen">
-        <div style={{
-          background: '#eef2ef'
-        }}>
-          <div style={{
-            width: 'min(400px, calc(100vw - 32px))',
-            background: '#ffffff',
-            border: '1px solid #dbe3de',
-            borderRadius: '8px',
-            padding: '40px'
-          }}>
-            <div style={{ marginBottom: '24px', textAlign: 'center' }}>
-              <div style={{
-                width: '48px',
-                height: '48px',
-                background: '#f1c44e',
-                borderRadius: '8px',
-                display: 'grid',
-                placeItems: 'center',
-                fontSize: '24px',
-                fontWeight: 'bold',
-                margin: '0 auto 16px'
-              }}>
-                S
-              </div>
-              <h1 style={{ margin: '0 0 8px', fontSize: '28px', color: '#18201d' }}>Integra360</h1>
-              <p style={{ margin: '0', color: '#52625b' }}>Operacao local</p>
+        <div className="login-wrapper">
+          <div className="login-card">
+            <div className="login-brand">
+              <div className="login-brand-mark">S</div>
+              <h1 className="login-title">Sistema Shawarma</h1>
+              <p className="login-subtitle">Faça login para continuar</p>
             </div>
 
-            <form onSubmit={handleLogin} style={{ display: 'grid', gap: '16px' }}>
-              <div>
-                <label htmlFor="email" style={{ display: 'block', marginBottom: '8px', fontWeight: 500, color: '#18201d' }}>
-                  Email
-                </label>
+            <form onSubmit={handleLogin} className="login-form">
+              <div className="login-field">
+                <label htmlFor="email">E-mail</label>
                 <input
                   id="email"
                   type="email"
                   value={loginEmail}
                   onChange={(e) => setLoginEmail(e.target.value)}
-                  placeholder="super@sistema.local"
-                  style={{
-                    width: '100%',
-                    padding: '10px',
-                    border: '1px solid #dbe3de',
-                    borderRadius: '4px',
-                    fontFamily: 'inherit'
-                  }}
+                  placeholder="seu@email.com"
+                  autoComplete="email"
                   disabled={isLoggingIn}
                 />
               </div>
 
-              <div>
-                <label htmlFor="password" style={{ display: 'block', marginBottom: '8px', fontWeight: 500, color: '#18201d' }}>
-                  Senha
-                </label>
+              <div className="login-field">
+                <label htmlFor="password">Senha</label>
                 <input
                   id="password"
                   type="password"
                   value={loginPassword}
                   onChange={(e) => setLoginPassword(e.target.value)}
-                  placeholder="admin"
-                  style={{
-                    width: '100%',
-                    padding: '10px',
-                    border: '1px solid #dbe3de',
-                    borderRadius: '4px',
-                    fontFamily: 'inherit'
-                  }}
+                  placeholder="••••••••"
+                  autoComplete="current-password"
                   disabled={isLoggingIn}
                 />
               </div>
 
               {loginError && (
-                <div style={{
-                  background: '#fee',
-                  border: '1px solid #fcc',
-                  borderRadius: '4px',
-                  padding: '10px',
-                  color: '#c33'
-                }}>
-                  {loginError}
-                </div>
+                <div className="login-error">{loginError}</div>
               )}
 
-              <button
-                type="submit"
-                disabled={isLoggingIn}
-                style={{
-                  background: '#f1c44e',
-                  border: 'none',
-                  borderRadius: '4px',
-                  padding: '12px',
-                  fontSize: '16px',
-                  fontWeight: 600,
-                  cursor: isLoggingIn ? 'not-allowed' : 'pointer',
-                  opacity: isLoggingIn ? 0.6 : 1
-                }}
-              >
-                {isLoggingIn ? 'Conectando...' : 'Conectar'}
+              <button type="submit" className="login-button" disabled={isLoggingIn}>
+                {isLoggingIn ? 'Conectando...' : 'Entrar'}
               </button>
             </form>
-
-            <p style={{ fontSize: '12px', color: '#52625b', marginTop: '16px', textAlign: 'center' }}>
-              Demo: use super@sistema.local / Herick159@
-            </p>
           </div>
         </div>
       </main>
