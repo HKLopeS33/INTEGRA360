@@ -390,14 +390,18 @@ export function App() {
     }
   }, [activeModule]);
 
-  const formatRemaining = (ms: number | null) => {
-    if (ms == null) return '—';
-    if (ms <= 0) return 'Expirado';
-    const secs = Math.floor(ms / 1000);
-    const days = Math.floor(secs / 86400);
-    const hours = Math.floor((secs % 86400) / 3600);
-    const mins = Math.floor((secs % 3600) / 60);
-    return `${days}d ${hours}h ${mins}m`;
+  const formatRemaining = (expiresAt: string | null) => {
+    if (!expiresAt) return { text: '—', days: null, expired: false, urgent: false };
+    const diff = new Date(expiresAt).getTime() - Date.now();
+    const days = Math.ceil(diff / 86400000);
+    if (diff <= 0) return { text: 'Vencida', days, expired: true, urgent: false };
+    if (days <= 7) return { text: `${days} dia${days !== 1 ? 's' : ''}`, days, expired: false, urgent: true };
+    return { text: `${days} dias`, days, expired: false, urgent: false };
+  };
+
+  const formatExpiryDate = (expiresAt: string | null) => {
+    if (!expiresAt) return '—';
+    return new Date(expiresAt).toLocaleDateString('pt-BR');
   };
 
   const loadCurrentCompany = async () => {
@@ -420,6 +424,17 @@ export function App() {
     try {
       const list = await api.listCompanies();
       setCompanies(list || []);
+
+      // Auto-suspender empresas com assinatura vencida e ainda ativas
+      const expired = (list || []).filter((c: any) =>
+        c.active && c.expiresAt && new Date(c.expiresAt).getTime() < Date.now()
+      );
+      if (expired.length > 0) {
+        await Promise.all(expired.map((c: any) => api.suspendCompany(c.id).catch(() => {})));
+        // Recarrega após suspender
+        const updated = await api.listCompanies();
+        setCompanies(updated || []);
+      }
     } catch (e) {
       // eslint-disable-next-line no-console
       console.error('Erro ao carregar empresas', e);
@@ -2918,7 +2933,7 @@ export function App() {
                         <th style={{ textAlign: 'left', padding: 12, fontWeight: 600, borderBottom: '2px solid #e5e7eb' }}>E-mail</th>
                         <th style={{ textAlign: 'left', padding: 12, fontWeight: 600, borderBottom: '2px solid #e5e7eb' }}>CNPJ</th>
                         <th style={{ textAlign: 'left', padding: 12, fontWeight: 600, borderBottom: '2px solid #e5e7eb' }}>Status</th>
-                        <th style={{ textAlign: 'left', padding: 12, fontWeight: 600, borderBottom: '2px solid #e5e7eb', whiteSpace: 'nowrap' }}>Tempo restante</th>
+                        <th style={{ textAlign: 'left', padding: 12, fontWeight: 600, borderBottom: '2px solid #e5e7eb', whiteSpace: 'nowrap' }}>Vencimento</th>
                         <th style={{ textAlign: 'left', padding: 12, fontWeight: 600, borderBottom: '2px solid #e5e7eb' }}>Mensalidade</th>
                         <th style={{ textAlign: 'left', padding: 12, fontWeight: 600, borderBottom: '2px solid #e5e7eb' }}>Ações</th>
                       </tr>
@@ -2970,10 +2985,31 @@ export function App() {
                           <td style={{ padding: 12, fontSize: 13 }}>{c.email}</td>
                           <td style={{ padding: 12 }}>{c.cnpj}</td>
                           <td style={{ padding: 12 }}>
-                            {hasOverdue ? <><AlertTriangle size={14} style={{ verticalAlign: 'middle', marginRight: 6, color: '#b91c1c' }} /> </> : null}
-                            {c.active ? 'Ativa' : 'Inativa'} / {c.subscriptionStatus ?? '—'}
+                            {(() => {
+                              const expired = c.expiresAt && new Date(c.expiresAt).getTime() < Date.now();
+                              const label = !c.active ? 'Suspensa' : expired ? 'Vencida' : 'Ativa';
+                              const color = !c.active ? '#6b7280' : expired ? '#b91c1c' : '#15803d';
+                              const bg    = !c.active ? '#f3f4f6' : expired ? '#fef2f2' : '#f0fdf4';
+                              return (
+                                <span style={{ background: bg, color, border: `1px solid ${color}30`, borderRadius: 6, padding: '2px 8px', fontSize: 12, fontWeight: 600 }}>
+                                  {expired && c.active && <AlertTriangle size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} />}
+                                  {label}
+                                </span>
+                              );
+                            })()}
                           </td>
-                          <td style={{ padding: 12, whiteSpace: 'nowrap', fontSize: 13 }}>{formatRemaining(c.remainingMs)}</td>
+                          <td style={{ padding: 12, whiteSpace: 'nowrap', fontSize: 13 }}>
+                            {(() => {
+                              const r = formatRemaining(c.expiresAt);
+                              const color = r.expired ? '#b91c1c' : r.urgent ? '#d97706' : '#15803d';
+                              return (
+                                <div>
+                                  <div style={{ fontWeight: 600, color }}>{r.text}</div>
+                                  {c.expiresAt && <div style={{ fontSize: 11, color: '#789088' }}>{formatExpiryDate(c.expiresAt)}</div>}
+                                </div>
+                              );
+                            })()}
+                          </td>
                           <td style={{ padding: 12 }}>{formatCurrency(Number(c.monthlyFee ?? 0))}</td>
                           <td style={{ padding: 12 }}>
                             <div style={{ position: 'relative' }} data-action-menu-id={c.id}>
