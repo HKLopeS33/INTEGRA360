@@ -7,69 +7,90 @@ import { spawn } from 'node:child_process';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distDir = path.join(__dirname, 'dist');
 const distAppDir = path.join(__dirname, 'dist-app');
+const unpackedDir = path.join(distAppDir, 'win-unpacked');
 
 function runCommand(cmd, args = []) {
   return new Promise((resolve, reject) => {
-    const proc = spawn(cmd, args, { 
+    const proc = spawn(cmd, args, {
       stdio: 'inherit',
       shell: true,
-      env: { ...process.env, USE_HARD_LINKS: 'false' }
+      env: { ...process.env, USE_HARD_LINKS: 'false', CSC_IDENTITY_AUTO_DISCOVERY: 'false', CSC_LINK: '' }
     });
-    proc.on('close', code => {
+    proc.on('exit', code => {
       if (code === 0) resolve();
       else reject(new Error(`Command failed with code ${code}`));
     });
-    proc.on('error', (err) => {
-      reject(err);
-    });
+    proc.on('error', reject);
   });
 }
 
-async function checkAppBuilt() {
+async function checkUnpacked() {
   try {
-    const files = await readdir(distAppDir);
-    return files.some(f => f.endsWith('.exe') || f.includes('win-unpacked'));
+    const files = await readdir(unpackedDir);
+    return files.some(f => f.includes('Sistema Shawarma.exe'));
   } catch {
     return false;
   }
 }
 
+async function checkNsisInstaller() {
+  try {
+    const files = await readdir(distAppDir);
+    return files.find(f => f.endsWith('.exe') && f.includes('Setup'));
+  } catch {
+    return null;
+  }
+}
+
+async function createZip() {
+  // Usa PowerShell para criar o ZIP (disponível em qualquer Windows 10+)
+  const zipPath = path.join(distAppDir, 'SistemaShawarma-portable.zip');
+  console.log('📦 Criando pacote portátil (ZIP)...');
+  await runCommand('powershell', [
+    '-NoProfile', '-Command',
+    `Compress-Archive -Path '${unpackedDir}\\*' -DestinationPath '${zipPath}' -Force`
+  ]);
+  return zipPath;
+}
+
 async function build() {
   try {
-    console.log('📦 Building app with Vite (skipping TypeScript check)...');
+    console.log('📦 Compilando com Vite...');
     await runCommand('npx', ['vite', 'build']);
 
-    console.log('📋 Copying Electron files to dist...');
+    console.log('📋 Copiando arquivos Electron para dist...');
     await mkdir(distDir, { recursive: true });
-    await copyFile(
-      path.join(__dirname, 'electron/main.js'),
-      path.join(distDir, 'main.js')
-    );
-    await copyFile(
-      path.join(__dirname, 'electron/preload.js'),
-      path.join(distDir, 'preload.js')
-    );
+    await copyFile(path.join(__dirname, 'electron/main.js'), path.join(distDir, 'main.js'));
+    await copyFile(path.join(__dirname, 'electron/preload.js'), path.join(distDir, 'preload.js'));
 
-    console.log('🔨 Building installer with electron-builder...');
+    console.log('🔨 Empacotando com electron-builder...');
+    let nsisOk = false;
     try {
       await runCommand('npx', ['electron-builder', '--publish', 'never']);
-    } catch (error) {
-      // Check if app was built despite error
-      if (await checkAppBuilt()) {
-        console.log('⚠️  Build tool error, but app executable was created successfully!');
-      } else {
-        throw error;
+      const installer = await checkNsisInstaller();
+      if (installer) {
+        nsisOk = true;
+        console.log('\n✅ Build completo!');
+        console.log(`📍 Instalador: dist-app/${installer}`);
+        console.log('   Envie esse único arquivo para o cliente instalar.\n');
       }
+    } catch {
+      // NSIS falhou (ex: sem permissão para symlinks) — tenta ZIP
     }
 
-    console.log('✅ Build completo!');
-    console.log('📍 Instalador: dist-app/Sistema Shawarma Setup 0.1.0.exe');
-    console.log('   Envie esse único arquivo para o cliente instalar.');
+    if (!nsisOk) {
+      if (!(await checkUnpacked())) {
+        throw new Error('Build falhou — win-unpacked não encontrado.');
+      }
+      const zipPath = await createZip();
+      console.log('\n✅ Build completo!');
+      console.log(`📍 Pacote portátil: ${zipPath}`);
+      console.log('   Envie o ZIP para o cliente, ele extrai e executa "Sistema Shawarma.exe" dentro da pasta.\n');
+    }
   } catch (error) {
-    console.error('❌ Build failed:', error.message);
+    console.error('❌ Build falhou:', error.message);
     process.exit(1);
   }
 }
 
 build();
-

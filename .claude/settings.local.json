@@ -14,7 +14,8 @@
       "Bash(curl -s 'https://runszwefsbvcukzwxryp.supabase.co/auth/v1/admin/users?per_page=100&page=1' -H 'Authorization: Bearer sb_secret_NsN8T_GMpuxDNcth6_M7AQ_ENQGRPEo' -H 'apikey: sb_secret_NsN8T_GMpuxDNcth6_M7AQ_ENQGRPEo')",
       "Bash(curl -s 'https://runszwefsbvcukzwxryp.supabase.co/rest/v1/Company?select=id,name,email,cnpj,active' -H 'Authorization: Bearer sb_secret_NsN8T_GMpuxDNcth6_M7AQ_ENQGRPEo' -H 'apikey: sb_secret_NsN8T_GMpuxDNcth6_M7AQ_ENQGRPEo')",
       "Bash(curl -s 'https://runszwefsbvcukzwxryp.supabase.co/rest/v1/RestaurantTable?select=id,name,number,companyId&companyId=eq.1a6c4f69-dd8a-4e08-a332-64b3d85c4588' -H 'Authorization: Bearer sb_secret_NsN8T_GMpuxDNcth6_M7AQ_ENQGRPEo' -H 'apikey: sb_secret_NsN8T_GMpuxDNcth6_M7AQ_ENQGRPEo')",
-      "Bash(curl -s 'https://runszwefsbvcukzwxryp.supabase.co/rest/v1/RestaurantTable?select=id,name,active&companyId=eq.1a6c4f69-dd8a-4e08-a332-64b3d85c4588' -H 'Authorization: Bearer sb_secret_NsN8T_GMpuxDNcth6_M7AQ_ENQGRPEo' -H 'apikey: sb_secret_NsN8T_GMpuxDNcth6_M7AQ_ENQGRPEo')"
+      "Bash(curl -s 'https://runszwefsbvcukzwxryp.supabase.co/rest/v1/RestaurantTable?select=id,name,active&companyId=eq.1a6c4f69-dd8a-4e08-a332-64b3d85c4588' -H 'Authorization: Bearer sb_secret_NsN8T_GMpuxDNcth6_M7AQ_ENQGRPEo' -H 'apikey: sb_secret_NsN8T_GMpuxDNcth6_M7AQ_ENQGRPEo')",
+      "Bash(wc -l \"/mnt/c/Users/Herick/Documents/SISTEMA SHAWARMA/apps/desktop/src/ui/App.tsx\")"
     ]
   }
 }

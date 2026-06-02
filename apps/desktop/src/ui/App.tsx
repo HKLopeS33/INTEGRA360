@@ -1,5 +1,8 @@
-import { type FormEvent, type ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { Banknote, ChefHat, LayoutDashboard, LogOut, ReceiptText, Settings, ShoppingBag, Utensils, Users, AlertTriangle, CheckCircle, Clock, TrendingUp, DollarSign, ShoppingCart, Target, MoreVertical } from 'lucide-react';
+import { type FormEvent, type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Banknote, ChefHat, LayoutDashboard, LogOut, ReceiptText, Settings, ShoppingBag, Utensils, Users, AlertTriangle, CheckCircle, Clock, TrendingUp, DollarSign, ShoppingCart, Target, MoreVertical, X, Info, AlertCircle } from 'lucide-react';
+
+type ToastType = 'success' | 'error' | 'warning' | 'info';
+interface ToastItem { id: number; message: string; type: ToastType; removing?: boolean; }
 import { api } from './api.js';
 import { supabase } from './supabase.ts';
 import type { Order, Product, RestaurantTable } from './types.js';
@@ -150,6 +153,7 @@ export function App() {
     onConfirm: () => Promise<void> | void;
   } | null>(null);
   const [confirmationLoading, setConfirmationLoading] = useState(false);
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [companyFilterStatus, setCompanyFilterStatus] = useState<'all' | 'overdue' | 'pending' | 'paid'>('all');
   const [companySearch, setCompanySearch] = useState('');
   const [usersList, setUsersList] = useState<any[]>([]);
@@ -295,11 +299,26 @@ export function App() {
     } catch (e) {
       // eslint-disable-next-line no-console
       console.error('Erro ao carregar empresas', e);
-      alert('Falha ao carregar empresas. Veja o console.');
+      showToast('Falha ao carregar empresas.', 'error');
     } finally {
       setLoadingCompanies(false);
     }
   }
+
+  const showToast = useCallback((message: string, type: ToastType = 'info') => {
+    const id = Date.now() + Math.random();
+    setToasts((prev) => [...prev, { id, message, type }]);
+    const removeTimer = setTimeout(() => {
+      setToasts((prev) => prev.map((t) => t.id === id ? { ...t, removing: true } : t));
+      setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 230);
+    }, 4000);
+    return removeTimer;
+  }, []);
+
+  const dismissToast = useCallback((id: number) => {
+    setToasts((prev) => prev.map((t) => t.id === id ? { ...t, removing: true } : t));
+    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 230);
+  }, []);
 
   const confirmAction = (message: string, action: () => Promise<void> | void) => {
     setConfirmationRequest({ message, onConfirm: action });
@@ -318,7 +337,7 @@ export function App() {
 
   const submitCreateCompany = async () => {
     if (!newCompanyName.trim() || !newAdminEmail.trim() || !newAdminPassword.trim()) {
-      return alert('Preencha o nome da empresa e credenciais do administrador.');
+      return showToast('Preencha o nome da empresa e credenciais do administrador.', 'warning');
     }
 
     try {
@@ -349,10 +368,10 @@ export function App() {
       setNewCompanyTableCount('10');
 
       await loadCompanies();
-      alert('Empresa criada com sucesso. Credenciais do admin criadas.');
+      showToast('Empresa criada com sucesso!', 'success');
     } catch (e) {
       console.error('Erro ao criar empresa', e);
-      alert('Falha ao criar empresa. Veja o console.');
+      showToast('Falha ao criar empresa. Verifique o console.', 'error');
     }
   };
 
@@ -361,10 +380,10 @@ export function App() {
       try {
         await api.suspendCompany(id);
         await loadCompanies();
-        alert('Empresa suspensa.');
+        showToast('Empresa suspensa.', 'success');
       } catch (e) {
         console.error(e);
-        alert('Falha ao suspender empresa.');
+        showToast('Falha ao suspender empresa.', 'error');
       }
     });
   };
@@ -374,10 +393,10 @@ export function App() {
       try {
         await api.reactivateCompany(id);
         await loadCompanies();
-        alert('Empresa reativada.');
+        showToast('Empresa reativada.', 'success');
       } catch (e) {
         console.error(e);
-        alert('Falha ao reativar empresa.');
+        showToast('Falha ao reativar empresa.', 'error');
       }
     });
   };
@@ -403,10 +422,10 @@ export function App() {
       await api.renewSubscription(selectedCompany.id, { months, days, hours, amount, status: 'PAGO' });
       await loadCompanies();
       setShowRenewModal(false);
-      alert('Assinatura renovada.');
+      showToast('Assinatura renovada.', 'success');
     } catch (e) {
       console.error(e);
-      alert('Falha ao renovar assinatura.');
+      showToast('Falha ao renovar assinatura.', 'error');
     }
   };
 
@@ -461,7 +480,7 @@ export function App() {
       setUsersList(res || []);
     } catch (e) {
       console.error('Erro ao listar usuarios', e);
-      alert('Falha ao carregar usuarios. Veja o console.');
+      showToast('Falha ao carregar usuários.', 'error');
     } finally {
       setLoadingUsers(false);
     }
@@ -472,10 +491,10 @@ export function App() {
       try {
         await api.suspendUser(id);
         await openUsersModal();
-        alert('Usuário suspenso.');
+        showToast('Usuário suspenso.', 'success');
       } catch (e) {
         console.error(e);
-        alert('Falha ao suspender usuário.');
+        showToast('Falha ao suspender usuário.', 'error');
       }
     });
   };
@@ -485,10 +504,10 @@ export function App() {
       try {
         await api.reactivateUser(id);
         await openUsersModal();
-        alert('Usuário reativado.');
+        showToast('Usuário reativado.', 'success');
       } catch (e) {
         console.error(e);
-        alert('Falha ao reativar usuário.');
+        showToast('Falha ao reativar usuário.', 'error');
       }
     });
   };
@@ -498,10 +517,10 @@ export function App() {
       try {
         await api.deleteUser(id);
         await openUsersModal();
-        alert('Usuário excluído.');
+        showToast('Usuário excluído.', 'success');
       } catch (e) {
         console.error(e);
-        alert('Falha ao excluir usuário.');
+        showToast('Falha ao excluir usuário.', 'error');
       }
     });
   };
@@ -516,22 +535,22 @@ export function App() {
           const updated = (companies || []).find((c) => c.id === invoiceCompany.id);
           setInvoiceCompany(updated ?? null);
         }
-        alert('Pagamento marcado como pago.');
+        showToast('Pagamento marcado como pago.', 'success');
       } catch (e) {
         console.error(e);
-        alert('Falha ao marcar pagamento.');
+        showToast('Falha ao marcar pagamento.', 'error');
       }
     });
   };
 
   const handleCreateCompanyUser = async () => {
     if (!newUserName.trim() || !newUserEmail.trim() || !newUserPassword.trim()) {
-      alert('Preencha nome, e-mail e senha.');
+      showToast('Preencha nome, e-mail e senha.', 'warning');
       return;
     }
 
     if (currentUser?.role === 'SUPER' && !selectedUsersCompany) {
-      alert('Selecione uma empresa antes de criar um usuário.');
+      showToast('Selecione uma empresa antes de criar um usuário.', 'warning');
       return;
     }
 
@@ -550,10 +569,10 @@ export function App() {
       setNewUserRole('CAIXA');
       setNewUserActive(true);
       await openUsersModal(selectedUsersCompany ?? undefined);
-      alert('Usuário criado com sucesso.');
+      showToast('Usuário criado com sucesso!', 'success');
     } catch (e) {
       console.error(e);
-      alert(`Falha ao criar usuário: ${(e as Error).message}`);
+      showToast(`Falha ao criar usuário: ${(e as Error).message}`, 'error');
     }
   };
 
@@ -582,11 +601,11 @@ export function App() {
           address: storeAddress
         });
         setCurrentCompany(response.company);
-        alert('Configurações salvas.');
+        showToast('Configurações salvas.', 'success');
         return;
       } catch (error) {
         console.error('Erro ao salvar configurações da empresa', error);
-        alert('Falha ao salvar configurações da empresa. Veja o console.');
+        showToast('Falha ao salvar configurações da empresa.', 'error');
         return;
       }
     }
@@ -595,16 +614,16 @@ export function App() {
     localStorage.setItem('storeCnpj', storeCnpj);
     localStorage.setItem('storeAddress', storeAddress);
     localStorage.setItem('storePhone', storePhone);
-    alert('Configurações salvas.');
+    showToast('Configurações salvas.', 'success');
   };
 
   const submitPasswordChange = async () => {
     if (!newPassword || !confirmPassword) {
-      return alert('Preencha a nova senha e a confirmação.');
+      return showToast('Preencha a nova senha e a confirmação.', 'warning');
     }
 
     if (newPassword !== confirmPassword) {
-      return alert('A confirmação não corresponde.');
+      return showToast('A confirmação de senha não corresponde.', 'warning');
     }
 
     try {
@@ -612,10 +631,10 @@ export function App() {
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
-      alert('Senha alterada com sucesso.');
+      showToast('Senha alterada com sucesso!', 'success');
     } catch (e) {
       console.error(e);
-      alert('Falha ao alterar senha.');
+      showToast('Falha ao alterar senha.', 'error');
     }
   };
 
@@ -626,7 +645,7 @@ export function App() {
       setDailyReceipts(receipts || []);
     } catch (e) {
       console.error(e);
-      alert('Falha ao carregar recibos do dia.');
+      showToast('Falha ao carregar recibos do dia.', 'error');
     } finally {
       setLoadingReceipts(false);
     }
@@ -634,19 +653,19 @@ export function App() {
 
   const searchReceiptByNumber = async () => {
     if (!searchReceiptNumber) {
-      return alert('Informe o número do recibo.');
+      return showToast('Informe o número do recibo.', 'warning');
     }
 
     setLoadingReceipts(true);
     try {
       const receipt = await api.getReceiptByNumber(Number(searchReceiptNumber));
       if ('error' in receipt) {
-        return alert(receipt.error);
+        return showToast(receipt.error, 'error');
       }
       setSelectedReceipt(receipt);
     } catch (e) {
       console.error(e);
-      alert('Falha ao buscar recibo.');
+      showToast('Falha ao buscar recibo.', 'error');
     } finally {
       setLoadingReceipts(false);
     }
@@ -673,10 +692,10 @@ export function App() {
 
       await loadCompanies();
       setShowEditModal(false);
-      alert('Empresa e usuário atualizados.');
+      showToast('Empresa e usuário atualizados.', 'success');
     } catch (e) {
       console.error(e);
-      alert('Falha ao atualizar empresa/usuario.');
+      showToast('Falha ao atualizar empresa/usuário.', 'error');
     }
   };
 
@@ -685,7 +704,7 @@ export function App() {
   };
 
   const exportCompaniesCSV = () => {
-    if (!companies || companies.length === 0) return alert('Nenhuma empresa para exportar.');
+    if (!companies || companies.length === 0) return showToast('Nenhuma empresa para exportar.', 'warning');
     const headers = ['id', 'name', 'email', 'cnpj', 'active', 'subscriptionStatus', 'expiresAt', 'monthlyFee'];
     const rows = companies.map((c) => headers.map((h) => JSON.stringify(c[h] ?? '')).join(','));
     const csv = `${headers.join(',')}\n${rows.join('\n')}`;
@@ -699,7 +718,7 @@ export function App() {
   };
 
   const exportCompaniesPdf = () => {
-    if (!companies || companies.length === 0) return alert('Nenhuma empresa para exportar.');
+    if (!companies || companies.length === 0) return showToast('Nenhuma empresa para exportar.', 'warning');
     const html = `
       <html><head><meta charset="utf-8"><title>Empresas</title>
       <style>body{font-family:Arial,sans-serif;padding:20px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ddd;padding:8px;text-align:left}</style>
@@ -711,7 +730,7 @@ export function App() {
         .join('')}
       </tbody></table></body></html>`;
     const w = window.open('', '_blank');
-    if (!w) return alert('Bloqueador de janelas impediu a abertura.');
+    if (!w) return showToast('Bloqueador de janelas impediu a abertura.', 'warning');
     w.document.write(html);
     w.document.close();
     // give the window a moment to render then print
@@ -793,11 +812,11 @@ export function App() {
 
   const submitMenuOrder = async () => {
     if (!menuTableId) {
-      alert('Mesa não encontrada.');
+      showToast('Mesa não encontrada.', 'error');
       return;
     }
     if (menuCart.length === 0) {
-      alert('Adicione itens ao pedido antes de enviar.');
+      showToast('Adicione itens ao pedido antes de enviar.', 'warning');
       return;
     }
 
@@ -807,12 +826,12 @@ export function App() {
         quantity: item.quantity,
         note: item.note || undefined
       })));
-      alert('Pedido enviado com sucesso!');
+      showToast('Pedido enviado com sucesso!', 'success');
       setMenuCart([]);
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('Erro ao enviar pedido', error);
-      alert('Falha ao enviar o pedido.');
+      showToast('Falha ao enviar o pedido.', 'error');
     }
   };
 
@@ -1011,7 +1030,7 @@ export function App() {
       setPixPaymentStatus('PAGO');
     } catch (err) {
       console.error('Erro ao fechar comanda após Pix', err);
-      alert('Erro ao encerrar comanda: ' + ((err as any)?.message ?? String(err)));
+      showToast('Erro ao encerrar comanda: ' + ((err as any)?.message ?? String(err)), 'error');
     }
   };
 
@@ -1028,7 +1047,7 @@ export function App() {
       setShowPixModal(true);
     } catch (err) {
       console.error('Erro ao iniciar pagamento PIX', err);
-      alert('Falha ao iniciar pagamento PIX: ' + ((err as any)?.message ?? String(err)));
+      showToast('Falha ao iniciar pagamento PIX: ' + ((err as any)?.message ?? String(err)), 'error');
     }
   };
 
@@ -1037,12 +1056,12 @@ export function App() {
     try {
       const tableOrders = selectedTableOrders;
       if (tableOrders.length === 0) {
-        return alert('Não há comanda aberta para esta mesa.');
+        return showToast('Não há comanda aberta para esta mesa.', 'warning');
       }
 
       const tabId = tableOrders[0]?.tabId;
       if (!tabId) {
-        return alert('Comanda sem identificação válida.');
+        return showToast('Comanda sem identificação válida.', 'error');
       }
 
       const map = new Map<string, { quantity: number; unitPrice: number }>();
@@ -1088,13 +1107,13 @@ export function App() {
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error('Erro ao encerrar mesa', err);
-      alert('Erro ao encerrar mesa. Veja o console.');
+      showToast('Erro ao encerrar mesa.', 'error');
     }
   };
 
   const exportReportPdf = async () => {
     if (!reportSummary) {
-      return alert('Relatório ainda não foi carregado.');
+      return showToast('Relatório ainda não foi carregado.', 'warning');
     }
     const html = `
       <html>
@@ -1155,7 +1174,7 @@ export function App() {
       const url = URL.createObjectURL(blob);
       const popup = window.open(url, '_blank');
       if (!popup) {
-        return alert('Exportação de PDF não está disponível no ambiente atual e a abertura de nova janela foi bloqueada pelo navegador.');
+        return showToast('Exportação de PDF bloqueada pelo navegador.', 'warning');
       }
       popup.focus();
       try {
@@ -1173,16 +1192,16 @@ export function App() {
       if (result.canceled) {
         return;
       }
-      alert(`Relatório salvo em ${result.filePath}`);
+      showToast(`Relatório salvo em ${result.filePath}`, 'success');
     } catch (error) {
       console.error('Erro ao exportar PDF', error);
-      alert('Falha ao gerar o arquivo PDF. Veja o console.');
+      showToast('Falha ao gerar o arquivo PDF.', 'error');
     }
   };
 
   const previewReportPdf = async () => {
     if (!reportSummary) {
-      return alert('Relatório ainda não foi carregado.');
+      return showToast('Relatório ainda não foi carregado.', 'warning');
     }
 
     const html = `
@@ -1244,7 +1263,7 @@ export function App() {
       const url = URL.createObjectURL(blob);
       const popup = window.open(url, '_blank');
       if (!popup) {
-        return alert('Visualização de PDF não está disponível no ambiente atual e a abertura de nova janela foi bloqueada pelo navegador.');
+        return showToast('Visualização de PDF bloqueada pelo navegador.', 'warning');
       }
       popup.focus();
       setTimeout(() => URL.revokeObjectURL(url), 5000);
@@ -1258,7 +1277,7 @@ export function App() {
       }
     } catch (error) {
       console.error('Erro ao pré-visualizar PDF', error);
-      alert('Falha ao visualizar o PDF. Veja o console.');
+      showToast('Falha ao visualizar o PDF.', 'error');
     }
   };
 
@@ -1302,7 +1321,7 @@ export function App() {
       setCurrentCompany(null);
       // notify user to re-login
       try {
-        alert('Sessão expirada. Faça login novamente.');
+        showToast('Sessão expirada. Faça login novamente.', 'warning');
       } catch (err) {
         // ignore in non-browser env
       }
@@ -1500,7 +1519,7 @@ export function App() {
       await api.updateOrderStatus(order.id, nextStatus);
       await reloadTablesAndOrders();
     } catch (err: any) {
-      alert('Erro ao avançar pedido: ' + (err?.message ?? String(err)));
+      showToast('Erro ao avançar pedido: ' + (err?.message ?? String(err)), 'error');
     }
   };
 
@@ -1831,7 +1850,7 @@ export function App() {
                     <button type="button" className="secondary-button" onClick={() => {
                       const payload = getPixBrCode(storePixKey, total, tabId, storeName, storeAddress || 'SÃO PAULO');
                       navigator.clipboard.writeText(payload);
-                      alert('Payload PIX copiado.');
+                      showToast('Payload PIX copiado.', 'success');
                     }}>
                       Copiar payload
                     </button>
@@ -1867,7 +1886,7 @@ export function App() {
                 className="primary-button"
                 onClick={() => {
                   navigator.clipboard.writeText(qrUrl);
-                  alert('Link do QR code copiado.');
+                  showToast('Link do QR code copiado.', 'success');
                 }}
               >
                 Copiar link
@@ -1902,7 +1921,7 @@ export function App() {
               </button>
               <button type="button" className="secondary-button" onClick={() => {
                 navigator.clipboard.writeText(pixPayload ?? '');
-                alert('Payload PIX copiado.');
+                showToast('Payload PIX copiado.', 'success');
               }}>Copiar Pix Copia e Cola</button>
               <button type="button" className="secondary-button" onClick={() => setShowPixModal(false)}>
                 Cancelar
@@ -2011,15 +2030,15 @@ export function App() {
                 </div>
                 <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                   <button type="button" className="secondary-button" onClick={() => {
-                    if (!selectedTable) return alert('Selecione uma mesa');
+                    if (!selectedTable) return showToast('Selecione uma mesa.', 'warning');
                     openTableMenuModal(selectedTable);
                   }}>
                     Abrir cardápio
                   </button>
                   {currentUser?.role !== 'GARCOM' && (
                     <button type="button" className="secondary-button" onClick={() => {
-                      if (!selectedTable) return alert('Selecione uma mesa');
-                      if (selectedTableOrders.length === 0) return alert('Não há comanda ativa para encerrar.');
+                      if (!selectedTable) return showToast('Selecione uma mesa.', 'warning');
+                      if (selectedTableOrders.length === 0) return showToast('Não há comanda ativa para encerrar.', 'warning');
                       openCloseModal();
                     }}>
                       Encerrar Mesa
@@ -2047,8 +2066,8 @@ export function App() {
 
               <div style={{ marginTop: 20 }}>
                 <button type="button" className="secondary-button" onClick={() => {
-                  if (!selectedTable) return alert('Selecione uma mesa');
-                  if (selectedTableOrders.length === 0) return alert('Nenhum pedido para a mesa.');
+                  if (!selectedTable) return showToast('Selecione uma mesa.', 'warning');
+                  if (selectedTableOrders.length === 0) return showToast('Nenhum pedido para a mesa.', 'warning');
                   const map = new Map<string, { quantity: number; unitPrice: number }>();
                   for (const o of selectedTableOrders) {
                     for (const it of o.items) {
@@ -2230,11 +2249,12 @@ export function App() {
         )}
 
         {confirmationRequest && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', display: 'grid', placeItems: 'center', zIndex: 130 }}>
-            <div style={{ width: 'min(420px, 92%)', background: '#fff', borderRadius: 12, padding: 24, boxShadow: '0 18px 40px rgba(0,0,0,0.18)' }} role="dialog" aria-modal="true">
-              <h3 style={{ margin: 0, marginBottom: 12, fontSize: 20 }}>Confirmação</h3>
-              <p style={{ margin: 0, color: '#4b5563', marginBottom: 24, lineHeight: 1.6 }}>{confirmationRequest.message}</p>
-              <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+          <div className="confirm-overlay" onClick={(e) => { if (e.target === e.currentTarget && !confirmationLoading) setConfirmationRequest(null); }}>
+            <div className="confirm-dialog" role="dialog" aria-modal="true">
+              <div className="confirm-dialog-icon">⚠️</div>
+              <h3>Confirmação</h3>
+              <p>{confirmationRequest.message}</p>
+              <div className="confirm-dialog-actions">
                 <button className="secondary-button" type="button" onClick={() => setConfirmationRequest(null)} style={{ minWidth: 96 }} disabled={confirmationLoading}>
                   Cancelar
                 </button>
@@ -2245,6 +2265,29 @@ export function App() {
             </div>
           </div>
         )}
+
+        {/* Toast notifications */}
+        <div className="toast-container">
+          {toasts.map((toast) => (
+            <div
+              key={toast.id}
+              className={`toast ${toast.type}${toast.removing ? ' removing' : ''}`}
+              onClick={() => dismissToast(toast.id)}
+              role="alert"
+            >
+              <span className="toast-icon">
+                {toast.type === 'success' && <CheckCircle size={18} />}
+                {toast.type === 'error' && <AlertCircle size={18} />}
+                {toast.type === 'warning' && <AlertTriangle size={18} />}
+                {toast.type === 'info' && <Info size={18} />}
+              </span>
+              <span className="toast-message">{toast.message}</span>
+              <button className="toast-close" type="button" onClick={(e) => { e.stopPropagation(); dismissToast(toast.id); }} aria-label="Fechar">
+                <X size={14} />
+              </button>
+            </div>
+          ))}
+        </div>
 
         {activeModule === 'comandas' && (
           <section className="module-grid">
@@ -3722,16 +3765,16 @@ export function App() {
                       onClick={async () => {
                         const value = Number(currentCashClosingAmount.replace(',', '.'));
                         if (Number.isNaN(value)) {
-                          return alert('Informe um valor de fechamento válido.');
+                          return showToast('Informe um valor de fechamento válido.', 'warning');
                         }
                         try {
                           await api.closeCashRegister(value);
                           await loadData();
                           setCurrentCashClosingAmount('');
-                          alert('Caixa fechado com sucesso.');
+                          showToast('Caixa fechado com sucesso!', 'success');
                         } catch (error) {
                           console.error(error);
-                          alert('Erro ao fechar o caixa.');
+                          showToast('Erro ao fechar o caixa.', 'error');
                         }
                       }}
                     >
@@ -3755,15 +3798,15 @@ export function App() {
                       onClick={async () => {
                         const value = Number(initialCashAmount.replace(',', '.'));
                         if (Number.isNaN(value)) {
-                          return alert('Informe um valor inicial válido.');
+                          return showToast('Informe um valor inicial válido.', 'warning');
                         }
                         try {
                           await api.openCashRegister(value);
                           await loadData();
-                          alert('Caixa aberto com sucesso.');
+                          showToast('Caixa aberto com sucesso!', 'success');
                         } catch (error) {
                           console.error(error);
-                          alert('Erro ao abrir o caixa.');
+                          showToast('Erro ao abrir o caixa.', 'error');
                         }
                       }}
                     >

@@ -397,6 +397,187 @@ h2 {
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
 }
 
+/* ── Toast notifications ── */
+.toast-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.10);
+  min-width: 280px;
+  max-width: 380px;
+  pointer-events: all;
+  animation: toast-in 0.28s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  font-size: 14px;
+  line-height: 1.45;
+  font-weight: 500;
+  backdrop-filter: blur(8px);
+  cursor: pointer;
+}
+
+.toast.removing {
+  animation: toast-out 0.22s ease-in forwards;
+}
+
+.toast-icon {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1px;
+}
+
+.toast-message {
+  flex: 1;
+}
+
+.toast-close {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.15s;
+  font-size: 16px;
+  line-height: 1;
+  margin-top: -1px;
+  color: inherit;
+}
+
+.toast-close:hover {
+  opacity: 1;
+}
+
+.toast.success {
+  background: #effaf4;
+  border: 1.5px solid #a7f3c5;
+  color: #15623a;
+}
+
+.toast.error {
+  background: #fff1f2;
+  border: 1.5px solid #fda4af;
+  color: #9b1c2c;
+}
+
+.toast.warning {
+  background: #fffbeb;
+  border: 1.5px solid #fde68a;
+  color: #92400e;
+}
+
+.toast.info {
+  background: #eff6ff;
+  border: 1.5px solid #93c5fd;
+  color: #1e40af;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateX(48px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes toast-out {
+  from {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(48px) scale(0.95);
+  }
+}
+
+/* ── Confirmation dialog ── */
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(22, 33, 29, 0.55);
+  backdrop-filter: blur(3px);
+  display: grid;
+  place-items: center;
+  z-index: 200;
+  animation: fade-in 0.15s ease both;
+}
+
+.confirm-dialog {
+  width: min(440px, 92%);
+  background: #fff;
+  border-radius: 16px;
+  padding: 28px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.22);
+  animation: dialog-in 0.22s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.confirm-dialog-icon {
+  width: 48px;
+  height: 48px;
+  background: #fff7e6;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+  font-size: 24px;
+}
+
+.confirm-dialog h3 {
+  margin: 0 0 8px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #18201d;
+}
+
+.confirm-dialog p {
+  margin: 0 0 24px;
+  color: #4b5563;
+  line-height: 1.6;
+  font-size: 14px;
+}
+
+.confirm-dialog-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: scale(0.92) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
 @media (max-width: 1100px) {
   .app-shell.authenticated {
     grid-template-columns: 92px 1fr;
