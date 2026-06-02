@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 const isElectronBuild = process.env.VITE_BUILD_ELECTRON === 'true';
 
 export default defineConfig({
-  base: './',
+  base: isElectronBuild ? './' : '/',
   plugins: [react()],
   build: {
     rollupOptions: {
