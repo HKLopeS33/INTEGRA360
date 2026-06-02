@@ -1993,7 +1993,7 @@ export function App() {
         </div>
       )}
       {showPixModal && pixPayload && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'grid', placeItems: 'center', zIndex: 80 }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'grid', placeItems: 'center', zIndex: 500 }}>
           <div style={{ width: 'min(420px, 96%)', background: '#fff', borderRadius: 8, padding: 20, textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
             <h3>Pagamento PIX</h3>
             <p style={{ fontSize: 13 }}>Apresente o QR code ao cliente. Após confirmar o recebimento no seu banco, clique em <strong>Confirmar PIX recebido</strong>.</p>
