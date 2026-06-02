@@ -5,13 +5,8 @@ import { getCompanyById, getCompanyForCurrentUser, getUserRowById, invalidateUse
 // Cria usuário no Supabase Auth via Admin REST API (service role key).
 // Isso é necessário para aceitar emails com domínios internos (.local, etc.)
 // e confirmar o email automaticamente sem enviar mensagem.
-const SUPABASE_URL: string =
-  (import.meta.env.VITE_SUPABASE_URL as string) ||
-  'https://runszwefsbvcukzwxryp.supabase.co';
-
-const SUPABASE_SERVICE_KEY: string =
-  (import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY as string) ||
-  'sb_secret_NsN8T_GMpuxDNcth6_M7AQ_ENQGRPEo';
+const SUPABASE_URL: string = import.meta.env.VITE_SUPABASE_URL as string;
+const SUPABASE_SERVICE_KEY: string = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY as string;
 
 const createAuthUser = async (email: string, password: string, metadata: Record<string, any>) => {
   if (SUPABASE_SERVICE_KEY) {
