@@ -1017,33 +1017,13 @@ export function App() {
   const removeAccents = (str: string) =>
     str.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\x20-\x7E]/g, '');
 
-  // Normaliza chave PIX respeitando todos os tipos:
-  // - Email: contém @ → mantém como está
-  // - Telefone E.164: começa com + → mantém como está
-  // - Telefone com formatação BR (ex: (87) 99971-0850) → converte para +55...
-  // - CPF (11 dígitos), CNPJ (14 dígitos), Chave aleatória (UUID) → mantém como está
+  // Usa a chave PIX exatamente como cadastrada pelo usuário.
+  // Não tenta adivinhar o tipo — CPF e telefone têm 11 dígitos e são indistinguíveis sem contexto.
+  // O usuário deve copiar a chave diretamente do seu banco (ex: +5587999710850 para telefone).
   const normalizePixKey = (key: string): string => {
     const clean = key.trim();
-    if (!clean) return clean;
-
-    // Email
+    // Apenas normaliza email para minúsculo
     if (clean.includes('@')) return clean.toLowerCase();
-
-    // Já está em formato E.164 (+55...)
-    if (clean.startsWith('+')) return clean;
-
-    // Chave aleatória (UUID)
-    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(clean)) return clean;
-
-    // Telefone com formatação (tem parênteses, hífen ou espaço → usuário digitou número de telefone)
-    if (/[() -]/.test(clean)) {
-      const onlyDigits = clean.replace(/\D/g, '');
-      if (onlyDigits.length === 10 || onlyDigits.length === 11) {
-        return `+55${onlyDigits}`;
-      }
-    }
-
-    // CPF (11 dígitos), CNPJ (14 dígitos) e qualquer outra coisa → usa exatamente como está
     return clean;
   };
 
