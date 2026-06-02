@@ -1079,7 +1079,7 @@ export function App() {
     }>;
   } | null>(null);
 
-  const openCloseModal = () => setShowCloseModal(true);
+  const openCloseModal = () => { setClosePaidValue(''); setClosePaymentMethod('DINHEIRO'); setShowCloseModal(true); };
   const [pixQrUrl, setPixQrUrl] = useState<string | null>(null);
   const [pixPayload, setPixPayload] = useState<string | null>(null);
   const [pixPaymentId, setPixPaymentId] = useState<string | null>(null);
@@ -1867,7 +1867,7 @@ export function App() {
               </label>
               <label style={{ display: 'flex', flexDirection: 'column', width: 180 }}>
                 Valor pago
-                <input value={closePaidValue} onChange={(e) => setClosePaidValue(e.target.value)} placeholder="0.00" />
+                <input value={closePaidValue} onChange={(e) => setClosePaidValue(e.target.value)} placeholder="0.00" autoComplete="off" />
               </label>
             </div>
 
