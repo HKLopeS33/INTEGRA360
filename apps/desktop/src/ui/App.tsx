@@ -356,15 +356,31 @@ export function App() {
     setStoreAddress(localStorage.getItem('storeAddress') ?? '');
     setStorePhone(localStorage.getItem('storePhone') ?? '');
     setStoreCity(localStorage.getItem('storeCity') ?? '');
+    setStorePixKey(localStorage.getItem('storePixKey') ?? '');
   }, [currentUser]);
 
   useEffect(() => {
     if (currentCompany) {
-      setStoreName(currentCompany.name ?? 'Integra360');
-      setStoreCnpj(currentCompany.cnpj ?? '');
-      setStoreAddress(currentCompany.address ?? '');
-      setStorePhone(currentCompany.phone ?? '');
-      setStorePixKey(currentCompany.pixKey ?? '');
+      const name    = currentCompany.name    ?? 'Integra360';
+      const cnpj    = currentCompany.cnpj    ?? '';
+      const address = currentCompany.address ?? '';
+      const phone   = currentCompany.phone   ?? '';
+      const pixKey  = currentCompany.pixKey  ?? localStorage.getItem('storePixKey') ?? '';
+      const city    = localStorage.getItem('storeCity') ?? '';
+
+      setStoreName(name);
+      setStoreCnpj(cnpj);
+      setStoreAddress(address);
+      setStorePhone(phone);
+      setStorePixKey(pixKey);
+      setStoreCity(city);
+
+      // Persiste no localStorage para uso imediato no PIX
+      localStorage.setItem('storeName', name);
+      localStorage.setItem('storeCnpj', cnpj);
+      localStorage.setItem('storeAddress', address);
+      localStorage.setItem('storePhone', phone);
+      if (pixKey) localStorage.setItem('storePixKey', pixKey);
     }
   }, [currentCompany]);
 
@@ -699,6 +715,14 @@ export function App() {
   };
 
   const saveStoreSettings = async () => {
+    // Sempre salva no localStorage como fallback imediato (garante que PIX funciona mesmo sem recarregar)
+    localStorage.setItem('storeName', storeName);
+    localStorage.setItem('storeCnpj', storeCnpj);
+    localStorage.setItem('storeAddress', storeAddress);
+    localStorage.setItem('storePhone', storePhone);
+    localStorage.setItem('storeCity', storeCity);
+    localStorage.setItem('storePixKey', storePixKey);
+
     if (currentCompany?.id) {
       try {
         const response = await api.updateCompanyProfile({
@@ -708,7 +732,8 @@ export function App() {
           phone: storePhone,
           address: storeAddress
         });
-        setCurrentCompany(response.company);
+        // Atualiza o state diretamente para garantir que PIX usa a nova chave imediatamente
+        setCurrentCompany({ ...response.company, pixKey: storePixKey });
         showToast('Configurações salvas.', 'success');
         return;
       } catch (error) {
@@ -718,11 +743,6 @@ export function App() {
       }
     }
 
-    localStorage.setItem('storeName', storeName);
-    localStorage.setItem('storeCnpj', storeCnpj);
-    localStorage.setItem('storeAddress', storeAddress);
-    localStorage.setItem('storePhone', storePhone);
-    localStorage.setItem('storeCity', storeCity);
     showToast('Configurações salvas.', 'success');
   };
 
