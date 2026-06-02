@@ -1810,110 +1810,141 @@ export function App() {
   // Main app screen
   return (
     <main className="app-shell authenticated">
-      {showCloseModal && selectedTable && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'grid', placeItems: 'center', zIndex: 60 }}>
-          <div style={{ width: 'min(560px, 92%)', background: '#fff', borderRadius: 8, padding: 20 }}>
-            <h3>Fechar comanda - {selectedTable.name}</h3>
-            <div style={{ maxHeight: '50vh', overflow: 'auto', marginBottom: 12 }}>
-              {/* Lista de itens agregados */}
-              {(() => {
-                const tableOrders = selectedTableOrders;
-                const map = new Map<string, { quantity: number; unitPrice: number }>();
-                for (const o of tableOrders) for (const it of o.items) {
-                  const prev = map.get(it.productName);
-                  if (prev) prev.quantity += it.quantity;
-                  else map.set(it.productName, { quantity: it.quantity, unitPrice: it.unitPrice });
-                }
-                const items = Array.from(map.entries()).map(([name, v]) => ({ name, quantity: v.quantity, unitPrice: v.unitPrice, total: v.quantity * v.unitPrice }));
-                return (
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead>
-                      <tr style={{ textAlign: 'left', borderBottom: '1px solid #ddd' }}>
-                        <th>Produto</th>
-                        <th style={{ width: 80 }}>Qtd</th>
-                        <th style={{ width: 120 }}>V. Unit</th>
-                        <th style={{ width: 120 }}>Total</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {items.map((it) => (
-                        <tr key={it.name} style={{ borderBottom: '1px solid #f4f4f4' }}>
-                          <td>{it.name}</td>
-                          <td>{it.quantity}</td>
-                          <td>{formatCurrency(it.unitPrice)}</td>
-                          <td>{formatCurrency(it.total)}</td>
-                        </tr>
-                      ))}
-                      <tr>
-                        <td colSpan={3} style={{ fontWeight: 700 }}>TOTAL</td>
-                        <td style={{ fontWeight: 700 }}>{formatCurrency(items.reduce((s, i) => s + i.total, 0))}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                );
-              })()}
-            </div>
+      {showCloseModal && selectedTable && (() => {
+        const tableOrders = selectedTableOrders;
+        const map = new Map<string, { quantity: number; unitPrice: number }>();
+        for (const o of tableOrders) for (const it of o.items) {
+          const prev = map.get(it.productName);
+          if (prev) prev.quantity += it.quantity;
+          else map.set(it.productName, { quantity: it.quantity, unitPrice: it.unitPrice });
+        }
+        const items = Array.from(map.entries()).map(([name, v]) => ({ name, quantity: v.quantity, unitPrice: v.unitPrice, total: v.quantity * v.unitPrice }));
+        const total = items.reduce((s, i) => s + i.total, 0);
+        const tabId = tableOrders[0]?.tabId ?? '';
+        const paid = Number(closePaidValue.replace(',', '.')) || 0;
+        const change = paid > 0 ? paid - total : null;
 
-            <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 12 }}>
-              <label style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
-                Forma de pagamento
-                <select value={closePaymentMethod} onChange={(e) => setClosePaymentMethod(e.target.value)}>
-                  <option value="DINHEIRO">Dinheiro</option>
-                  <option value="CREDITO">Cartão Crédito</option>
-                  <option value="DEBITO">Cartão Débito</option>
-                  <option value="PIX">PIX</option>
-                  <option value="VOUCHER">Voucher</option>
-                </select>
-              </label>
-              <label style={{ display: 'flex', flexDirection: 'column', width: 180 }}>
-                Valor pago
-                <input value={closePaidValue} onChange={(e) => setClosePaidValue(e.target.value)} placeholder="0.00" autoComplete="off" />
-              </label>
-            </div>
+        const paymentOptions = [
+          { value: 'DINHEIRO', label: 'Dinheiro', icon: '💵' },
+          { value: 'CREDITO',  label: 'Crédito',  icon: '💳' },
+          { value: 'DEBITO',   label: 'Débito',   icon: '🏦' },
+          { value: 'PIX',      label: 'PIX',      icon: '⚡' },
+          { value: 'VOUCHER',  label: 'Voucher',  icon: '🎫' },
+        ];
 
-            {closePaymentMethod === 'PIX' && storePixKey && (() => {
-              const tableOrders = selectedTableOrders;
-              const map = new Map<string, { quantity: number; unitPrice: number }>();
-              for (const o of tableOrders) for (const it of o.items) {
-                const prev = map.get(it.productName);
-                if (prev) prev.quantity += it.quantity;
-                else map.set(it.productName, { quantity: it.quantity, unitPrice: it.unitPrice });
-              }
-              const items = Array.from(map.entries()).map(([name, v]) => ({ name, quantity: v.quantity, unitPrice: v.unitPrice, total: v.quantity * v.unitPrice }));
-              const total = items.reduce((s, i) => s + i.total, 0);
-              const tabId = tableOrders[0]?.tabId ?? '';
+        return (
+          <div className="confirm-overlay" onClick={() => closeCloseModal()}>
+            <div className="close-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
 
-              return (
-                <div style={{ marginBottom: 12 }}>
-                  <strong>PIX disponível:</strong>
-                  <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
+              {/* Cabeçalho */}
+              <div className="close-modal-header">
+                <div>
+                  <span className="eyebrow" style={{ color: '#789088' }}>Encerramento</span>
+                  <h3 className="close-modal-title">Fechar comanda — {selectedTable.name}</h3>
+                </div>
+                <button type="button" className="close-modal-x" onClick={() => closeCloseModal()} aria-label="Fechar">
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Lista de itens */}
+              <div className="close-modal-items">
+                {items.map((it) => (
+                  <div key={it.name} className="close-modal-item">
+                    <span className="close-modal-item-qty">{it.quantity}×</span>
+                    <span className="close-modal-item-name">{it.name}</span>
+                    <span className="close-modal-item-price">{formatCurrency(it.total)}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Total */}
+              <div className="close-modal-total">
+                <span>Total</span>
+                <span>{formatCurrency(total)}</span>
+              </div>
+
+              {/* Forma de pagamento */}
+              <div className="close-modal-section-label">Forma de pagamento</div>
+              <div className="close-modal-payment-options">
+                {paymentOptions.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    className={`close-modal-pay-btn${closePaymentMethod === opt.value ? ' active' : ''}`}
+                    onClick={() => setClosePaymentMethod(opt.value)}
+                  >
+                    <span className="close-modal-pay-icon">{opt.icon}</span>
+                    <span>{opt.label}</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Valor pago + troco */}
+              <div className="close-modal-value-row">
+                <div className="close-modal-value-field">
+                  <label htmlFor="paid-value" className="close-modal-section-label" style={{ marginBottom: 6 }}>Valor recebido</label>
+                  <div className="close-modal-value-input-wrap">
+                    <span className="close-modal-currency">R$</span>
+                    <input
+                      id="paid-value"
+                      type="number"
+                      inputMode="decimal"
+                      min="0"
+                      step="0.01"
+                      value={closePaidValue}
+                      onChange={(e) => setClosePaidValue(e.target.value)}
+                      placeholder="0,00"
+                      autoComplete="off"
+                      className="close-modal-value-input"
+                    />
+                  </div>
+                </div>
+                {change !== null && (
+                  <div className={`close-modal-change${change < 0 ? ' negative' : ''}`}>
+                    <span className="close-modal-section-label" style={{ marginBottom: 4 }}>{change >= 0 ? 'Troco' : 'Faltam'}</span>
+                    <span className="close-modal-change-value">{formatCurrency(Math.abs(change))}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Seção PIX */}
+              {closePaymentMethod === 'PIX' && storePixKey && (
+                <div className="close-modal-pix">
+                  <div className="close-modal-pix-label">⚡ Pagamento via PIX</div>
+                  <div className="close-modal-pix-actions">
                     <button type="button" className="secondary-button" onClick={() => {
                       const payload = getPixBrCode(storePixKey, total, tabId, storeName, storeAddress || 'SÃO PAULO');
                       setPixPayload(payload);
                       setPixQrUrl(getQrCodeSrc(payload));
                       setShowPixModal(true);
                     }}>
-                      Abrir QR PIX ({formatCurrency(total)})
+                      Exibir QR Code — {formatCurrency(total)}
                     </button>
                     <button type="button" className="secondary-button" onClick={() => {
                       const payload = getPixBrCode(storePixKey, total, tabId, storeName, storeAddress || 'SÃO PAULO');
                       navigator.clipboard.writeText(payload);
                       showToast('Payload PIX copiado.', 'success');
                     }}>
-                      Copiar payload
+                      Copiar chave PIX
                     </button>
                   </div>
                 </div>
-              );
-            })()}
+              )}
 
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button type="button" className="secondary-button" onClick={() => closeCloseModal()}>Cancelar</button>
-              <button type="button" className="primary-button" onClick={() => void handleConfirmClose()}>Confirmar e Encerrar</button>
+              {/* Ações */}
+              <div className="close-modal-actions">
+                <button type="button" className="secondary-button" onClick={() => closeCloseModal()}>Cancelar</button>
+                <button type="button" className="primary-button" onClick={() => void handleConfirmClose()}>
+                  <CheckCircle size={16} style={{ marginRight: 6 }} />
+                  Confirmar e Encerrar
+                </button>
+              </div>
+
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {qrModalTable && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'grid', placeItems: 'center', zIndex: 65 }} onClick={closeQrModal}>
