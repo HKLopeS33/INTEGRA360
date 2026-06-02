@@ -29,9 +29,14 @@ function updateVersion(filePath, newVersion) {
   console.log(`✅ ${filePath.replace(__dirname, '.')}: ${old} → ${newVersion}`);
 }
 
-function run(cmd, args = [], cwd = __dirname) {
+function run(cmd, args = [], cwd = __dirname, extraEnv = {}) {
   return new Promise((resolve, reject) => {
-    const proc = spawn(cmd, args, { stdio: 'inherit', shell: true, cwd });
+    const proc = spawn(cmd, args, {
+      stdio: 'inherit',
+      shell: true,
+      cwd,
+      env: { ...process.env, ...extraEnv }
+    });
     proc.on('exit', code => code === 0 ? resolve() : reject(new Error(`Falhou com código ${code}`)));
     proc.on('error', reject);
   });
@@ -66,9 +71,13 @@ async function main() {
   console.log('\n📦 Buildando...');
   await run('node', ['build-app.mjs'], resolve(__dirname, 'apps/desktop'));
 
-  // 3. Publish no GitHub Releases
+  // 3. Publish no GitHub Releases — passa GH_TOKEN explicitamente para o processo filho
   console.log('\n📡 Publicando release no GitHub...');
-  await run('npx', ['electron-builder', '--publish', 'always'], resolve(__dirname, 'apps/desktop'));
+  await run(
+    'npx', ['electron-builder', '--publish', 'always'],
+    resolve(__dirname, 'apps/desktop'),
+    { GH_TOKEN: process.env.GH_TOKEN }
+  );
 
   console.log(`\n🎉 Release v${version} publicada com sucesso!`);
   console.log('   Clientes com o app instalado receberão a atualização na próxima abertura.\n');
