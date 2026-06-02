@@ -87,7 +87,18 @@ const mapUserRow = (user: User, row: UserRow): AppUser => ({
 async function getAuthUser() {
   const { data, error } = await supabase.auth.getUser();
   if (error || !data.user) {
-    throw new Error(error?.message ?? 'Usuário não autenticado.');
+    const msg = error?.message ?? 'Usuário não autenticado.';
+    // Refresh token inválido ou sessão ausente → força logout na UI
+    if (
+      msg.includes('Refresh Token') ||
+      msg.includes('Auth session missing') ||
+      msg.includes('Invalid Refresh Token') ||
+      error?.status === 401
+    ) {
+      void supabase.auth.signOut();
+      window.dispatchEvent(new CustomEvent('sistema:unauthorized'));
+    }
+    throw new Error(msg);
   }
   return data.user;
 }

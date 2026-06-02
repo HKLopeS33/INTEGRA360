@@ -1411,10 +1411,24 @@ export function App() {
             setIsAuthenticated(true);
           }
         }).catch(() => {
-          // session exists but user load failed — stay on login screen
+          // session exists but user load failed — clear invalid session and stay on login
+          void supabase.auth.signOut();
         });
       }
     });
+
+    // Detecta expiração/invalidação de sessão em tempo real
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED') {
+        if (event === 'SIGNED_OUT') {
+          setIsAuthenticated(false);
+          setCurrentUser(null);
+          setCurrentCompany(null);
+        }
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   // Listen for unauthorized events emitted by the API layer (e.g. token expired or invalid)

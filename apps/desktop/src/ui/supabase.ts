@@ -18,9 +18,14 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 
 // Cliente com service role key — usado apenas para criar usuários via admin API
 // (necessário para aceitar emails com domínios internos como .local)
+// storageKey diferente evita conflito de GoTrueClient no mesmo contexto
 export const supabaseAdmin = supabaseServiceRoleKey
   ? createClient(supabaseUrl, supabaseServiceRoleKey, {
-      auth: { persistSession: false, autoRefreshToken: false }
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        storageKey: 'supabase-admin-auth'
+      }
     })
   : null;
 
