@@ -106,32 +106,65 @@ ipcMain.handle('preview-report-pdf', async (event, html) => {
 
 // ── Auto-updater ──────────────────────────────────────────────
 function setupAutoUpdater(win) {
-  if (!app.isPackaged) return; // só roda no app empacotado
+  if (!app.isPackaged) {
+    // Em dev, avisa o renderer para pular a splash imediatamente
+    win.webContents.once('did-finish-load', () => {
+      win.webContents.send('updater-status', { event: 'update-not-available' });
+    });
+    return;
+  }
 
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
 
-  autoUpdater.on('update-available', (info) => {
-    win.webContents.send('update-available', info.version);
+  const send = (event, data = {}) =>
+    win.webContents.send('updater-status', { event, ...data });
+
+  autoUpdater.on('checking-for-update', () => {
+    send('checking-for-update');
   });
 
-  autoUpdater.on('update-downloaded', () => {
-    const choice = dialog.showMessageBoxSync(win, {
-      type: 'info',
-      title: 'Atualização disponível',
-      message: `Uma nova versão foi baixada.\nDeseja reiniciar agora para instalar?`,
-      buttons: ['Reiniciar agora', 'Depois'],
-      defaultId: 0
-    });
-    if (choice === 0) autoUpdater.quitAndInstall();
+  autoUpdater.on('update-available', (info) => {
+    send('update-available', { version: info.version });
+  });
+
+  autoUpdater.on('update-not-available', () => {
+    send('update-not-available');
+  });
+
+  autoUpdater.on('download-progress', (progress) => {
+    send('download-progress', { percent: Math.floor(progress.percent) });
+  });
+
+  autoUpdater.on('update-downloaded', (info) => {
+    send('update-downloaded', { version: info.version });
+    // Dá 1.5s para o renderer mostrar "concluído" antes de perguntar
+    setTimeout(() => {
+      const choice = dialog.showMessageBoxSync(win, {
+        type: 'info',
+        title: 'Atualização pronta',
+        message: `Versão ${info.version} baixada.\nDeseja reiniciar agora para instalar?`,
+        buttons: ['Reiniciar agora', 'Depois'],
+        defaultId: 0
+      });
+      if (choice === 0) autoUpdater.quitAndInstall();
+      else send('update-not-available'); // segue para login se escolheu "Depois"
+    }, 1500);
   });
 
   autoUpdater.on('error', (err) => {
     console.error('[AutoUpdater] erro:', err?.message ?? err);
+    send('error', { message: err?.message ?? 'Erro desconhecido' });
   });
 
-  // Verifica atualizações ao iniciar e a cada 2 horas
-  autoUpdater.checkForUpdates().catch(() => {});
+  // Verifica ao iniciar — após o renderer estar pronto
+  win.webContents.once('did-finish-load', () => {
+    autoUpdater.checkForUpdates().catch((err) => {
+      send('error', { message: err?.message ?? 'Falha ao verificar' });
+    });
+  });
+
+  // Reverifica a cada 2 horas
   setInterval(() => autoUpdater.checkForUpdates().catch(() => {}), 2 * 60 * 60 * 1000);
 }
 // ──────────────────────────────────────────────────────────────

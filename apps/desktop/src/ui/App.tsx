@@ -98,7 +98,111 @@ const getNavItems = (role?: string) => {
   return allowedModuleIds.map((moduleId) => moduleOptions[moduleId]).filter((item) => item !== undefined);
 };
 
+// ── Splash screen ────────────────────────────────────────────────────────────
+type SplashState = 'checking' | 'downloading' | 'ready' | 'done';
+
+function SplashScreen({ onDone }: { onDone: () => void }) {
+  const [status, setStatus] = useState<SplashState>('checking');
+  const [label, setLabel]   = useState('Verificando atualizações...');
+  const [progress, setProgress] = useState(0);
+  const [exiting, setExiting]   = useState(false);
+  const isElectron = typeof window !== 'undefined' && !!(window as any).sistema?.onUpdaterStatus;
+
+  const finish = useCallback(() => {
+    setExiting(true);
+    setTimeout(onDone, 480);
+  }, [onDone]);
+
+  useEffect(() => {
+    if (isElectron) {
+      // Electron: ouve eventos reais do electron-updater
+      const unsub = (window as any).sistema.onUpdaterStatus((data: any) => {
+        switch (data.event) {
+          case 'checking-for-update':
+            setLabel('Verificando atualizações...');
+            setProgress(15);
+            break;
+          case 'update-available':
+            setStatus('downloading');
+            setLabel(`Nova versão ${data.version} encontrada! Baixando...`);
+            setProgress(30);
+            break;
+          case 'download-progress':
+            setStatus('downloading');
+            setLabel(`Baixando atualização... ${data.percent}%`);
+            setProgress(30 + Math.floor(data.percent * 0.6));
+            break;
+          case 'update-downloaded':
+            setStatus('ready');
+            setLabel('Atualização concluída! Reiniciando...');
+            setProgress(100);
+            break;
+          case 'update-not-available':
+            setStatus('ready');
+            setLabel('Sistema atualizado.');
+            setProgress(100);
+            setTimeout(finish, 800);
+            break;
+          case 'error':
+            setLabel('Não foi possível verificar atualizações.');
+            setProgress(100);
+            setTimeout(finish, 1200);
+            break;
+        }
+      });
+      // Timeout de segurança: se não receber nada em 8s, segue
+      const timeout = setTimeout(() => {
+        setLabel('Sistema pronto.');
+        setProgress(100);
+        setTimeout(finish, 600);
+      }, 8000);
+      return () => { unsub(); clearTimeout(timeout); };
+    } else {
+      // Web: sequência simulada de boot
+      const steps: Array<{ label: string; progress: number; delay: number }> = [
+        { label: 'Iniciando Integra360...', progress: 20,  delay: 0   },
+        { label: 'Verificando conexão...',  progress: 50,  delay: 600 },
+        { label: 'Carregando recursos...',  progress: 80,  delay: 1100 },
+        { label: 'Tudo pronto!',            progress: 100, delay: 1600 },
+      ];
+      const timers: ReturnType<typeof setTimeout>[] = [];
+      steps.forEach(({ label: l, progress: p, delay }) => {
+        timers.push(setTimeout(() => { setLabel(l); setProgress(p); }, delay));
+      });
+      timers.push(setTimeout(finish, 2200));
+      return () => timers.forEach(clearTimeout);
+    }
+  }, [isElectron, finish]);
+
+  const isIndeterminate = status === 'checking' && progress < 15;
+
+  return (
+    <div className={`splash${exiting ? ' exiting' : ''}`}>
+      <div className="splash-brand">
+        <div className="splash-mark">I</div>
+        <span className="splash-name">Integra360</span>
+      </div>
+      <div className="splash-progress-area">
+        <div className="splash-status">{label}</div>
+        <div className="splash-bar-track">
+          <div
+            className={`splash-bar-fill${isIndeterminate ? ' indeterminate' : ''}`}
+            style={{ width: isIndeterminate ? undefined : `${progress}%` }}
+          />
+        </div>
+        <div className="splash-version">v{APP_VERSION}</div>
+      </div>
+    </div>
+  );
+}
+
+const APP_VERSION = '1.0.1';
+// ─────────────────────────────────────────────────────────────────────────────
+
 export function App() {
+  // Splash
+  const [showSplash, setShowSplash] = useState(true);
+
   // Auth state
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
@@ -1545,6 +1649,11 @@ export function App() {
     setNewProductPreparationMinutes('10');
     await loadData();
   };
+
+  // Splash screen
+  if (showSplash) {
+    return <SplashScreen onDone={() => setShowSplash(false)} />;
+  }
 
   // Login screen
   if (!isAuthenticated) {
