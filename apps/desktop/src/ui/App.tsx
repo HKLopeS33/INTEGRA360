@@ -226,6 +226,11 @@ export function App() {
   const [newProductDescription, setNewProductDescription] = useState('');
   const [newProductPrice, setNewProductPrice] = useState('');
   const [newProductPreparationMinutes, setNewProductPreparationMinutes] = useState('10');
+  const [newProductCategoryId, setNewProductCategoryId] = useState('');
+  const [categories, setCategories] = useState<Array<{ id: string; name: string }>>([]);
+  const [editingProduct, setEditingProduct] = useState<any | null>(null);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [showCategoryForm, setShowCategoryForm] = useState(false);
   const [menuTableId, setMenuTableId] = useState<string | null>(null);
   const [menuCart, setMenuCart] = useState<Array<{ product: Product; quantity: number; note: string }>>([]);
   const [menuModalTable, setMenuModalTable] = useState<RestaurantTable | null>(null);
@@ -387,6 +392,9 @@ export function App() {
   useEffect(() => {
     if (activeModule === 'cadastros') {
       void loadCompanies();
+    }
+    if (activeModule === 'cardapio') {
+      void loadCategories();
     }
   }, [activeModule]);
 
@@ -1705,27 +1713,77 @@ export function App() {
     }
   };
 
-  const createProduct = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const loadCategories = async () => {
+    try {
+      const list = await api.categories();
+      setCategories(list);
+      if (list.length > 0 && !newProductCategoryId) setNewProductCategoryId(list[0].id);
+    } catch { /* silencioso */ }
+  };
 
-    const normalizedPrice = Number(newProductPrice.replace(',', '.'));
-
-    if (!newProductName.trim() || Number.isNaN(normalizedPrice) || normalizedPrice <= 0) {
-      return;
+  const createCategory = async () => {
+    if (!newCategoryName.trim()) return showToast('Digite o nome da categoria.', 'warning');
+    try {
+      await api.createCategory(newCategoryName.trim());
+      setNewCategoryName('');
+      setShowCategoryForm(false);
+      await loadCategories();
+      showToast('Categoria criada!', 'success');
+    } catch (e) {
+      showToast((e as Error).message, 'error');
     }
+  };
 
-    await api.createProduct({
-      name: newProductName,
-      description: newProductDescription,
-      price: normalizedPrice,
-      preparationMinutes: Number(newProductPreparationMinutes || 0)
-    });
+  const startEditProduct = (product: any) => {
+    setEditingProduct(product);
+    setNewProductName(product.name);
+    setNewProductDescription(product.description ?? '');
+    setNewProductPrice(String(product.price));
+    setNewProductPreparationMinutes(String(product.preparationMinutes ?? 10));
+    setNewProductCategoryId(product.categoryId ?? '');
+  };
 
+  const cancelEdit = () => {
+    setEditingProduct(null);
     setNewProductName('');
     setNewProductDescription('');
     setNewProductPrice('');
     setNewProductPreparationMinutes('10');
-    await loadData();
+    setNewProductCategoryId(categories[0]?.id ?? '');
+  };
+
+  const createProduct = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const normalizedPrice = Number(newProductPrice.replace(',', '.'));
+    if (!newProductName.trim() || Number.isNaN(normalizedPrice) || normalizedPrice <= 0) {
+      showToast('Preencha nome e preço válido.', 'warning');
+      return;
+    }
+    try {
+      if (editingProduct) {
+        await api.updateProduct(editingProduct.id, {
+          name: newProductName,
+          description: newProductDescription,
+          price: normalizedPrice,
+          preparationMinutes: Number(newProductPreparationMinutes || 0),
+          categoryId: newProductCategoryId || undefined
+        });
+        showToast('Produto atualizado!', 'success');
+      } else {
+        await api.createProduct({
+          name: newProductName,
+          description: newProductDescription,
+          price: normalizedPrice,
+          preparationMinutes: Number(newProductPreparationMinutes || 0),
+          categoryId: newProductCategoryId || undefined
+        });
+        showToast('Produto criado!', 'success');
+      }
+      cancelEdit();
+      await loadData();
+    } catch (e) {
+      showToast((e as Error).message, 'error');
+    }
   };
 
   // Splash screen
@@ -2677,58 +2735,99 @@ export function App() {
 
         {activeModule === 'cardapio' && (
           <section className="module-grid two-columns">
-            <form className="panel product-form" onSubmit={(event) => void createProduct(event)}>
-              <div className="panel-header">
-                <div>
-                  <span className="eyebrow">Novo item</span>
-                  <h2>Inserir no cardapio</h2>
+
+            {/* Formulário de criação / edição */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <form className="panel product-form" onSubmit={(event) => void createProduct(event)}>
+                <div className="panel-header">
+                  <div>
+                    <span className="eyebrow">{editingProduct ? 'Editar item' : 'Novo item'}</span>
+                    <h2>{editingProduct ? `Editando: ${editingProduct.name}` : 'Inserir no cardápio'}</h2>
+                  </div>
+                  <ShoppingBag size={22} />
                 </div>
-                <ShoppingBag size={22} />
-              </div>
 
-              <label>
-                Nome
-                <input
-                  placeholder="Ex: Shawarma de cordeiro"
-                  value={newProductName}
-                  onChange={(event) => setNewProductName(event.target.value)}
-                />
-              </label>
-
-              <label>
-                Descricao
-                <textarea
-                  placeholder="Ingredientes, tamanho ou observacoes"
-                  rows={3}
-                  value={newProductDescription}
-                  onChange={(event) => setNewProductDescription(event.target.value)}
-                />
-              </label>
-
-              <div className="form-grid">
                 <label>
-                  Preco
-                  <input
-                    inputMode="decimal"
-                    placeholder="29,90"
-                    value={newProductPrice}
-                    onChange={(event) => setNewProductPrice(event.target.value)}
-                  />
+                  Nome
+                  <input placeholder="Ex: Shawarma de cordeiro" value={newProductName} onChange={(e) => setNewProductName(e.target.value)} />
                 </label>
 
                 <label>
-                  Preparo min.
-                  <input
-                    inputMode="numeric"
-                    value={newProductPreparationMinutes}
-                    onChange={(event) => setNewProductPreparationMinutes(event.target.value)}
-                  />
+                  Descrição
+                  <textarea placeholder="Ingredientes, tamanho ou observações" rows={3} value={newProductDescription} onChange={(e) => setNewProductDescription(e.target.value)} style={{ resize: 'vertical' }} />
                 </label>
+
+                <label>
+                  Categoria
+                  <select value={newProductCategoryId} onChange={(e) => setNewProductCategoryId(e.target.value)}>
+                    <option value="">— Sem categoria —</option>
+                    {categories.map((cat) => (
+                      <option key={cat.id} value={cat.id}>{cat.name}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <div className="form-grid">
+                  <label>
+                    Preço (R$)
+                    <input inputMode="decimal" placeholder="29,90" value={newProductPrice} onChange={(e) => setNewProductPrice(e.target.value)} />
+                  </label>
+                  <label>
+                    Preparo (min)
+                    <input inputMode="numeric" placeholder="10" value={newProductPreparationMinutes} onChange={(e) => setNewProductPreparationMinutes(e.target.value)} />
+                  </label>
+                </div>
+
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button className="primary-button" type="submit" style={{ flex: 1 }}>
+                    {editingProduct ? 'Salvar alterações' : 'Salvar item'}
+                  </button>
+                  {editingProduct && (
+                    <button className="secondary-button" type="button" onClick={cancelEdit}>
+                      Cancelar
+                    </button>
+                  )}
+                </div>
+              </form>
+
+              {/* Gerenciar categorias */}
+              <div className="panel product-form">
+                <div className="panel-header" style={{ cursor: 'pointer' }} onClick={() => setShowCategoryForm(!showCategoryForm)}>
+                  <div>
+                    <span className="eyebrow">Organização</span>
+                    <h2>Categorias</h2>
+                  </div>
+                  <span style={{ fontSize: 13, color: '#789088' }}>{showCategoryForm ? '▲ Fechar' : '▼ Gerenciar'}</span>
+                </div>
+
+                {showCategoryForm && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <input
+                        placeholder="Nome da nova categoria"
+                        value={newCategoryName}
+                        onChange={(e) => setNewCategoryName(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), void createCategory())}
+                        style={{ flex: 1 }}
+                      />
+                      <button className="primary-button" type="button" onClick={() => void createCategory()}>
+                        Criar
+                      </button>
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                      {categories.length === 0 && <p style={{ fontSize: 13, color: '#789088', margin: 0 }}>Nenhuma categoria criada.</p>}
+                      {categories.map((cat) => (
+                        <span key={cat.id} style={{ background: '#eef2ef', border: '1px solid #dbe3de', borderRadius: 8, padding: '4px 12px', fontSize: 13, fontWeight: 500 }}>
+                          {cat.name}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
+            </div>
 
-              <button className="primary-button" type="submit">Salvar item</button>
-            </form>
-
+            {/* Lista de produtos agrupados por categoria */}
             <div className="panel">
               <div className="panel-header">
                 <div>
@@ -2737,23 +2836,55 @@ export function App() {
                 </div>
                 <ShoppingBag size={22} />
               </div>
-              <div className="product-list catalog-list">
-                {Object.entries(groupedMenuSections).map(([section, items]) => (
-                  items.length > 0 ? (
-                    <div key={section} style={{ marginBottom: 24 }}>
-                      <h3 style={{ margin: '0 0 12px' }}>{section}</h3>
-                      {items.map((product) => (
-                        <div className="product-row static" key={product.id}>
-                          <span>
-                            <strong>{product.name}</strong>
-                            <small>{product.description}</small>
-                          </span>
-                          <b>{formatCurrency(product.price)}</b>
+              <div className="product-list catalog-list" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
+                {products.length === 0 && <p style={{ color: '#789088', fontSize: 14 }}>Nenhum produto cadastrado.</p>}
+                {(() => {
+                  // Agrupa por categoria real
+                  const byCat: Record<string, { catName: string; items: Product[] }> = {};
+                  products.forEach((p) => {
+                    const cat = categories.find((c) => c.id === p.categoryId);
+                    const key = cat?.id ?? 'sem-cat';
+                    const label = cat?.name ?? 'Sem categoria';
+                    if (!byCat[key]) byCat[key] = { catName: label, items: [] };
+                    byCat[key].items.push(p);
+                  });
+                  return Object.entries(byCat).map(([key, group]) => (
+                    <div key={key} style={{ marginBottom: 20 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#789088', marginBottom: 8, borderBottom: '1px solid #eef2ef', paddingBottom: 4 }}>
+                        {group.catName}
+                      </div>
+                      {group.items.map((product) => (
+                        <div key={product.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: '1px solid #f4f6f4' }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontWeight: 600, fontSize: 14, color: '#18201d' }}>{product.name}</div>
+                            {product.description && <div style={{ fontSize: 12, color: '#789088', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{product.description}</div>}
+                          </div>
+                          <b style={{ color: '#18201d', whiteSpace: 'nowrap' }}>{formatCurrency(product.price)}</b>
+                          <button
+                            type="button"
+                            className="secondary-button"
+                            style={{ padding: '4px 10px', fontSize: 12 }}
+                            onClick={() => startEditProduct(product)}
+                          >
+                            Editar
+                          </button>
+                          <button
+                            type="button"
+                            className="secondary-button"
+                            style={{ padding: '4px 10px', fontSize: 12, color: '#b91c1c', borderColor: '#fca5a5' }}
+                            onClick={() => confirmAction(`Remover "${product.name}"?`, async () => {
+                              await api.deleteProduct(product.id);
+                              await loadData();
+                              showToast('Produto removido.', 'success');
+                            })}
+                          >
+                            Remover
+                          </button>
                         </div>
                       ))}
                     </div>
-                  ) : null
-                ))}
+                  ));
+                })()}
               </div>
             </div>
           </section>

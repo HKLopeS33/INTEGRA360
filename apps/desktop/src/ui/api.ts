@@ -392,6 +392,69 @@ export const api = {
     };
   },
 
+  updateProduct: async (productId: string, payload: {
+    name?: string;
+    description?: string;
+    price?: number;
+    preparationMinutes?: number;
+    categoryId?: string;
+    available?: boolean;
+  }) => {
+    const user = await requireCompanyUserWithRoles(['ADMIN', 'GERENTE', 'ESTOQUE']);
+    const { data, error } = await supabase
+      .from('Product')
+      .update({
+        ...(payload.name !== undefined && { name: payload.name.trim() }),
+        ...(payload.description !== undefined && { description: payload.description.trim() }),
+        ...(payload.price !== undefined && { price: Number(payload.price) }),
+        ...(payload.preparationMinutes !== undefined && { preparationMinutes: Number(payload.preparationMinutes) }),
+        ...(payload.categoryId !== undefined && { categoryId: payload.categoryId }),
+        ...(payload.available !== undefined && { available: payload.available }),
+      })
+      .eq('id', productId)
+      .eq('companyId', user.companyId)
+      .select('id,categoryId,name,description,price,preparationMinutes,available')
+      .single();
+    if (error) throwSupabaseError(error, 'Falha ao atualizar produto.');
+    return { ...data, price: Number(data.price) };
+  },
+
+  deleteProduct: async (productId: string) => {
+    const user = await requireCompanyUserWithRoles(['ADMIN', 'GERENTE', 'ESTOQUE']);
+    const { error } = await supabase
+      .from('Product')
+      .update({ active: false })
+      .eq('id', productId)
+      .eq('companyId', user.companyId);
+    if (error) throwSupabaseError(error, 'Falha ao remover produto.');
+    return { success: true };
+  },
+
+  createCategory: async (name: string) => {
+    const user = await requireCompanyUserWithRoles(['ADMIN', 'GERENTE', 'ESTOQUE']);
+    const { data: existing } = await supabase
+      .from('Category')
+      .select('id')
+      .eq('companyId', user.companyId)
+      .ilike('name', name.trim())
+      .maybeSingle();
+    if (existing) throw new Error('Categoria já existe.');
+    const { data: maxSort } = await supabase
+      .from('Category')
+      .select('sort')
+      .eq('companyId', user.companyId)
+      .order('sort', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const { data, error } = await supabase
+      .from('Category')
+      .insert([{ companyId: user.companyId, name: name.trim(), sort: (maxSort?.sort ?? 0) + 1, active: true }])
+      .select('id,name,active')
+      .single();
+    if (error) throwSupabaseError(error, 'Falha ao criar categoria.');
+    return data;
+  },
+
   orders: async (active?: boolean) => {
     const user = await requireCompanyUserWithRoles(['ADMIN', 'GARCOM', 'CAIXA', 'GERENTE', 'FINANCEIRO', 'ESTOQUE']);
 
