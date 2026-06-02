@@ -196,7 +196,9 @@ function SplashScreen({ onDone }: { onDone: () => void }) {
   );
 }
 
-const APP_VERSION = '1.0.1';
+// Versão injetada automaticamente pelo Vite a partir do package.json
+declare const __APP_VERSION__: string;
+const APP_VERSION: string = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.0.0';
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function App() {
