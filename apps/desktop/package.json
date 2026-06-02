@@ -43,7 +43,7 @@
     "publish": {
       "provider": "github",
       "owner": "HKLopeS33",
-      "repo": "SISTEMA-SHAWARMA"
+      "repo": "INTEGRA360"
     },
     "directories": {
       "output": "dist-app",
