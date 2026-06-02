@@ -118,6 +118,18 @@ function setupAutoUpdater(win) {
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
 
+  // Suporte a repositório privado — token de leitura embutido no build
+  const updaterToken = process.env.GH_UPDATER_TOKEN;
+  if (updaterToken) {
+    autoUpdater.setFeedURL({
+      provider: 'github',
+      owner: 'HKLopeS33',
+      repo: 'INTEGRA360',
+      private: true,
+      token: updaterToken
+    });
+  }
+
   const send = (event, data = {}) =>
     win.webContents.send('updater-status', { event, ...data });
 

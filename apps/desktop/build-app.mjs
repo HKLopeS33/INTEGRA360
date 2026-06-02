@@ -1,8 +1,20 @@
 #!/usr/bin/env node
-import { copyFile, mkdir, readdir } from 'node:fs/promises';
+import { copyFile, mkdir, readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
+
+// Carrega .env automaticamente para injetar tokens no build
+async function loadEnv() {
+  try {
+    const envPath = path.join(path.dirname(fileURLToPath(import.meta.url)), '.env');
+    const content = await readFile(envPath, 'utf8');
+    for (const line of content.split('\n')) {
+      const match = line.match(/^([^#=][^=]*)=(.*)$/);
+      if (match) process.env[match[1].trim()] = match[2].trim();
+    }
+  } catch { /* .env opcional */ }
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distDir = path.join(__dirname, 'dist');
@@ -93,4 +105,5 @@ async function build() {
   }
 }
 
+await loadEnv();
 build();
