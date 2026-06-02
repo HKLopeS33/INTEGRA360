@@ -65,12 +65,13 @@
           ]
         }
       ],
-      "requestedExecutionLevel": "requireAdministrator",
       "sign": false,
       "signingHashAlgorithms": []
     },
     "nsis": {
       "oneClick": false,
+      "perMachine": false,
+      "allowElevation": true,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
