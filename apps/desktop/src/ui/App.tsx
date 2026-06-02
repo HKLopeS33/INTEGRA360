@@ -1017,21 +1017,33 @@ export function App() {
   const removeAccents = (str: string) =>
     str.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\x20-\x7E]/g, '');
 
-  // Normaliza chave PIX:
-  // - Telefone (ex: 87999710850 ou (87) 99971-0850) → +5587999710850
-  // - Email, CPF, CNPJ, EVP → mantém como está (só limpa espaços)
+  // Normaliza chave PIX respeitando todos os tipos:
+  // - Email: contém @ → mantém como está
+  // - Telefone E.164: começa com + → mantém como está
+  // - Telefone com formatação BR (ex: (87) 99971-0850) → converte para +55...
+  // - CPF (11 dígitos), CNPJ (14 dígitos), Chave aleatória (UUID) → mantém como está
   const normalizePixKey = (key: string): string => {
     const clean = key.trim();
-    // Verifica se é telefone: só dígitos, 10 ou 11 chars (sem +55 ainda)
-    const onlyDigits = clean.replace(/\D/g, '');
-    if (/^\d{10,11}$/.test(onlyDigits) && !clean.startsWith('+')) {
-      return `+55${onlyDigits}`;
+    if (!clean) return clean;
+
+    // Email
+    if (clean.includes('@')) return clean.toLowerCase();
+
+    // Já está em formato E.164 (+55...)
+    if (clean.startsWith('+')) return clean;
+
+    // Chave aleatória (UUID)
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(clean)) return clean;
+
+    // Telefone com formatação (tem parênteses, hífen ou espaço → usuário digitou número de telefone)
+    if (/[() -]/.test(clean)) {
+      const onlyDigits = clean.replace(/\D/g, '');
+      if (onlyDigits.length === 10 || onlyDigits.length === 11) {
+        return `+55${onlyDigits}`;
+      }
     }
-    // Já tem +55
-    if (clean.startsWith('+55') && /^\+55\d{10,11}$/.test(clean)) {
-      return clean;
-    }
-    // Email, CPF (11 dígitos tratados como CPF), CNPJ, EVP — retorna como está
+
+    // CPF (11 dígitos), CNPJ (14 dígitos) e qualquer outra coisa → usa exatamente como está
     return clean;
   };
 
@@ -4210,8 +4222,8 @@ export function App() {
                 <input value={storePhone} onChange={(e) => setStorePhone(e.target.value)} placeholder="(00) 0000-0000" />
               </label>
               <label>
-                Chave PIX (para recebimentos)
-                <input value={storePixKey} onChange={(e) => setStorePixKey(e.target.value)} placeholder="ex: email, celular ou chave aleatoria" />
+                Chave PIX <span style={{ fontSize: 11, color: '#789088', fontWeight: 400 }}>(email, CPF, CNPJ, telefone com +55 ou chave aleatória)</span>
+                <input value={storePixKey} onChange={(e) => setStorePixKey(e.target.value)} placeholder="Ex: +5511999999999 ou email@exemplo.com" autoComplete="off" />
               </label>
               <button className="primary-button" type="button" onClick={saveStoreSettings}>Salvar configurações</button>
             </div>
