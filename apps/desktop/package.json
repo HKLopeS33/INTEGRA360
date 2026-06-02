@@ -1,11 +1,11 @@
 {
-  "name": "@sistema/desktop",
+  "name": "@integra360/desktop",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "main": "dist/main.js",
-  "description": "Desktop application for Sistema Shawarma restaurant management",
-  "author": "Sistema Shawarma",
+  "description": "Desktop application for Integra360 restaurant management",
+  "author": "Integra360",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 5173",
     "build": "vite build",
@@ -38,8 +38,8 @@
     "vite": "^6.3.5"
   },
   "build": {
-    "appId": "com.sistemashawarma.app",
-    "productName": "Sistema Shawarma",
+    "appId": "com.integra360.app",
+    "productName": "Integra360",
     "publish": {
       "provider": "github",
       "owner": "HKLopeS33",
@@ -74,13 +74,13 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Sistema Shawarma",
+      "shortcutName": "Integra360",
       "installerLanguages": [
         "pt_BR"
       ],
       "language": "1046",
       "license": false,
-      "uninstallDisplayName": "Sistema Shawarma"
+      "uninstallDisplayName": "Integra360"
     },
     "mac": {
       "target": [

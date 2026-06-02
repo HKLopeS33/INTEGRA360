@@ -14,7 +14,7 @@ const createWindow = () => {
     height: 860,
     minWidth: 1100,
     minHeight: 720,
-    title: 'Sistema Shawarma',
+    title: 'Integra360',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,

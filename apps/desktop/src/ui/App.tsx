@@ -1554,7 +1554,7 @@ export function App() {
           <div className="login-card">
             <div className="login-brand">
               <div className="login-brand-mark">S</div>
-              <h1 className="login-title">Sistema Shawarma</h1>
+              <h1 className="login-title">Integra360</h1>
               <p className="login-subtitle">Faça login para continuar</p>
             </div>
 

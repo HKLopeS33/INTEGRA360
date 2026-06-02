@@ -1,16 +1,16 @@
 {
-  "name": "sistema-shawarma",
-  "version": "0.1.0",
+  "name": "integra360",
+  "version": "1.0.1",
   "private": true,
-  "description": "Sistema local com integracao web para gestao de restaurante.",
+  "description": "Sistema de gestão para restaurantes Integra360.",
   "workspaces": [
     "apps/*"
   ],
   "scripts": {
-    "dev": "npm run dev --workspace @sistema/desktop",
-    "dev:desktop": "npm run dev --workspace @sistema/desktop",
-    "build": "npm run build --workspace @sistema/desktop && npm run build:desktop",
-    "build:desktop": "npm run build:electron --workspace @sistema/desktop",
+    "dev": "npm run dev --workspace @integra360/desktop",
+    "dev:desktop": "npm run dev --workspace @integra360/desktop",
+    "build": "npm run build --workspace @integra360/desktop && npm run build:desktop",
+    "build:desktop": "npm run build:electron --workspace @integra360/desktop",
     "lint": "npm run lint --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present"
   },
