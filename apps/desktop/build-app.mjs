@@ -92,11 +92,8 @@ async function build() {
       console.warn('⚠️  GH_UPDATER_TOKEN não encontrado — auto-update para repo privado não funcionará');
     }
     await writeFile(path.join(distDir, 'main.js'), mainJs);
-    await copyFile(path.join(__dirname, 'electron/preload.js'), path.join(distDir, 'preload.js'));
-
-    // Garante que o dist/ seja tratado como CommonJS pelo Electron
-    // (o preload.js usa require() e não pode ser carregado como ESM)
-    await writeFile(path.join(distDir, 'package.json'), JSON.stringify({ type: 'commonjs' }, null, 2));
+    // preload.cjs usa require() — extensão .cjs garante CommonJS independente do package.json pai
+    await copyFile(path.join(__dirname, 'electron/preload.cjs'), path.join(distDir, 'preload.cjs'));
 
     console.log('🔨 Empacotando com electron-builder...');
     let nsisOk = false;

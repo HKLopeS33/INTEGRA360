@@ -52,9 +52,7 @@
     "files": [
       "dist/**/*",
       "dist/main.js",
-      "dist/preload.js",
-      "electron/main.js",
-      "electron/preload.js"
+      "dist/preload.cjs"
     ],
     "win": {
       "target": [
