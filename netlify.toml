@@ -1,7 +1,6 @@
 [build]
-  base    = "apps/desktop"
-  command = "npm install && npm run build"
-  publish = "dist"
+  command = "cd apps/desktop && npm install && npm run build"
+  publish = "apps/desktop/dist"
 
 [build.environment]
   NODE_VERSION = "22"
