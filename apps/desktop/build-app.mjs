@@ -94,6 +94,10 @@ async function build() {
     await writeFile(path.join(distDir, 'main.js'), mainJs);
     await copyFile(path.join(__dirname, 'electron/preload.js'), path.join(distDir, 'preload.js'));
 
+    // Garante que o dist/ seja tratado como CommonJS pelo Electron
+    // (o preload.js usa require() e não pode ser carregado como ESM)
+    await writeFile(path.join(distDir, 'package.json'), JSON.stringify({ type: 'commonjs' }, null, 2));
+
     console.log('🔨 Empacotando com electron-builder...');
     let nsisOk = false;
     try {
