@@ -92,6 +92,8 @@ async function build() {
       console.warn('⚠️  GH_UPDATER_TOKEN não encontrado — auto-update para repo privado não funcionará');
     }
     await writeFile(path.join(distDir, 'main.js'), mainJs);
+    // Garante que o main.js seja tratado como ESM dentro do asar empacotado
+    await writeFile(path.join(distDir, 'package.json'), JSON.stringify({ type: 'module' }));
     // preload.cjs usa require() — extensão .cjs garante CommonJS independente do package.json pai
     await copyFile(path.join(__dirname, 'electron/preload.cjs'), path.join(distDir, 'preload.cjs'));
 

@@ -1,6 +1,6 @@
 {
   "name": "@integra360/desktop",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "private": true,
   "type": "module",
   "main": "dist/main.js",
@@ -52,7 +52,8 @@
     "files": [
       "dist/**/*",
       "dist/main.js",
-      "dist/preload.cjs"
+      "dist/preload.cjs",
+      "dist/package.json"
     ],
     "win": {
       "target": [

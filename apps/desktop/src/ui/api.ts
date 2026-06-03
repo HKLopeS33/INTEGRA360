@@ -450,6 +450,129 @@ export const api = {
     return data;
   },
 
+  // ── Delivery ─────────────────────────────────────────────────────────────
+
+  createDeliveryOrder: async (payload: {
+    customerName: string;
+    customerPhone?: string;
+    customerAddress: string;
+    paymentMethod: string;
+    deliveryFee: number;
+    notes?: string;
+    items: Array<{ productId?: string; productName: string; quantity: number; unitPrice: number; note?: string }>;
+  }) => {
+    const user = await requireCompanyUserWithRoles(['ADMIN', 'GERENTE', 'CAIXA', 'GARCOM']);
+    const total = payload.items.reduce((s, i) => s + i.quantity * i.unitPrice, 0) + payload.deliveryFee;
+
+    const { data: order, error } = await supabase
+      .from('DeliveryOrder')
+      .insert([{
+        companyId: user.companyId,
+        customerName: payload.customerName.trim(),
+        customerPhone: payload.customerPhone?.trim() || null,
+        customerAddress: payload.customerAddress.trim(),
+        paymentMethod: payload.paymentMethod,
+        deliveryFee: payload.deliveryFee,
+        total,
+        notes: payload.notes?.trim() || null,
+        status: 'RECEBIDO',
+        updatedAt: new Date().toISOString()
+      }])
+      .select('id')
+      .single();
+    if (error) throwSupabaseError(error, 'Falha ao criar pedido de delivery.');
+
+    if (payload.items.length > 0) {
+      const { error: itemsError } = await supabase
+        .from('DeliveryOrderItem')
+        .insert(payload.items.map((item) => ({
+          deliveryOrderId: order.id,
+          productId: item.productId || null,
+          productName: item.productName,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          note: item.note || null
+        })));
+      if (itemsError) throwSupabaseError(itemsError, 'Falha ao salvar itens do pedido.');
+    }
+    return { id: order.id };
+  },
+
+  listDeliveryOrders: async (status?: string) => {
+    const user = await requireCompanyUserWithRoles(['ADMIN', 'GERENTE', 'CAIXA', 'GARCOM', 'COZINHA']);
+    let query = supabase
+      .from('DeliveryOrder')
+      .select('id,customerName,customerPhone,customerAddress,status,paymentMethod,deliveryFee,total,notes,createdAt,closedAt')
+      .eq('companyId', user.companyId)
+      .order('createdAt', { ascending: false });
+    if (status === 'all') { /* sem filtro — retorna todos */ }
+    else if (status) query = query.eq('status', status);
+    else query = query.neq('status', 'ENTREGUE').neq('status', 'CANCELADO');
+
+    const { data: orders, error } = await query;
+    if (error) throwSupabaseError(error, 'Falha ao carregar pedidos de delivery.');
+
+    if (!orders || orders.length === 0) return [];
+
+    const { data: items } = await supabase
+      .from('DeliveryOrderItem')
+      .select('id,deliveryOrderId,productName,quantity,unitPrice,note')
+      .in('deliveryOrderId', orders.map((o) => o.id));
+
+    const itemsByOrder: Record<string, any[]> = {};
+    (items || []).forEach((item) => {
+      itemsByOrder[item.deliveryOrderId] = itemsByOrder[item.deliveryOrderId] || [];
+      itemsByOrder[item.deliveryOrderId].push(item);
+    });
+
+    return orders.map((o) => ({
+      ...o,
+      deliveryFee: Number(o.deliveryFee),
+      total: Number(o.total),
+      items: (itemsByOrder[o.id] || []).map((i) => ({ ...i, unitPrice: Number(i.unitPrice) }))
+    }));
+  },
+
+  updateDeliveryStatus: async (orderId: string, status: string) => {
+    const user = await requireCompanyUserWithRoles(['ADMIN', 'GERENTE', 'CAIXA', 'GARCOM', 'COZINHA']);
+    const update: any = { status, updatedAt: new Date().toISOString() };
+    if (status === 'ENTREGUE' || status === 'CANCELADO') update.closedAt = new Date().toISOString();
+    const { error } = await supabase
+      .from('DeliveryOrder')
+      .update(update)
+      .eq('id', orderId)
+      .eq('companyId', user.companyId);
+    if (error) throwSupabaseError(error, 'Falha ao atualizar status do pedido.');
+    return { success: true };
+  },
+
+  assignDeliveryReceiptNumber: async (orderId: string) => {
+    const user = await requireCompanyUserWithRoles(['ADMIN', 'GERENTE', 'CAIXA', 'GARCOM']);
+
+    // Verifica se já tem número atribuído
+    const { data: existing } = await supabase
+      .from('DeliveryOrder')
+      .select('receiptNumber')
+      .eq('id', orderId)
+      .single();
+    if (existing?.receiptNumber) return existing.receiptNumber as number;
+
+    // Incremento atômico via RPC — elimina race condition com mesa/delivery simultâneos
+    const { data: next, error: rpcError } = await supabase
+      .rpc('next_receipt_number', { p_company_id: user.companyId });
+    if (rpcError) throwSupabaseError(rpcError, 'Falha ao gerar número do recibo.');
+
+    const { error } = await supabase
+      .from('DeliveryOrder')
+      .update({ receiptNumber: next })
+      .eq('id', orderId)
+      .eq('companyId', user.companyId);
+    if (error) throwSupabaseError(error, 'Falha ao salvar número do recibo.');
+    return next as number;
+  },
+
+  // ─────────────────────────────────────────────────────────────────────────
+
   orders: async (active?: boolean) => {
     const user = await requireCompanyUserWithRoles(['ADMIN', 'GARCOM', 'CAIXA', 'GERENTE', 'FINANCEIRO', 'ESTOQUE']);
 
@@ -470,6 +593,7 @@ export const api = {
       .from('Order')
       .select('id,tabId,status,createdAt,updatedAt')
       .eq('companyId', user.companyId)
+      .neq('status', 'CANCELADO')
       .order('createdAt', { ascending: false });
 
     if (active && tabIds.length > 0) {
@@ -708,7 +832,7 @@ export const api = {
   },
 
   closeTab: async (tabId: string, paymentMethod: string, amountPaid?: number) => {
-    const user = await requireCompanyUserWithRoles(['ADMIN', 'CAIXA', 'GERENTE', 'FINANCEIRO']);
+    const user = await requireCompanyUserWithRoles(['ADMIN', 'CAIXA', 'GERENTE', 'FINANCEIRO', 'GARCOM']);
 
     const { data: tab, error: tabError } = await supabase
       .from('Tab')
@@ -763,16 +887,11 @@ export const api = {
       throwSupabaseError(updateTabError, 'Falha ao fechar comanda.');
     }
 
-    const { data: lastReceipt } = await supabase
-      .from('Tab')
-      .select('receiptNumber')
-      .eq('companyId', user.companyId)
-      .not('receiptNumber', 'is', null)
-      .order('receiptNumber', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    // Incremento atômico via RPC — evita duplicata quando mesa e delivery fecham ao mesmo tempo
+    const { data: nextReceiptNumber, error: rpcError } = await supabase
+      .rpc('next_receipt_number', { p_company_id: user.companyId });
+    if (rpcError) throwSupabaseError(rpcError, 'Falha ao gerar numero do recibo.');
 
-    const nextReceiptNumber = (lastReceipt?.receiptNumber ?? 0) + 1;
     const { data: finalTab, error: finalTabError } = await supabase
       .from('Tab')
       .update({ receiptNumber: nextReceiptNumber, receiptGeneratedAt: new Date().toISOString() })
@@ -984,42 +1103,67 @@ export const api = {
     return { status: 'PAGO', paymentId: payment.id, amount: Number(payment.amount) };
   },
 
-  listDailyReceipts: async () => {
+  listDailyReceipts: async (dateStr?: string) => {
     const user = await requireCompanyUserWithRoles(['ADMIN', 'CAIXA', 'GERENTE', 'FINANCEIRO']);
-    const today = new Date();
+    const today = dateStr ? new Date(`${dateStr}T00:00:00`) : new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    const { data: receipts, error } = await supabase
-      .from('Tab')
-      .select('id,receiptNumber,tableId,subtotal,total,closedAt,receiptGeneratedAt')
-      .eq('companyId', user.companyId)
-      .eq('status', 'FECHADA')
-      .gte('receiptGeneratedAt', today.toISOString())
-      .lt('receiptGeneratedAt', tomorrow.toISOString())
-      .order('receiptGeneratedAt', { ascending: true });
+    const [tabResult, deliveryResult] = await Promise.all([
+      supabase
+        .from('Tab')
+        .select('id,receiptNumber,tableId,subtotal,total,closedAt,receiptGeneratedAt')
+        .eq('companyId', user.companyId)
+        .eq('status', 'FECHADA')
+        .gte('receiptGeneratedAt', today.toISOString())
+        .lt('receiptGeneratedAt', tomorrow.toISOString())
+        .order('receiptGeneratedAt', { ascending: true }),
+      supabase
+        .from('DeliveryOrder')
+        .select('id,customerName,total,deliveryFee,paymentMethod,status,createdAt,receiptNumber')
+        .eq('companyId', user.companyId)
+        .neq('status', 'CANCELADO')
+        .gte('createdAt', today.toISOString())
+        .lt('createdAt', tomorrow.toISOString())
+        .order('createdAt', { ascending: true }),
+    ]);
 
-    if (error) {
-      throwSupabaseError(error, 'Falha ao carregar recibos.');
-    }
+    if (tabResult.error) throwSupabaseError(tabResult.error, 'Falha ao carregar recibos.');
 
-    const tableIds = (receipts || []).map((receipt) => receipt.tableId);
-    const { data: tables, error: tablesError } = await supabase.from('RestaurantTable').select('id,name').in('id', tableIds);
-    if (tablesError) {
-      throwSupabaseError(tablesError, 'Falha ao carregar mesas.');
-    }
-    const tableMap = (tables || []).reduce((acc, table) => { acc[table.id] = table; return acc; }, {} as Record<string, any>);
+    const tableIds = (tabResult.data || []).map((r) => r.tableId);
+    const { data: tables } = tableIds.length > 0
+      ? await supabase.from('RestaurantTable').select('id,name').in('id', tableIds)
+      : { data: [] as any[] };
+    const tableMap = (tables || []).reduce((acc: any, t: any) => { acc[t.id] = t; return acc; }, {});
 
-    return (receipts || []).map((receipt) => ({
+    const mesaReceipts = (tabResult.data || []).map((receipt) => ({
       id: receipt.id,
+      type: 'mesa' as const,
       receiptNumber: receipt.receiptNumber,
       tableName: tableMap[receipt.tableId]?.name ?? '',
       subtotal: Number(receipt.subtotal),
       total: Number(receipt.total),
       closedAt: formatDate(receipt.closedAt),
-      receiptGeneratedAt: formatDate(receipt.receiptGeneratedAt)
+      receiptGeneratedAt: formatDate(receipt.receiptGeneratedAt),
     }));
+
+    const deliveryReceipts = (deliveryResult.data || []).map((d: any) => ({
+      id: d.id,
+      type: 'delivery' as const,
+      receiptNumber: d.receiptNumber ?? null,
+      tableName: `Delivery – ${d.customerName}`,
+      subtotal: Number(d.total) - Number(d.deliveryFee || 0),
+      total: Number(d.total),
+      closedAt: formatDate(d.createdAt),
+      receiptGeneratedAt: formatDate(d.createdAt),
+      paymentMethod: d.paymentMethod,
+      status: d.status,
+    }));
+
+    return [...mesaReceipts, ...deliveryReceipts].sort((a, b) =>
+      new Date(a.receiptGeneratedAt).getTime() - new Date(b.receiptGeneratedAt).getTime()
+    );
   },
 
   getReceiptByNumber: async (receiptNumber: number) => {
@@ -2232,48 +2376,59 @@ export const api = {
     };
   },
 
-  reportSummary: async (period: string = 'daily') => {
+  reportSummary: async (period: string = 'daily', refDate?: string) => {
     const user = await requireCompanyUserWithRoles(['ADMIN', 'CAIXA', 'FINANCEIRO', 'GERENTE']);
 
-    const now = new Date();
-    let startDate = new Date(now);
-    let endDate = new Date(now);
+    const ref = refDate ? new Date(refDate) : new Date();
+    let startDate: Date;
+    let endDate: Date;
     let periodLabel = '';
 
     switch ((period || 'daily').toLowerCase()) {
       case 'weekly': {
-        const day = now.getDay();
+        const day = ref.getDay();
         const mondayOffset = (day + 6) % 7;
-        startDate.setDate(now.getDate() - mondayOffset);
-        startDate.setHours(0, 0, 0, 0);
+        startDate = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate() - mondayOffset);
         endDate = new Date(startDate);
         endDate.setDate(startDate.getDate() + 7);
-        periodLabel = 'Semana atual';
+        const endDisplay = new Date(endDate); endDisplay.setDate(endDisplay.getDate() - 1);
+        periodLabel = `${startDate.toLocaleDateString('pt-BR')} – ${endDisplay.toLocaleDateString('pt-BR')}`;
         break;
       }
       case 'monthly':
-        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-        endDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-        periodLabel = new Date(now.getFullYear(), now.getMonth(), 1).toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
+        startDate = new Date(ref.getFullYear(), ref.getMonth(), 1);
+        endDate = new Date(ref.getFullYear(), ref.getMonth() + 1, 1);
+        periodLabel = startDate.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
         break;
       case 'yearly':
-        startDate = new Date(now.getFullYear(), 0, 1);
-        endDate = new Date(now.getFullYear() + 1, 0, 1);
-        periodLabel = String(now.getFullYear());
+        startDate = new Date(ref.getFullYear(), 0, 1);
+        endDate = new Date(ref.getFullYear() + 1, 0, 1);
+        periodLabel = String(ref.getFullYear());
         break;
-      default:
-        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-        periodLabel = startDate.toLocaleDateString('pt-BR');
+      default: // daily
+        startDate = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate());
+        endDate = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate() + 1);
+        periodLabel = startDate.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
     }
 
+    // Pedidos de mesa
     const { data: orders, error: ordersError } = await supabase
       .from('Order')
       .select('id,tabId,status,createdAt')
       .eq('companyId', user.companyId)
+      .neq('status', 'CANCELADO')
       .gte('createdAt', startDate.toISOString())
       .lt('createdAt', endDate.toISOString());
     if (ordersError) throwSupabaseError(ordersError, 'Falha ao carregar pedidos.');
+
+    // Pedidos de delivery no mesmo período
+    const { data: deliveryOrders } = await supabase
+      .from('DeliveryOrder')
+      .select('id,total,status,createdAt,customerName')
+      .eq('companyId', user.companyId)
+      .neq('status', 'CANCELADO')
+      .gte('createdAt', startDate.toISOString())
+      .lt('createdAt', endDate.toISOString());
 
     const orderIds = (orders || []).map((o) => o.id);
     const tabIds = Array.from(new Set((orders || []).map((o) => o.tabId)));
@@ -2318,19 +2473,32 @@ export const api = {
       tableGroups[tableId].totalItems += orderItemCount;
     }
 
-    const totalOrders = (orders || []).length;
-    const totalItems = items.reduce((s: number, i: any) => s + i.quantity, 0);
-    const totalValue = items.reduce((s: number, i: any) => s + Number(i.unitPrice) * i.quantity, 0);
+    // Delivery como grupo especial
+    const deliveryList = deliveryOrders || [];
+    if (deliveryList.length > 0) {
+      const deliveryTotal = deliveryList.reduce((s: number, d: any) => s + Number(d.total), 0);
+      tableGroups['__delivery__'] = {
+        tableId: '__delivery__',
+        tableName: 'Delivery',
+        orders: deliveryList,
+        totalValue: deliveryTotal,
+        totalItems: deliveryList.length,
+      };
+    }
+
+    const mesaItems = items.reduce((s: number, i: any) => s + i.quantity, 0);
+    const mesaValue = items.reduce((s: number, i: any) => s + Number(i.unitPrice) * i.quantity, 0);
+    const deliveryValue = deliveryList.reduce((s: number, d: any) => s + Number(d.total), 0);
 
     return {
       period,
       periodLabel,
       startDate: startDate.toISOString(),
       endDate: endDate.toISOString(),
-      totalOrders,
-      totalItems,
-      totalValue,
-      tables: Object.values(tableGroups)
+      totalOrders: (orders || []).length + deliveryList.length,
+      totalItems: mesaItems + deliveryList.length,
+      totalValue: mesaValue + deliveryValue,
+      tables: Object.values(tableGroups),
     };
   }
 };

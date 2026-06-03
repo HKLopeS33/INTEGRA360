@@ -11,4 +11,6 @@ contextBridge.exposeInMainWorld('sistema', {
   },
   checkForUpdates: () => ipcRenderer.invoke('updater-check'),
   installUpdate: () => ipcRenderer.invoke('updater-install'),
+  listPrinters: () => ipcRenderer.invoke('list-printers'),
+  printSilent: (html, printerName) => ipcRenderer.invoke('print-silent', html, printerName),
 });

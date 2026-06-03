@@ -110,8 +110,9 @@ export function generateThermalHTML(data: ReceiptData) {
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
       width: 56mm;
-      font-family: 'Courier New', Courier, monospace;
-      font-size: 13px;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 12px;
+      font-weight: 500;
       line-height: 1.5;
       color: #000;
       background: #fff;
@@ -119,12 +120,12 @@ export function generateThermalHTML(data: ReceiptData) {
     .ticket { width: 100%; }
     .center { text-align: center; }
     .sep       { border-top: 1px dashed #000; margin: 4px 0; }
-    .sep-solid { border-top: 1px solid  #000; margin: 4px 0; }
-    .company { font-size: 14px; font-weight: 700; letter-spacing: 1px; margin-bottom: 2px; }
-    .info    { font-size: 12px; line-height: 1.4; }
-    .pre     { white-space: pre; font-size: 12.5px; line-height: 1.45; }
+    .sep-solid { border-top: 2px solid  #000; margin: 4px 0; }
+    .company { font-size: 14px; font-weight: 800; letter-spacing: 0.5px; margin-bottom: 2px; }
+    .info    { font-size: 11px; font-weight: 500; line-height: 1.4; }
+    .pre     { white-space: pre; font-size: 11px; font-weight: 500; line-height: 1.5; font-family: Arial, sans-serif; }
     .bold    { font-weight: 700; }
-    .footer  { font-size: 11px; line-height: 1.5; text-align: center; margin-top: 6px; }
+    .footer  { font-size: 10px; font-weight: 500; line-height: 1.5; text-align: center; margin-top: 6px; }
     @media print {
       html, body { width: 56mm; }
     }
@@ -143,6 +144,7 @@ export function generateThermalHTML(data: ReceiptData) {
     <div class="info"><span class="bold">CUPOM Nº</span> ${receiptNo}</div>
     <div class="info"><span class="bold">DATA:</span> ${dateStr}</div>
     ${tableName ? `<div class="info"><span class="bold">${tableName}</span></div>` : ''}
+    ${data.consumer ? `<div class="info">${data.consumer}</div>` : ''}
 
     <div class="sep"></div>
 
@@ -156,6 +158,7 @@ export function generateThermalHTML(data: ReceiptData) {
     <div class="pre">${payLine}</div>
     ${paidLine   ? `<div class="pre">${paidLine}</div>`   : ''}
     ${changeLine ? `<div class="pre bold">${changeLine}</div>` : ''}
+    ${data.nota  ? `<div class="sep"></div><div class="info bold">${data.nota}</div>` : ''}
 
     <div class="sep-solid"></div>
 
@@ -168,6 +171,60 @@ export function generateThermalHTML(data: ReceiptData) {
 
   </div>
   <script>window.onload = function(){ setTimeout(() => window.print(), 250); }</script>
+</body>
+</html>`;
+}
+
+// Gera HTML do ticket da cozinha (sem valores, foco nos itens)
+export function generateKitchenTicketHTML(data: {
+  type: 'MESA' | 'DELIVERY';
+  tableName?: string;
+  customerName?: string;
+  customerAddress?: string;
+  customerPhone?: string;
+  items: Array<{ name: string; quantity: number; note?: string }>;
+  notes?: string;
+  paymentMethod?: string;
+  time: string;
+}): string {
+  const sep = '================================';
+  const sepDash = '--------------------------------';
+
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    @page { size: 58mm auto; margin: 2mm 1mm; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 56mm; font-family: Arial, Helvetica, sans-serif; font-size: 13px; font-weight: 600; line-height: 1.6; color: #000; background: #fff; }
+    .center { text-align: center; }
+    .big { font-size: 16px; font-weight: 800; }
+    .item { font-size: 14px; font-weight: 700; margin: 4px 0; }
+    .note { font-size: 11px; font-weight: 500; color: #333; padding-left: 8px; }
+    .sep { border-top: 2px solid #000; margin: 5px 0; }
+    @media print { html, body { width: 56mm; } }
+  </style>
+</head>
+<body>
+  <div class="center big">${data.type === 'DELIVERY' ? '🚲 DELIVERY' : '🍽 MESA'}</div>
+  ${data.type === 'MESA' ? `<div class="center big">${data.tableName ?? ''}</div>` : ''}
+  ${data.type === 'DELIVERY' ? `
+    <div class="center" style="font-size:14px;font-weight:700">${data.customerName ?? ''}</div>
+    <div style="font-size:11px;font-weight:500;text-align:center">${data.customerAddress ?? ''}</div>
+    ${data.customerPhone ? `<div style="font-size:11px;font-weight:500;text-align:center">Tel: ${data.customerPhone}</div>` : ''}
+    ${data.paymentMethod ? `<div style="font-size:11px;text-align:center;font-weight:600">💳 ${data.paymentMethod}</div>` : ''}
+  ` : ''}
+  <div style="font-size:11px;text-align:center;font-weight:500">${data.time}</div>
+  <div class="sep"></div>
+  ${data.items.map((i) => `
+    <div class="item">${i.quantity}x  ${i.name}</div>
+    ${i.note ? `<div class="note">↳ ${i.note}</div>` : ''}
+  `).join('')}
+  ${data.notes ? `<div class="sep"></div><div style="font-size:12px;font-weight:600">📝 ${data.notes}</div>` : ''}
+  <div class="sep"></div>
+  <div class="center" style="font-size:10px;font-weight:500">— COZINHA —</div>
+  <script>window.onload = function(){ setTimeout(() => window.print(), 200); }</script>
 </body>
 </html>`;
 }

@@ -1,5 +1,7 @@
 import { type FormEvent, type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Banknote, ChefHat, LayoutDashboard, LogOut, ReceiptText, Settings, ShoppingBag, Utensils, Users, AlertTriangle, CheckCircle, Clock, TrendingUp, DollarSign, ShoppingCart, Target, MoreVertical, X, Info, AlertCircle } from 'lucide-react';
+import { Banknote, ChefHat, LayoutDashboard, LogOut, ReceiptText, Settings, ShoppingBag, Utensils, Users, AlertTriangle, CheckCircle, Clock, TrendingUp, DollarSign, ShoppingCart, Target, MoreVertical, X, Info, AlertCircle, Bike, Phone, MapPin, User, Plus, Trash2, Package } from 'lucide-react';
+import type { DeliveryOrder } from './types.js';
+import { generateKitchenTicketHTML } from './receipt';
 
 type ToastType = 'success' | 'error' | 'warning' | 'info';
 interface ToastItem { id: number; message: string; type: ToastType; removing?: boolean; }
@@ -8,7 +10,7 @@ import { supabase } from './supabase.ts';
 import type { Order, Product, RestaurantTable } from './types.js';
 import { printReceipt } from './receipt';
 
-type ActiveModule = 'mesas' | 'comandas' | 'cozinha' | 'cardapio' | 'caixa' | 'ajustes' | 'menu' | 'financeiro' | 'cadastros' | 'usuarios';
+type ActiveModule = 'mesas' | 'comandas' | 'cozinha' | 'cardapio' | 'caixa' | 'ajustes' | 'menu' | 'financeiro' | 'cadastros' | 'usuarios' | 'delivery';
 type ReportPeriod = 'daily' | 'weekly' | 'monthly' | 'yearly';
 
 const reportPeriods: Array<{ value: ReportPeriod; label: string }> = [
@@ -55,6 +57,7 @@ const moduleConfig: Record<ActiveModule, { eyebrow: string; title: string }> = {
   comandas: { eyebrow: 'Atendimento', title: 'Comandas abertas' },
   cozinha: { eyebrow: 'KDS', title: 'Fila da cozinha' },
   cardapio: { eyebrow: 'Produtos', title: 'Cardapio' },
+  delivery: { eyebrow: 'Delivery', title: 'Pedidos de entrega' },
   caixa: { eyebrow: 'Financeiro', title: 'Caixa' },
   ajustes: { eyebrow: 'Administracao', title: 'Ajustes do sistema' },
   financeiro: { eyebrow: 'Financeiro', title: 'Resumo Financeiro' },
@@ -64,10 +67,10 @@ const moduleConfig: Record<ActiveModule, { eyebrow: string; title: string }> = {
 };
 const roleAllowedModules: Record<string, ActiveModule[]> = {
   SUPER: ['financeiro', 'cadastros', 'usuarios'],
-  ADMIN: ['mesas', 'comandas', 'cozinha', 'cardapio', 'caixa', 'ajustes', 'menu'],
-  GERENTE: ['mesas', 'comandas', 'cozinha', 'cardapio', 'caixa', 'ajustes', 'menu'],
-  CAIXA: ['mesas', 'comandas', 'cozinha'],
-  GARCOM: ['mesas', 'comandas'],
+  ADMIN: ['mesas', 'comandas', 'cozinha', 'cardapio', 'delivery', 'caixa', 'ajustes', 'menu'],
+  GERENTE: ['mesas', 'comandas', 'cozinha', 'cardapio', 'delivery', 'caixa', 'ajustes', 'menu'],
+  CAIXA: ['mesas', 'comandas', 'cozinha', 'delivery'],
+  GARCOM: ['mesas', 'comandas', 'delivery'],
   COZINHA: ['cozinha'],
   FINANCEIRO: ['financeiro', 'caixa', 'mesas', 'comandas'],
   ESTOQUE: ['cardapio', 'mesas', 'comandas']
@@ -75,9 +78,9 @@ const roleAllowedModules: Record<string, ActiveModule[]> = {
 
 const getAllowedModules = (role?: string): ActiveModule[] => {
   if (!role) {
-    return ['mesas', 'comandas', 'cozinha', 'cardapio', 'caixa', 'ajustes', 'menu', 'financeiro', 'cadastros', 'usuarios'];
+    return ['mesas', 'comandas', 'cozinha', 'cardapio', 'delivery', 'caixa', 'ajustes', 'menu', 'financeiro', 'cadastros', 'usuarios'];
   }
-  return roleAllowedModules[role] ?? ['mesas', 'comandas', 'cozinha', 'cardapio', 'caixa', 'ajustes', 'menu', 'financeiro', 'cadastros', 'usuarios'];
+  return roleAllowedModules[role] ?? ['mesas', 'comandas', 'cozinha', 'cardapio', 'delivery', 'caixa', 'ajustes', 'menu', 'financeiro', 'cadastros', 'usuarios'];
 };
 
 const getNavItems = (role?: string) => {
@@ -87,6 +90,7 @@ const getNavItems = (role?: string) => {
     comandas: { id: 'comandas', label: 'Comandas', icon: ReceiptText },
     cozinha: { id: 'cozinha', label: 'Cozinha', icon: ChefHat },
     cardapio: { id: 'cardapio', label: 'Cardápio', icon: ShoppingBag },
+    delivery: { id: 'delivery', label: 'Delivery', icon: Bike },
     caixa: { id: 'caixa', label: 'Caixa', icon: Banknote },
     ajustes: { id: 'ajustes', label: 'Ajustes', icon: Settings },
     menu: { id: 'menu', label: 'Menu', icon: Utensils },
@@ -95,7 +99,7 @@ const getNavItems = (role?: string) => {
     usuarios: { id: 'usuarios', label: 'Usuários', icon: Users }
   };
 
-  return allowedModuleIds.map((moduleId) => moduleOptions[moduleId]).filter((item) => item !== undefined);
+  return allowedModuleIds.map((moduleId) => moduleOptions[moduleId]).filter((item) => item !== undefined && item.id !== 'menu');
 };
 
 // ── Splash screen ────────────────────────────────────────────────────────────
@@ -208,6 +212,7 @@ export function App() {
   // Auth state
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const initialLoadDone = useRef(false);
   const [currentCompany, setCurrentCompany] = useState<any>(null);
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
@@ -219,6 +224,7 @@ export function App() {
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [kitchenOrders, setKitchenOrders] = useState<Order[]>([]);
+  const [kitchenDeliveryOrders, setKitchenDeliveryOrders] = useState<DeliveryOrder[]>([]);
   const [selectedTableId, setSelectedTableId] = useState<string>('mesa_1');
   const [apiStatus, setApiStatus] = useState<'online' | 'offline'>('offline');
   const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'error'>('idle');
@@ -233,10 +239,34 @@ export function App() {
   const [categories, setCategories] = useState<Array<{ id: string; name: string }>>([]);
   const [editingProduct, setEditingProduct] = useState<any | null>(null);
   const [newCategoryName, setNewCategoryName] = useState('');
+  const [printerKitchen, setPrinterKitchen] = useState('');
+  const [printerCashier, setPrinterCashier] = useState('');
+  const [availablePrinters, setAvailablePrinters] = useState<Array<{ name: string; isDefault: boolean }>>([]);
   const [showCategoryForm, setShowCategoryForm] = useState(false);
+
+  // Delivery states
+  const [deliveryOrders, setDeliveryOrders] = useState<DeliveryOrder[]>([]);
+  const [deliveryOrdersAll, setDeliveryOrdersAll] = useState<DeliveryOrder[]>([]);
+  const [loadingDelivery, setLoadingDelivery] = useState(false);
+  const [dlvCustomerName, setDlvCustomerName] = useState('');
+  const [dlvCustomerPhone, setDlvCustomerPhone] = useState('');
+  const [dlvCustomerAddress, setDlvCustomerAddress] = useState('');
+  const [dlvPaymentMethod, setDlvPaymentMethod] = useState('DINHEIRO');
+  const [dlvDeliveryFee, setDlvDeliveryFee] = useState('0');
+  const [dlvNotes, setDlvNotes] = useState('');
+  const [dlvItems, setDlvItems] = useState<Array<{ productId?: string; productName: string; quantity: number; unitPrice: number; note: string }>>([]);
+  const [dlvSelectedProduct, setDlvSelectedProduct] = useState('');
+  const [dlvProductSearch, setDlvProductSearch] = useState('');
+  const [dlvProductDropdownOpen, setDlvProductDropdownOpen] = useState(false);
+  const [dlvProductQty, setDlvProductQty] = useState('1');
+  const [dlvProductNote, setDlvProductNote] = useState('');
+  const [dlvTab, setDlvTab] = useState<'novo' | 'ativos'>('novo');
   const [menuTableId, setMenuTableId] = useState<string | null>(null);
   const [menuCart, setMenuCart] = useState<Array<{ product: Product; quantity: number; note: string }>>([]);
   const [menuModalTable, setMenuModalTable] = useState<RestaurantTable | null>(null);
+  const [tableCart, setTableCart] = useState<Array<{ product: Product; quantity: number; note: string }>>([]);
+  const [tableCartNoteProduct, setTableCartNoteProduct] = useState<Product | null>(null);
+  const [tableCartNote, setTableCartNote] = useState('');
   const [qrModalTable, setQrModalTable] = useState<RestaurantTable | null>(null);
   const [qrUrl, setQrUrl] = useState('');
   // Super user panel state
@@ -293,6 +323,7 @@ export function App() {
   const [loadingReceipts, setLoadingReceipts] = useState(false);
   const [searchReceiptNumber, setSearchReceiptNumber] = useState('');
   const [selectedReceipt, setSelectedReceipt] = useState<any | null>(null);
+  const [receiptsDate, setReceiptsDate] = useState(() => new Date().toISOString().slice(0, 10));
   // New company / admin creation state
   const [newCompanyName, setNewCompanyName] = useState('');
   const [newCompanyCnpj, setNewCompanyCnpj] = useState('');
@@ -309,6 +340,10 @@ export function App() {
   // Super user reports state
   const [reportsTab, setReportsTab] = useState<'revenue' | 'products' | 'payments' | 'users' | 'audit' | 'health'>('revenue');
   const [reportPeriod, setReportPeriod] = useState<'daily' | 'weekly' | 'monthly' | 'yearly'>('monthly');
+  const [reportRefDate, setReportRefDate] = useState(() => {
+    const now = new Date();
+    return now.toISOString().slice(0, 10); // YYYY-MM-DD
+  });
   const [revenueReport, setRevenueReport] = useState<any>(null);
   const [ticketAverageReport, setTicketAverageReport] = useState<any>(null);
   const [topProductsReport, setTopProductsReport] = useState<any>(null);
@@ -365,6 +400,13 @@ export function App() {
     setStorePhone(localStorage.getItem('storePhone') ?? '');
     setStoreCity(localStorage.getItem('storeCity') ?? '');
     setStorePixKey(localStorage.getItem('storePixKey') ?? '');
+    setPrinterKitchen(localStorage.getItem('printerKitchen') ?? '');
+    setPrinterCashier(localStorage.getItem('printerCashier') ?? '');
+    // Carrega lista de impressoras disponíveis (só no Electron)
+    const sistema = (window as any).sistema;
+    if (sistema?.listPrinters) {
+      sistema.listPrinters().then((list: any[]) => setAvailablePrinters(list)).catch(() => {});
+    }
   }, [currentUser]);
 
   useEffect(() => {
@@ -397,6 +439,10 @@ export function App() {
       void loadCompanies();
     }
     if (activeModule === 'cardapio') {
+      void loadCategories();
+    }
+    if (activeModule === 'delivery') {
+      void loadDeliveryOrders();
       void loadCategories();
     }
   }, [activeModule]);
@@ -748,6 +794,8 @@ export function App() {
     localStorage.setItem('storePhone', storePhone);
     localStorage.setItem('storeCity', storeCity);
     localStorage.setItem('storePixKey', storePixKey);
+    localStorage.setItem('printerKitchen', printerKitchen);
+    localStorage.setItem('printerCashier', printerCashier);
 
     if (currentCompany?.id) {
       try {
@@ -793,10 +841,10 @@ export function App() {
     }
   };
 
-  const loadDailyReceipts = async () => {
+  const loadDailyReceipts = async (date?: string) => {
     setLoadingReceipts(true);
     try {
-      const receipts = await api.listDailyReceipts();
+      const receipts = await api.listDailyReceipts(date ?? receiptsDate);
       setDailyReceipts(receipts || []);
     } catch (e) {
       console.error(e);
@@ -898,7 +946,7 @@ export function App() {
   );
 
   const selectedTableOrders = useMemo(
-    () => orders.filter((order) => order.tableId === selectedTable?.id && order.tabStatus === 'ABERTA'),
+    () => orders.filter((order) => order.tableId === selectedTable?.id && order.tabStatus === 'ABERTA' && order.status !== 'CANCELADO'),
     [orders, selectedTable]
   );
 
@@ -999,7 +1047,7 @@ export function App() {
     }>();
 
     orders
-      .filter((order) => order.tabStatus === 'ABERTA')
+      .filter((order) => order.tabStatus === 'ABERTA' && order.status !== 'CANCELADO')
       .forEach((order) => {
         const key = order.tabId ?? order.tableId;
         const existing = grouped.get(key);
@@ -1290,87 +1338,131 @@ export function App() {
     }
   };
 
+  const buildReportHtml = () => {
+    if (!reportSummary) return null;
+    const dateRange = reportSummary.startDate === reportSummary.endDate
+      ? new Date(reportSummary.startDate).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
+      : `${new Date(reportSummary.startDate).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })} – ${new Date(reportSummary.endDate).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}`;
+    const mesaTables = reportSummary.tables.filter((t) => t.tableId !== '__delivery__').sort((a, b) => b.totalValue - a.totalValue);
+    const deliveryGroup = reportSummary.tables.find((t) => t.tableId === '__delivery__');
+    const tableRows = mesaTables.map((t, i) => `
+        <tr class="${i % 2 === 0 ? 'even' : ''}">
+          <td>${t.tableName}</td>
+          <td style="text-align:center">${t.totalItems}</td>
+          <td style="text-align:right;font-weight:600">${formatCurrency(t.totalValue)}</td>
+        </tr>`).join('');
+    const deliveryRow = deliveryGroup ? `
+        <tr style="background:#fffbeb">
+          <td style="font-weight:600">🚲 Delivery (${deliveryGroup.totalItems} pedidos)</td>
+          <td style="text-align:center">${deliveryGroup.totalItems}</td>
+          <td style="text-align:right;font-weight:700">${formatCurrency(deliveryGroup.totalValue)}</td>
+        </tr>` : '';
+    return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8"/>
+  <title>Relatório Financeiro – ${reportSummary.periodLabel}</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Inter',Arial,sans-serif;background:#f4f6f4;color:#1a1e1a;font-size:14px;line-height:1.5}
+    .page{background:#fff;max-width:800px;margin:0 auto;min-height:100vh;padding:0}
+    .topbar{background:#18201d;padding:28px 40px 24px;display:flex;justify-content:space-between;align-items:flex-end}
+    .topbar-brand{color:#f1c44e;font-size:20px;font-weight:700;letter-spacing:.5px}
+    .topbar-meta{color:#9ab09f;font-size:12px;text-align:right}
+    .topbar-meta strong{display:block;color:#fff;font-size:15px;margin-bottom:2px}
+    .content{padding:32px 40px 40px}
+    .period-badge{display:inline-block;background:#f1c44e;color:#18201d;font-weight:700;font-size:11px;letter-spacing:1px;text-transform:uppercase;padding:4px 12px;border-radius:20px;margin-bottom:20px}
+    .section-title{font-size:11px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:#6b7a6b;margin-bottom:14px}
+    .metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:32px}
+    .metric{background:#f8faf8;border:1px solid #dbe3de;border-radius:12px;padding:20px 18px}
+    .metric label{font-size:11px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:#7a8a7a;display:block;margin-bottom:8px}
+    .metric value{font-size:26px;font-weight:700;color:#18201d;display:block}
+    .metric.highlight{background:#18201d;border-color:#18201d}
+    .metric.highlight label{color:#9ab09f}
+    .metric.highlight value{color:#f1c44e}
+    table{width:100%;border-collapse:collapse}
+    thead tr{background:#18201d}
+    thead th{color:#9ab09f;font-size:11px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;padding:12px 16px;text-align:left}
+    thead th:nth-child(2){text-align:center}
+    thead th:last-child{text-align:right}
+    tbody tr{border-bottom:1px solid #eef1ee}
+    tbody tr.even{background:#f8faf8}
+    tbody td{padding:12px 16px;color:#2a342a}
+    tfoot tr{background:#f1f4f1;border-top:2px solid #dbe3de}
+    tfoot td{padding:12px 16px;font-weight:700;color:#18201d}
+    .footer{margin-top:32px;padding-top:20px;border-top:1px solid #eef1ee;display:flex;justify-content:space-between;color:#9ab09f;font-size:11px}
+  </style>
+</head>
+<body>
+<div class="page">
+  <div class="topbar">
+    <div class="topbar-brand">Sistema Shawarma</div>
+    <div class="topbar-meta">
+      <strong>Relatório Financeiro</strong>
+      ${dateRange}
+    </div>
+  </div>
+  <div class="content">
+    <div class="period-badge">${reportSummary.periodLabel}</div>
+    <div class="section-title">Resumo do período</div>
+    <div class="metrics">
+      <div class="metric">
+        <label>Pedidos</label>
+        <value>${reportSummary.totalOrders}</value>
+      </div>
+      <div class="metric">
+        <label>Itens vendidos</label>
+        <value>${reportSummary.totalItems}</value>
+      </div>
+      <div class="metric highlight">
+        <label>Faturamento total</label>
+        <value>${formatCurrency(reportSummary.totalValue)}</value>
+      </div>
+    </div>
+    <div class="section-title">Detalhamento por origem</div>
+    <table>
+      <thead>
+        <tr><th>Origem</th><th>Itens / Pedidos</th><th>Valor</th></tr>
+      </thead>
+      <tbody>${tableRows}${deliveryRow}</tbody>
+      <tfoot>
+        <tr>
+          <td>Total geral</td>
+          <td style="text-align:center">${reportSummary.totalItems}</td>
+          <td style="text-align:right">${formatCurrency(reportSummary.totalValue)}</td>
+        </tr>
+      </tfoot>
+    </table>
+    <div class="footer">
+      <span>Sistema Shawarma – Relatório gerado automaticamente</span>
+      <span>Gerado em ${new Date().toLocaleString('pt-BR')}</span>
+    </div>
+  </div>
+</div>
+</body>
+</html>`;
+  };
+
   const exportReportPdf = async () => {
-    if (!reportSummary) {
-      return showToast('Relatório ainda não foi carregado.', 'warning');
-    }
-    const html = `
-      <html>
-        <head>
-          <meta charset="utf-8" />
-          <title>Relatório ${reportSummary.periodLabel}</title>
-          <style>
-            body { font-family: Arial, sans-serif; margin: 24px; color: #111; }
-            h1, h2, h3 { margin: 0 0 12px; }
-            .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-            .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 20px; }
-            .summary-card { padding: 14px 16px; border: 1px solid #ddd; border-radius: 10px; }
-            .summary-card strong { display: block; margin-bottom: 6px; }
-            .table-list { width: 100%; border-collapse: collapse; margin-top: 16px; }
-            .table-list th, .table-list td { padding: 10px 12px; border: 1px solid #ddd; }
-            .table-list th { background: #f7f7f7; text-align: left; }
-            .footer { margin-top: 26px; font-size: 13px; color: #555; }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <div>
-              <h1>Relatório ${reportSummary.periodLabel}</h1>
-              <div>${new Date(reportSummary.startDate).toLocaleDateString()} — ${new Date(reportSummary.endDate).toLocaleDateString()}</div>
-            </div>
-          </div>
-          <div class="summary">
-            <div class="summary-card"><strong>Pedidos</strong><span>${reportSummary.totalOrders}</span></div>
-            <div class="summary-card"><strong>Itens vendidos</strong><span>${reportSummary.totalItems}</span></div>
-            <div class="summary-card"><strong>Faturamento</strong><span>${formatCurrency(reportSummary.totalValue)}</span></div>
-          </div>
-          <table class="table-list">
-            <thead>
-              <tr>
-                <th>Mesa</th>
-                <th>Itens</th>
-                <th>Valor</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${reportSummary.tables.map((table) => `
-                <tr>
-                  <td>${table.tableName}</td>
-                  <td>${table.totalItems}</td>
-                  <td>${formatCurrency(table.totalValue)}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-          <div class="footer">Gerado em ${new Date().toLocaleString()}</div>
-        </body>
-      </html>
-    `;
+    const html = buildReportHtml();
+    if (!html) return showToast('Relatório ainda não foi carregado.', 'warning');
 
     if (!window.sistema?.saveReportPdf) {
       console.warn('API de PDF indisponível: window.sistema.saveReportPdf não encontrada, usando fallback de navegador');
       const blob = new Blob([html], { type: 'text/html' });
       const url = URL.createObjectURL(blob);
       const popup = window.open(url, '_blank');
-      if (!popup) {
-        return showToast('Exportação de PDF bloqueada pelo navegador.', 'warning');
-      }
+      if (!popup) return showToast('Exportação de PDF bloqueada pelo navegador.', 'warning');
       popup.focus();
-      try {
-        popup.print();
-      } catch (e) {
-        // ignore
-      }
-      // revoke after a short delay to allow the popup to load
+      try { popup.print(); } catch (e) { /* ignore */ }
       setTimeout(() => URL.revokeObjectURL(url), 5000);
       return;
     }
 
     try {
       const result = await window.sistema.saveReportPdf(html);
-      if (result.canceled) {
-        return;
-      }
+      if (result.canceled) return;
       showToast(`Relatório salvo em ${result.filePath}`, 'success');
     } catch (error) {
       console.error('Erro ao exportar PDF', error);
@@ -1379,71 +1471,15 @@ export function App() {
   };
 
   const previewReportPdf = async () => {
-    if (!reportSummary) {
-      return showToast('Relatório ainda não foi carregado.', 'warning');
-    }
-
-    const html = `
-      <html>
-        <head>
-          <meta charset="utf-8" />
-          <title>Relatório ${reportSummary.periodLabel}</title>
-          <style>
-            body { font-family: Arial, sans-serif; margin: 24px; color: #111; }
-            h1, h2, h3 { margin: 0 0 12px; }
-            .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-            .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 20px; }
-            .summary-card { padding: 14px 16px; border: 1px solid #ddd; border-radius: 10px; }
-            .summary-card strong { display: block; margin-bottom: 6px; }
-            .table-list { width: 100%; border-collapse: collapse; margin-top: 16px; }
-            .table-list th, .table-list td { padding: 10px 12px; border: 1px solid #ddd; }
-            .table-list th { background: #f7f7f7; text-align: left; }
-            .footer { margin-top: 26px; font-size: 13px; color: #555; }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <div>
-              <h1>Relatório ${reportSummary.periodLabel}</h1>
-              <div>${new Date(reportSummary.startDate).toLocaleDateString()} — ${new Date(reportSummary.endDate).toLocaleDateString()}</div>
-            </div>
-          </div>
-          <div class="summary">
-            <div class="summary-card"><strong>Pedidos</strong><span>${reportSummary.totalOrders}</span></div>
-            <div class="summary-card"><strong>Itens vendidos</strong><span>${reportSummary.totalItems}</span></div>
-            <div class="summary-card"><strong>Faturamento</strong><span>${formatCurrency(reportSummary.totalValue)}</span></div>
-          </div>
-          <table class="table-list">
-            <thead>
-              <tr>
-                <th>Mesa</th>
-                <th>Itens</th>
-                <th>Valor</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${reportSummary.tables.map((table) => `
-                <tr>
-                  <td>${table.tableName}</td>
-                  <td>${table.totalItems}</td>
-                  <td>${formatCurrency(table.totalValue)}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-          <div class="footer">Gerado em ${new Date().toLocaleString()}</div>
-        </body>
-      </html>
-    `;
+    const html = buildReportHtml();
+    if (!html) return showToast('Relatório ainda não foi carregado.', 'warning');
 
     if (!window.sistema?.previewReportPdf) {
       console.warn('API de PDF indisponível: window.sistema.previewReportPdf não encontrada, usando fallback de navegador');
       const blob = new Blob([html], { type: 'text/html' });
       const url = URL.createObjectURL(blob);
       const popup = window.open(url, '_blank');
-      if (!popup) {
-        return showToast('Visualização de PDF bloqueada pelo navegador.', 'warning');
-      }
+      if (!popup) return showToast('Visualização de PDF bloqueada pelo navegador.', 'warning');
       popup.focus();
       setTimeout(() => URL.revokeObjectURL(url), 5000);
       return;
@@ -1451,9 +1487,7 @@ export function App() {
 
     try {
       const result = await window.sistema.previewReportPdf(html);
-      if (result.canceled) {
-        return;
-      }
+      if (result.canceled) return;
     } catch (error) {
       console.error('Erro ao pré-visualizar PDF', error);
       showToast('Falha ao visualizar o PDF.', 'error');
@@ -1652,13 +1686,14 @@ export function App() {
     const hasOrdersAccess = role ? ['GARCOM', 'CAIXA', 'GERENTE', 'FINANCEIRO', 'ESTOQUE', 'SUPER', 'ADMIN'].includes(role) : false;
 
     try {
-      const [tablesResult, productsResult, ordersResult, kitchenResult, cashResult, reportResult] = await Promise.allSettled([
+      const [tablesResult, productsResult, ordersResult, kitchenResult, cashResult, reportResult, deliveryKitchenResult] = await Promise.allSettled([
         api.tables(),
         api.products(),
         hasOrdersAccess ? api.orders() : Promise.resolve([] as Order[]),
         hasKitchenAccess ? api.kitchenQueue() : Promise.resolve([] as Order[]),
         hasCashAccess ? api.cashRegisterCurrent() : Promise.resolve(null),
-        hasReportAccess ? api.reportSummary(reportPeriod) : Promise.resolve(null)
+        hasReportAccess ? api.reportSummary(reportPeriod, reportRefDate) : Promise.resolve(null),
+        hasKitchenAccess ? api.listDeliveryOrders('EM_PREPARO') : Promise.resolve([])
       ]);
 
       setApiStatus('online');
@@ -1668,8 +1703,11 @@ export function App() {
       if (kitchenResult.status === 'fulfilled') setKitchenOrders(kitchenResult.value);
       if (cashResult.status === 'fulfilled') setCashRegister(cashResult.value ?? null);
       if (reportResult.status === 'fulfilled') setReportSummary(reportResult.value ?? null);
+      if (deliveryKitchenResult.status === 'fulfilled') setKitchenDeliveryOrders(deliveryKitchenResult.value as DeliveryOrder[]);
+      initialLoadDone.current = true;
     } catch {
       setApiStatus('offline');
+      initialLoadDone.current = true;
     }
   };
 
@@ -1726,23 +1764,94 @@ export function App() {
         });
       }
     }
-  }, [isAuthenticated, reportPeriod, currentUser, activeModule, selectedReportCompany]);
+  }, [isAuthenticated, reportPeriod, reportRefDate, currentUser, activeModule, selectedReportCompany]);
 
-  const createOrder = async (productId: string) => {
-    if (!selectedTable) {
+  // Auto-refresh: cozinha + mesas + delivery a cada 3s, só após o carregamento inicial
+  useEffect(() => {
+    if (!isAuthenticated || !currentUser || currentUser.role === 'SUPER') return;
+
+    let running = true;
+
+    const tick = async () => {
+      if (!running || !initialLoadDone.current) return;
+      try {
+        await reloadTablesAndOrders();
+      } catch (e) {
+        console.error('[auto-refresh] reloadTablesAndOrders:', e);
+      }
+      if (!running) return;
+      try {
+        const deliveryOrders = await api.listDeliveryOrders('EM_PREPARO');
+        if (running) setKitchenDeliveryOrders(deliveryOrders as DeliveryOrder[]);
+      } catch {
+        // usuário sem acesso a delivery — ignora silenciosamente
+      }
+    };
+
+    const intervalId = setInterval(() => { void tick(); }, 3000);
+
+    return () => {
+      running = false;
+      clearInterval(intervalId);
+    };
+  }, [isAuthenticated, currentUser]);
+
+  const createOrder = async (
+    tableId: string,
+    cartItems: Array<{ productId: string; quantity: number; note?: string; productName: string; unitPrice: number }>,
+    tableName: string,
+  ) => {
+    // Optimistic update
+    const optimisticOrder: Order = {
+      id: `optimistic-${Date.now()}`,
+      tableId,
+      tableName,
+      status: 'ENVIADO',
+      items: cartItems.map((ci, idx) => ({
+        id: `opt-item-${Date.now()}-${idx}`,
+        productId: ci.productId,
+        productName: ci.productName,
+        quantity: ci.quantity,
+        unitPrice: ci.unitPrice,
+        note: ci.note,
+      })),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    setOrders((prev) => [...prev, optimisticOrder]);
+    setKitchenOrders((prev) => [...prev, optimisticOrder]);
+
+    try {
+      await api.createOrder(tableId, cartItems.map((ci) => ({ productId: ci.productId, quantity: ci.quantity, note: ci.note })));
+    } catch (err: any) {
+      setOrders((prev) => prev.filter((o) => !o.id.startsWith('optimistic-')));
+      setKitchenOrders((prev) => prev.filter((o) => !o.id.startsWith('optimistic-')));
+      showToast('Erro ao criar pedido: ' + (err?.message ?? String(err)), 'error');
       return;
     }
 
-    await api.createOrder(selectedTable.id, [{ productId, quantity: 1 }]);
-    await reloadTablesAndOrders();
+    // Imprime ticket da cozinha com todos os itens e observações
+    void printKitchenTicket({
+      type: 'MESA',
+      tableName,
+      items: cartItems.map((ci) => ({ name: ci.productName, quantity: ci.quantity, note: ci.note || undefined })),
+      time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+    });
+
+    void reloadTablesAndOrders();
   };
 
   const advanceOrder = async (order: Order) => {
+    const nextStatus = order.status === 'ENVIADO' ? 'EM_PREPARO' : order.status === 'EM_PREPARO' ? 'PRONTO' : 'ENTREGUE';
+    // Optimistic update — UI responde imediatamente
+    setOrders((prev) => prev.map((o) => o.id === order.id ? { ...o, status: nextStatus as Order['status'] } : o));
     try {
-      const nextStatus = order.status === 'ENVIADO' ? 'EM_PREPARO' : order.status === 'EM_PREPARO' ? 'PRONTO' : 'ENTREGUE';
       await api.updateOrderStatus(order.id, nextStatus);
-      await reloadTablesAndOrders();
+      // Sincroniza em background sem bloquear a UI
+      void reloadTablesAndOrders();
     } catch (err: any) {
+      // Reverte em caso de erro
+      setOrders((prev) => prev.map((o) => o.id === order.id ? { ...o, status: order.status } : o));
       showToast('Erro ao avançar pedido: ' + (err?.message ?? String(err)), 'error');
     }
   };
@@ -1766,6 +1875,155 @@ export function App() {
     } catch (e) {
       showToast((e as Error).message, 'error');
     }
+  };
+
+  const printKitchenTicket = async (ticketData: Parameters<typeof generateKitchenTicketHTML>[0]) => {
+    const html = generateKitchenTicketHTML(ticketData);
+    const sistema = (window as any).sistema;
+    if (sistema?.printSilent && printerKitchen) {
+      const result = await sistema.printSilent(html, printerKitchen);
+      if (!result?.success) showToast(`Erro ao imprimir na cozinha: ${result?.reason ?? ''}`, 'error');
+    } else if (sistema?.printSilent && !printerKitchen) {
+      showToast('Impressora da cozinha não configurada. Configure em Ajustes.', 'warning');
+    } else {
+      // Web: abre janela para impressão manual
+      const w = window.open('', '_blank', 'width=240,height=600');
+      if (w) { w.document.open(); w.document.write(html); w.document.close(); }
+    }
+  };
+
+  const loadDeliveryOrders = async () => {
+    setLoadingDelivery(true);
+    try {
+      const [active, all] = await Promise.all([
+        api.listDeliveryOrders(),
+        api.listDeliveryOrders('all')
+      ]);
+      setDeliveryOrders(active as DeliveryOrder[]);
+      setDeliveryOrdersAll(all as DeliveryOrder[]);
+    } catch (e) {
+      showToast('Falha ao carregar pedidos de delivery.', 'error');
+    } finally {
+      setLoadingDelivery(false);
+    }
+  };
+
+  const addDeliveryItem = () => {
+    const product = products.find((p) => p.id === dlvSelectedProduct);
+    if (!product && !dlvSelectedProduct) return showToast('Selecione um produto.', 'warning');
+    const item = product
+      ? { productId: product.id, productName: product.name, quantity: Number(dlvProductQty) || 1, unitPrice: product.price, note: dlvProductNote }
+      : { productName: dlvSelectedProduct, quantity: Number(dlvProductQty) || 1, unitPrice: 0, note: dlvProductNote };
+    setDlvItems((prev) => [...prev, item]);
+    setDlvSelectedProduct('');
+    setDlvProductSearch('');
+    setDlvProductDropdownOpen(false);
+    setDlvProductQty('1');
+    setDlvProductNote('');
+  };
+
+  const removeDeliveryItem = (idx: number) => setDlvItems((prev) => prev.filter((_, i) => i !== idx));
+
+  const submitDeliveryOrder = async () => {
+    if (!dlvCustomerName.trim()) return showToast('Informe o nome do cliente.', 'warning');
+    if (!dlvCustomerAddress.trim()) return showToast('Informe o endereço de entrega.', 'warning');
+    if (dlvItems.length === 0) return showToast('Adicione pelo menos um item.', 'warning');
+    try {
+      await api.createDeliveryOrder({
+        customerName: dlvCustomerName,
+        customerPhone: dlvCustomerPhone,
+        customerAddress: dlvCustomerAddress,
+        paymentMethod: dlvPaymentMethod,
+        deliveryFee: Number(dlvDeliveryFee.replace(',', '.')) || 0,
+        notes: dlvNotes,
+        items: dlvItems
+      });
+      // Imprime ticket na cozinha automaticamente
+      await printKitchenTicket({
+        type: 'DELIVERY',
+        customerName: dlvCustomerName,
+        customerPhone: dlvCustomerPhone,
+        customerAddress: dlvCustomerAddress,
+        paymentMethod: dlvPaymentMethod,
+        items: dlvItems.map((i) => ({ name: i.productName, quantity: i.quantity, note: i.note })),
+        notes: dlvNotes,
+        time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+      });
+
+      setDlvCustomerName(''); setDlvCustomerPhone(''); setDlvCustomerAddress('');
+      setDlvPaymentMethod('DINHEIRO'); setDlvDeliveryFee('0'); setDlvNotes('');
+      setDlvItems([]); setDlvTab('ativos');
+      showToast('Pedido de delivery criado!', 'success');
+      await loadDeliveryOrders();
+    } catch (e) {
+      showToast((e as Error).message, 'error');
+    }
+  };
+
+  const printDeliveryReceipt = async (order: DeliveryOrder) => {
+    try {
+      const subtotal = order.items.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
+      const receiptNumber = await api.assignDeliveryReceiptNumber(order.id);
+      const w = window.open('', '_blank', 'width=240,height=700,toolbar=no,menubar=no');
+      if (!w) { showToast('Bloqueador de janelas impediu a impressão.', 'warning'); return; }
+      const deliveryInfo = [
+        order.customerPhone ? `Tel: ${order.customerPhone}` : null,
+        `End: ${order.customerAddress}`
+      ].filter(Boolean).join(' | ');
+      printReceipt({
+        companyName: storeName,
+        cnpj: storeCnpj ? `CNPJ: ${storeCnpj}` : undefined,
+        address: storeAddress,
+        phone: storePhone,
+        receiptNumber,
+        tableName: `DELIVERY — ${order.customerName}`,
+        consumer: deliveryInfo,
+        items: order.items.map((i) => ({ name: i.productName, quantity: i.quantity, unitPrice: i.unitPrice, total: i.quantity * i.unitPrice })),
+        subtotal,
+        total: order.total,
+        paymentMethod: order.paymentMethod,
+        nota: order.deliveryFee > 0 ? `Taxa entrega: ${formatCurrency(order.deliveryFee)}` : undefined,
+      });
+    } catch (e) {
+      showToast('Erro ao gerar recibo.', 'error');
+    }
+  };
+
+  const advanceDeliveryStatus = async (order: DeliveryOrder) => {
+    const next: Record<string, string> = {
+      RECEBIDO: 'EM_PREPARO',
+      EM_PREPARO: 'SAIU_PARA_ENTREGA',
+      SAIU_PARA_ENTREGA: 'ENTREGUE'
+    };
+    const nextStatus = next[order.status];
+    if (!nextStatus) return;
+    // Optimistic update — UI responde imediatamente
+    const applyStatus = (prev: DeliveryOrder[]) =>
+      prev.map((o) => o.id === order.id ? { ...o, status: nextStatus } : o);
+    setDeliveryOrders(applyStatus);
+    setDeliveryOrdersAll(applyStatus);
+    if (nextStatus === 'ENTREGUE') showToast('Pedido entregue! ✓', 'success');
+    try {
+      await api.updateDeliveryStatus(order.id, nextStatus);
+      // Ao entregar, aguarda o número ser gravado antes de recarregar a lista
+      if (nextStatus === 'ENTREGUE') await api.assignDeliveryReceiptNumber(order.id);
+      void loadDeliveryOrders();
+    } catch (e) {
+      // Reverte em caso de erro
+      const revert = (prev: DeliveryOrder[]) =>
+        prev.map((o) => o.id === order.id ? { ...o, status: order.status } : o);
+      setDeliveryOrders(revert);
+      setDeliveryOrdersAll(revert);
+      showToast((e as Error).message, 'error');
+    }
+  };
+
+  const cancelDeliveryOrder = async (order: DeliveryOrder) => {
+    confirmAction(`Cancelar pedido de ${order.customerName}?`, async () => {
+      await api.updateDeliveryStatus(order.id, 'CANCELADO');
+      await loadDeliveryOrders();
+      showToast('Pedido cancelado.', 'info');
+    });
   };
 
   const startEditProduct = (product: any) => {
@@ -2345,15 +2603,13 @@ export function App() {
                   }}>
                     Abrir cardápio
                   </button>
-                  {currentUser?.role !== 'GARCOM' && (
-                    <button type="button" className="secondary-button" onClick={() => {
-                      if (!selectedTable) return showToast('Selecione uma mesa.', 'warning');
-                      if (selectedTableOrders.length === 0) return showToast('Não há comanda ativa para encerrar.', 'warning');
-                      openCloseModal();
-                    }}>
-                      Encerrar Mesa
-                    </button>
-                  )}
+                  <button type="button" className="secondary-button" onClick={() => {
+                    if (!selectedTable) return showToast('Selecione uma mesa.', 'warning');
+                    if (selectedTableOrders.length === 0) return showToast('Não há comanda ativa para encerrar.', 'warning');
+                    openCloseModal();
+                  }}>
+                    Encerrar Mesa
+                  </button>
                 </div>
               </div>
 
@@ -2364,11 +2620,30 @@ export function App() {
                 ) : (
                   selectedTableOrders.map((order) => (
                     <div className="order-card" key={order.id}>
-                      <div>
-                        <strong>{order.items.map((item) => `${item.productName} x${item.quantity}`).join(', ')}</strong>
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <strong style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{order.items.map((item) => `${item.productName} x${item.quantity}`).join(', ')}</strong>
                         <span>{orderStatusLabel[order.status]}</span>
                       </div>
-                      <button type="button" onClick={() => void advanceOrder(order)}>Avançar</button>
+                      <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                        {order.status === 'ENVIADO' && (
+                          <button
+                            type="button"
+                            style={{ background: '#fee2e2', color: '#b91c1c', border: 'none', borderRadius: 8, padding: '6px 12px', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}
+                            onClick={async () => {
+                              try {
+                                await api.updateOrderStatus(order.id, 'CANCELADO');
+                                await reloadTablesAndOrders();
+                                showToast('Pedido removido.', 'success');
+                              } catch (err: any) {
+                                showToast('Erro ao remover pedido: ' + (err?.message ?? String(err)), 'error');
+                              }
+                            }}
+                          >
+                            Remover
+                          </button>
+                        )}
+                        <button type="button" onClick={() => void advanceOrder(order)}>Avançar</button>
+                      </div>
                     </div>
                   ))
                 )}
@@ -2416,42 +2691,152 @@ export function App() {
             </div>
 
             {menuModalTable && (
-              <div style={{ position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.35)', zIndex: 80, display: 'grid', placeItems: 'center', padding: 20 }} onClick={closeTableMenuModal}>
-                <div style={{ width: 'min(800px, 100%)', maxHeight: '90vh', overflowY: 'auto', background: '#fff', borderRadius: 14, padding: 24, boxShadow: '0 24px 60px rgba(0,0,0,0.18)' }} onClick={(event) => event.stopPropagation()}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+              <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 80, display: 'grid', placeItems: 'center', padding: 20 }} onClick={() => { closeTableMenuModal(); setTableCart([]); }}>
+                <div style={{ width: 'min(960px, 100%)', maxHeight: '92vh', background: '#fff', borderRadius: 14, boxShadow: '0 24px 60px rgba(0,0,0,0.18)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }} onClick={(e) => e.stopPropagation()}>
+
+                  {/* Header */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 24px', borderBottom: '1px solid #eef2ef' }}>
                     <div>
                       <span className="eyebrow">Cardápio</span>
                       <h2 style={{ margin: 0 }}>{menuModalTable.name}</h2>
-                      <p style={{ margin: '6px 0 0', color: '#5d6c66' }}>Duplo clique em uma mesa para abrir o cardápio.</p>
                     </div>
-                    <button type="button" className="secondary-button" onClick={closeTableMenuModal}>Fechar</button>
+                    <button type="button" className="secondary-button" onClick={() => { closeTableMenuModal(); setTableCart([]); }}>Fechar</button>
                   </div>
-                  {Object.entries(groupedMenuSections).map(([section, items]) => items.length > 0 ? (
-                    <div key={section} style={{ marginBottom: 24 }}>
-                      <h3 style={{ marginBottom: 12 }}>{section}</h3>
-                      <div style={{ display: 'grid', gap: 10 }}>
-                        {items.map((product) => (
-                          <div key={product.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', border: '1px solid #ececec', borderRadius: 10 }}>
-                            <div>
-                              <strong>{product.name}</strong>
-                              <div style={{ marginTop: 4, color: '#5d6c66', fontSize: 13 }}>{product.description}</div>
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                              <strong>{formatCurrency(product.price)}</strong>
-                              <button type="button" className="secondary-button" onClick={() => {
-                                setSelectedTableId(menuModalTable.id);
-                                void createOrder(product.id);
-                              }}>Pedir</button>
-                            </div>
+
+                  <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+                    {/* Lista de produtos */}
+                    <div style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
+                      {Object.entries(groupedMenuSections).map(([section, items]) => items.length > 0 ? (
+                        <div key={section} style={{ marginBottom: 24 }}>
+                          <h3 style={{ marginBottom: 12 }}>{section}</h3>
+                          <div style={{ display: 'grid', gap: 8 }}>
+                            {items.map((product) => {
+                              const inCart = tableCart.filter((c) => c.product.id === product.id).reduce((s, c) => s + c.quantity, 0);
+                              return (
+                                <div key={product.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', border: `1px solid ${inCart > 0 ? '#16a34a' : '#ececec'}`, borderRadius: 10, background: inCart > 0 ? '#f0fdf4' : '#fff', transition: 'all .15s' }}>
+                                  <div style={{ flex: 1 }}>
+                                    <strong>{product.name}</strong>
+                                    {inCart > 0 && <span style={{ marginLeft: 8, background: '#16a34a', color: '#fff', fontSize: 11, fontWeight: 700, borderRadius: 20, padding: '1px 8px' }}>{inCart}x</span>}
+                                    <div style={{ marginTop: 3, color: '#5d6c66', fontSize: 13 }}>{product.description}</div>
+                                  </div>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 12 }}>
+                                    <strong style={{ fontSize: 14 }}>{formatCurrency(product.price)}</strong>
+                                    <button type="button" className="secondary-button" style={{ padding: '6px 14px', minHeight: 'unset', fontSize: 13 }} onClick={() => {
+                                      setSelectedTableId(menuModalTable.id);
+                                      setTableCartNoteProduct(product);
+                                      setTableCartNote('');
+                                    }}>+ Adicionar</button>
+                                  </div>
+                                </div>
+                              );
+                            })}
                           </div>
-                        ))}
-                      </div>
+                        </div>
+                      ) : null)}
                     </div>
-                  ) : null)}
+
+                    {/* Painel do carrinho */}
+                    <div style={{ width: 300, borderLeft: '1px solid #eef2ef', display: 'flex', flexDirection: 'column', background: '#fafafa' }}>
+                      <div style={{ padding: '16px 18px', borderBottom: '1px solid #eef2ef' }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: '#7a8a7a' }}>Pedido atual</span>
+                      </div>
+                      <div style={{ flex: 1, overflowY: 'auto', padding: '12px 18px' }}>
+                        {tableCart.length === 0 ? (
+                          <p style={{ color: '#9a9a9a', fontSize: 13, textAlign: 'center', marginTop: 24 }}>Nenhum item adicionado.</p>
+                        ) : (
+                          <div style={{ display: 'grid', gap: 8 }}>
+                            {tableCart.map((entry, idx) => (
+                              <div key={idx} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, padding: '10px 12px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                  <div style={{ flex: 1 }}>
+                                    <span style={{ fontWeight: 600, fontSize: 13 }}>{entry.quantity}× {entry.product.name}</span>
+                                    {entry.note && <div style={{ fontSize: 12, color: '#7a8a7a', marginTop: 3 }}>↳ {entry.note}</div>}
+                                  </div>
+                                  <button type="button" onClick={() => setTableCart((prev) => prev.filter((_, i) => i !== idx))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#b91c1c', padding: '0 0 0 8px', fontSize: 16, lineHeight: 1 }}>×</button>
+                                </div>
+                                <div style={{ fontSize: 12, color: '#9a9a9a', marginTop: 4, textAlign: 'right' }}>{formatCurrency(entry.quantity * entry.product.price)}</div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      {tableCart.length > 0 && (
+                        <div style={{ padding: '14px 18px', borderTop: '1px solid #eef2ef' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, fontWeight: 700, marginBottom: 12 }}>
+                            <span>Total</span>
+                            <span>{formatCurrency(tableCart.reduce((s, c) => s + c.quantity * c.product.price, 0))}</span>
+                          </div>
+                          <button
+                            type="button"
+                            className="primary-button"
+                            style={{ width: '100%' }}
+                            onClick={async () => {
+                              const cartItems = tableCart.map((c) => ({
+                                productId: c.product.id,
+                                productName: c.product.name,
+                                quantity: c.quantity,
+                                unitPrice: c.product.price,
+                                note: c.note || undefined,
+                              }));
+                              setTableCart([]);
+                              closeTableMenuModal();
+                              await createOrder(menuModalTable.id, cartItems, menuModalTable.name);
+                            }}
+                          >
+                            Confirmar e enviar para cozinha
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
           </section>
+        )}
+
+        {/* Mini-modal observação do item do carrinho */}
+        {tableCartNoteProduct && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'grid', placeItems: 'center', zIndex: 200 }} onClick={() => setTableCartNoteProduct(null)}>
+            <div style={{ background: '#fff', borderRadius: 16, padding: 28, width: 340, display: 'grid', gap: 16 }} onClick={(e) => e.stopPropagation()}>
+              <div>
+                <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: '#7a8a7a' }}>Adicionar ao pedido</span>
+                <h3 style={{ margin: '6px 0 2px', fontSize: 18 }}>{tableCartNoteProduct.name}</h3>
+                <span style={{ color: '#7a8a7a', fontSize: 14 }}>{formatCurrency(tableCartNoteProduct.price)}</span>
+              </div>
+              <label style={{ display: 'grid', gap: 6, margin: 0 }}>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>Observação <span style={{ fontWeight: 400, color: '#9a9a9a' }}>(opcional)</span></span>
+                <input
+                  type="text"
+                  placeholder="Ex: sem cebola, bem passado..."
+                  value={tableCartNote}
+                  onChange={(e) => setTableCartNote(e.target.value)}
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      setTableCart((prev) => [...prev, { product: tableCartNoteProduct, quantity: 1, note: tableCartNote.trim() }]);
+                      setTableCartNoteProduct(null);
+                    }
+                    if (e.key === 'Escape') setTableCartNoteProduct(null);
+                  }}
+                />
+              </label>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button type="button" className="secondary-button" style={{ flex: 1 }} onClick={() => setTableCartNoteProduct(null)}>Cancelar</button>
+                <button
+                  type="button"
+                  className="primary-button"
+                  style={{ flex: 1 }}
+                  onClick={() => {
+                    setTableCart((prev) => [...prev, { product: tableCartNoteProduct, quantity: 1, note: tableCartNote.trim() }]);
+                    setTableCartNoteProduct(null);
+                  }}
+                >
+                  Adicionar
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Users modal */}
@@ -2659,34 +3044,116 @@ export function App() {
           </section>
         )}
 
-        {activeModule === 'cozinha' && (
-          <section className="module-grid">
-            <div className="panel">
-              <div className="panel-header">
-                <div>
-                  <span className="eyebrow">KDS</span>
-                  <h2>Pedidos em producao</h2>
+        {activeModule === 'cozinha' && (() => {
+          const now = Date.now();
+          const elapsed = (iso: string) => {
+            const diff = Math.floor((now - new Date(iso).getTime()) / 1000);
+            const m = Math.floor(diff / 60);
+            const s = diff % 60;
+            return m > 0 ? `${m}min ${s}s` : `${s}s`;
+          };
+          const urgentMs = 20 * 60 * 1000; // 20 min = urgente
+
+          return (
+            <section className="module-grid two-columns">
+
+              {/* Pedidos de mesa */}
+              <div className="panel">
+                <div className="panel-header">
+                  <div>
+                    <span className="eyebrow">KDS — Mesas</span>
+                    <h2>Pedidos em produção</h2>
+                  </div>
+                  <Utensils size={22} />
                 </div>
-                <Utensils size={22} />
+                <div className="kitchen-list">
+                  {kitchenOrders.length === 0 ? (
+                    <p style={{ color: '#789088', padding: 12 }}>Fila vazia.</p>
+                  ) : (
+                    kitchenOrders.map((order) => {
+                      const age = now - new Date(order.createdAt).getTime();
+                      const urgent = age > urgentMs;
+                      return (
+                        <div className="kitchen-row" key={order.id} style={{ borderLeft: `4px solid ${urgent ? '#b91c1c' : '#16211d'}`, paddingLeft: 12, gap: 8 }}>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                              <strong style={{ fontSize: 15 }}>{order.tableName}</strong>
+                              <span style={{ fontSize: 11, fontWeight: 700, color: urgent ? '#b91c1c' : '#789088', background: urgent ? '#fef2f2' : '#f1f5f0', borderRadius: 4, padding: '2px 6px' }}>
+                                <Clock size={10} style={{ marginRight: 3, verticalAlign: 'middle' }} />
+                                {elapsed(order.createdAt)}
+                              </span>
+                            </div>
+                            <div style={{ fontSize: 13, color: '#4b5563' }}>
+                              {order.items.map((i) => `${i.quantity}× ${i.productName}`).join(' • ')}
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+                            <span style={{ fontSize: 11, color: '#789088' }}>{new Date(order.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+                            <button type="button" className="primary-button" style={{ fontSize: 12, padding: '5px 12px' }} onClick={() => void advanceOrder(order)}>
+                              {orderStatusLabel[order.status]} →
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
               </div>
 
-              <div className="kitchen-list">
-                {kitchenOrders.length === 0 ? (
-                  <p>Fila vazia.</p>
-                ) : (
-                  kitchenOrders.map((order) => (
-                    <div className="kitchen-row" key={order.id}>
-                      <strong>{order.tableName}</strong>
-                      <span>{order.items.map((item) => item.productName).join(', ')}</span>
-                      <b>{orderStatusLabel[order.status]}</b>
-                      <button type="button" onClick={() => void advanceOrder(order)}>Avancar</button>
-                    </div>
-                  ))
-                )}
+              {/* Pedidos de delivery em preparo */}
+              <div className="panel">
+                <div className="panel-header">
+                  <div>
+                    <span className="eyebrow">KDS — Delivery</span>
+                    <h2>Deliveries em preparo</h2>
+                  </div>
+                  <Bike size={22} />
+                </div>
+                <div className="kitchen-list">
+                  {kitchenDeliveryOrders.length === 0 ? (
+                    <p style={{ color: '#789088', padding: 12 }}>Nenhum delivery em preparo.</p>
+                  ) : (
+                    kitchenDeliveryOrders.map((order) => {
+                      const age = now - new Date(order.createdAt).getTime();
+                      const urgent = age > urgentMs;
+                      return (
+                        <div key={order.id} className="kitchen-row" style={{ borderLeft: `4px solid ${urgent ? '#b91c1c' : '#f1c44e'}`, paddingLeft: 12, gap: 8 }}>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                              <strong style={{ fontSize: 15 }}>{order.customerName}</strong>
+                              <span style={{ fontSize: 11, background: '#fffbeb', color: '#92400e', borderRadius: 4, padding: '2px 6px', fontWeight: 700 }}>
+                                🚲 Delivery
+                              </span>
+                              <span style={{ fontSize: 11, fontWeight: 700, color: urgent ? '#b91c1c' : '#789088', background: urgent ? '#fef2f2' : '#f1f5f0', borderRadius: 4, padding: '2px 6px' }}>
+                                <Clock size={10} style={{ marginRight: 3, verticalAlign: 'middle' }} />
+                                {elapsed(order.createdAt)}
+                              </span>
+                            </div>
+                            <div style={{ fontSize: 12, color: '#789088', marginBottom: 4 }}>
+                              <MapPin size={10} style={{ marginRight: 3, verticalAlign: 'middle' }} />
+                              {order.customerAddress}
+                            </div>
+                            <div style={{ fontSize: 13, color: '#4b5563' }}>
+                              {order.items.map((i) => `${i.quantity}× ${i.productName}`).join(' • ')}
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+                            <span style={{ fontSize: 11, color: '#789088' }}>{new Date(order.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+                            <button type="button" className="primary-button" style={{ fontSize: 12, padding: '5px 12px' }}
+                              onClick={() => void advanceDeliveryStatus(order)}>
+                              Saiu p/ entrega
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
               </div>
-            </div>
-          </section>
-        )}
+
+            </section>
+          );
+        })()}
 
         {activeModule === 'menu' && (
           <section className="module-grid two-columns">
@@ -4116,6 +4583,238 @@ export function App() {
           </div>
         )}
 
+        {activeModule === 'delivery' && (() => {
+          const dlvTotal = dlvItems.reduce((s, i) => s + i.quantity * i.unitPrice, 0) + (Number(dlvDeliveryFee.replace(',', '.')) || 0);
+          const statusConfig: Record<string, { label: string; color: string; bg: string; next: string }> = {
+            RECEBIDO:          { label: 'Recebido',        color: '#92400e', bg: '#fffbeb', next: 'Iniciar preparo' },
+            EM_PREPARO:        { label: 'Em preparo',      color: '#1e40af', bg: '#eff6ff', next: 'Saiu para entrega' },
+            SAIU_PARA_ENTREGA: { label: 'Saiu p/ entrega', color: '#065f46', bg: '#ecfdf5', next: 'Marcar entregue' },
+            ENTREGUE:          { label: 'Entregue',        color: '#15803d', bg: '#f0fdf4', next: '' },
+            CANCELADO:         { label: 'Cancelado',       color: '#6b7280', bg: '#f3f4f6', next: '' },
+          };
+
+          return (
+            <section className="module-grid two-columns">
+
+              {/* Painel esquerdo: novo pedido */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 0, overflowY: 'auto', maxHeight: 'calc(100vh - 80px)' }}>
+                {/* Abas */}
+                <div style={{ display: 'flex', borderBottom: '2px solid #e5e7eb', marginBottom: 0 }}>
+                  {(['novo', 'ativos'] as const).map((t) => (
+                    <button key={t} type="button" onClick={() => setDlvTab(t)}
+                      style={{ flex: 1, padding: '10px', fontWeight: 600, fontSize: 14, border: 'none', cursor: 'pointer', borderBottom: dlvTab === t ? '2px solid #16211d' : '2px solid transparent', marginBottom: -2, background: 'none', color: dlvTab === t ? '#16211d' : '#789088' }}>
+                      {t === 'novo' ? '+ Novo pedido' : `Pedidos ativos (${deliveryOrders.length})`}
+                    </button>
+                  ))}
+                </div>
+
+                {dlvTab === 'novo' && (
+                  <div className="panel product-form" style={{ borderRadius: '0 0 12px 12px' }}>
+                    {/* Dados do cliente */}
+                    <div className="panel-header">
+                      <div><span className="eyebrow">Cliente</span><h2>Dados de entrega</h2></div>
+                      <Bike size={22} />
+                    </div>
+
+                    <label><User size={14} style={{ marginRight: 6, verticalAlign: 'middle' }} />Nome do cliente
+                      <input value={dlvCustomerName} onChange={(e) => setDlvCustomerName(e.target.value)} placeholder="Ex: João Silva" autoComplete="off" />
+                    </label>
+                    <label><Phone size={14} style={{ marginRight: 6, verticalAlign: 'middle' }} />Telefone
+                      <input value={dlvCustomerPhone} onChange={(e) => setDlvCustomerPhone(e.target.value)} placeholder="(00) 90000-0000" inputMode="tel" autoComplete="off" />
+                    </label>
+                    <label><MapPin size={14} style={{ marginRight: 6, verticalAlign: 'middle' }} />Endereço de entrega
+                      <input value={dlvCustomerAddress} onChange={(e) => setDlvCustomerAddress(e.target.value)} placeholder="Rua, número, bairro" autoComplete="off" />
+                    </label>
+
+                    <div className="form-grid">
+                      <label>Forma de pagamento
+                        <select value={dlvPaymentMethod} onChange={(e) => setDlvPaymentMethod(e.target.value)}>
+                          <option value="DINHEIRO">💵 Dinheiro</option>
+                          <option value="PIX">⚡ PIX</option>
+                          <option value="CREDITO">💳 Crédito</option>
+                          <option value="DEBITO">🏦 Débito</option>
+                        </select>
+                      </label>
+                      <label>Taxa de entrega (R$)
+                        <input value={dlvDeliveryFee} onChange={(e) => setDlvDeliveryFee(e.target.value)} inputMode="decimal" placeholder="0,00" autoComplete="off" />
+                      </label>
+                    </div>
+
+                    <label>Observações
+                      <input value={dlvNotes} onChange={(e) => setDlvNotes(e.target.value)} placeholder="Ex: Sem cebola, troco para R$50..." autoComplete="off" />
+                    </label>
+
+                    {/* Adicionar itens */}
+                    <div style={{ borderTop: '1px solid #eef2ef', paddingTop: 14, marginTop: 4 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#789088', marginBottom: 10 }}>Itens do pedido</div>
+                      <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'flex-start' }}>
+                        <div style={{ flex: 2, position: 'relative' }}>
+                          <input
+                            type="text"
+                            placeholder="Buscar produto..."
+                            autoComplete="off"
+                            value={dlvProductSearch}
+                            onChange={(e) => {
+                              setDlvProductSearch(e.target.value);
+                              setDlvSelectedProduct('');
+                              setDlvProductDropdownOpen(true);
+                            }}
+                            onFocus={() => setDlvProductDropdownOpen(true)}
+                            onBlur={() => setTimeout(() => setDlvProductDropdownOpen(false), 150)}
+                            style={{ width: '100%', borderColor: dlvSelectedProduct ? '#16a34a' : undefined }}
+                          />
+                          {dlvProductDropdownOpen && dlvProductSearch.trim().length > 0 && (() => {
+                            const filtered = products.filter((p) => p.available && p.name.toLowerCase().includes(dlvProductSearch.toLowerCase()));
+                            if (filtered.length === 0) return null;
+                            return (
+                              <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #dbe3de', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', zIndex: 100, maxHeight: 200, overflowY: 'auto', marginTop: 4 }}>
+                                {filtered.map((p) => (
+                                  <div
+                                    key={p.id}
+                                    onMouseDown={() => {
+                                      setDlvSelectedProduct(p.id);
+                                      setDlvProductSearch(p.name);
+                                      setDlvProductDropdownOpen(false);
+                                    }}
+                                    style={{ padding: '10px 14px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', fontSize: 13, borderBottom: '1px solid #f0f2f0' }}
+                                    onMouseEnter={(e) => (e.currentTarget.style.background = '#f8faf8')}
+                                    onMouseLeave={(e) => (e.currentTarget.style.background = '')}
+                                  >
+                                    <span>{p.name}</span>
+                                    <span style={{ color: '#7a8a7a', fontWeight: 600 }}>{formatCurrency(p.price)}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            );
+                          })()}
+                        </div>
+                        <input value={dlvProductQty} onChange={(e) => setDlvProductQty(e.target.value)} inputMode="numeric" placeholder="Qtd" style={{ width: 60 }} />
+                        <button type="button" className="primary-button" style={{ padding: '0 12px' }} onClick={addDeliveryItem}>
+                          <Plus size={16} />
+                        </button>
+                      </div>
+                      <input value={dlvProductNote} onChange={(e) => setDlvProductNote(e.target.value)} placeholder="Observação do item (opcional)" style={{ marginBottom: 10 }} autoComplete="off" />
+
+                      {dlvItems.length === 0 && <p style={{ fontSize: 13, color: '#789088', textAlign: 'center', padding: 12 }}>Nenhum item adicionado.</p>}
+                      {dlvItems.map((item, idx) => (
+                        <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', background: '#f9fbf9', borderRadius: 8, marginBottom: 6 }}>
+                          <span style={{ flex: 1, fontSize: 13 }}><strong>{item.quantity}×</strong> {item.productName}</span>
+                          <span style={{ fontSize: 13, fontWeight: 600 }}>{formatCurrency(item.quantity * item.unitPrice)}</span>
+                          <button type="button" onClick={() => removeDeliveryItem(idx)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#b91c1c' }}><Trash2 size={14} /></button>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Totais */}
+                    {dlvItems.length > 0 && (
+                      <div style={{ background: '#16211d', color: '#f4f7f2', borderRadius: 10, padding: '12px 16px', marginTop: 8 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4, color: '#9aada6' }}>
+                          <span>Subtotal</span><span>{formatCurrency(dlvItems.reduce((s, i) => s + i.quantity * i.unitPrice, 0))}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6, color: '#9aada6' }}>
+                          <span>Taxa de entrega</span><span>{formatCurrency(Number(dlvDeliveryFee.replace(',', '.')) || 0)}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 16 }}>
+                          <span>Total</span><span>{formatCurrency(dlvTotal)}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    <button className="primary-button" type="button" style={{ marginTop: 12 }} onClick={() => void submitDeliveryOrder()}>
+                      <Bike size={16} style={{ marginRight: 8 }} /> Confirmar pedido
+                    </button>
+                  </div>
+                )}
+
+                {dlvTab === 'ativos' && (
+                  <div className="panel" style={{ borderRadius: '0 0 12px 12px' }}>
+                    <div className="panel-header">
+                      <div><span className="eyebrow">Em andamento</span><h2>Pedidos ativos</h2></div>
+                      <button className="secondary-button" type="button" onClick={() => void loadDeliveryOrders()} style={{ fontSize: 12 }}>Atualizar</button>
+                    </div>
+                    {loadingDelivery && <p style={{ textAlign: 'center', color: '#789088', padding: 20 }}>Carregando...</p>}
+                    {!loadingDelivery && deliveryOrders.length === 0 && (
+                      <p style={{ textAlign: 'center', color: '#789088', padding: 20 }}>Nenhum pedido ativo no momento.</p>
+                    )}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      {deliveryOrders.map((order) => {
+                        const cfg = statusConfig[order.status] ?? statusConfig.RECEBIDO;
+                        return (
+                          <div key={order.id} style={{ border: '1.5px solid #e5e7eb', borderRadius: 12, padding: 16, background: '#fafbfa' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+                              <div>
+                                <div style={{ fontWeight: 700, fontSize: 15 }}>{order.customerName}</div>
+                                {order.customerPhone && <div style={{ fontSize: 12, color: '#789088', marginTop: 2 }}><Phone size={11} style={{ marginRight: 4, verticalAlign: 'middle' }} />{order.customerPhone}</div>}
+                                <div style={{ fontSize: 12, color: '#789088', marginTop: 2 }}><MapPin size={11} style={{ marginRight: 4, verticalAlign: 'middle' }} />{order.customerAddress}</div>
+                              </div>
+                              <span style={{ background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.color}30`, borderRadius: 6, padding: '3px 10px', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>
+                                {cfg.label}
+                              </span>
+                            </div>
+                            <div style={{ fontSize: 13, color: '#4b5563', marginBottom: 10 }}>
+                              {order.items.map((item, i) => (
+                                <span key={i}>{item.quantity}× {item.productName}{i < order.items.length - 1 ? ', ' : ''}</span>
+                              ))}
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span style={{ fontWeight: 700, fontSize: 16 }}>{formatCurrency(order.total)}</span>
+                              <div style={{ display: 'flex', gap: 8 }}>
+                                <button type="button" className="secondary-button" style={{ fontSize: 12, padding: '6px 10px' }} onClick={(e) => { e.stopPropagation(); printDeliveryReceipt(order); }}>
+                                  🖨 Recibo
+                                </button>
+                                {cfg.next && (
+                                  <button type="button" className="primary-button" style={{ fontSize: 12, padding: '6px 12px' }} onClick={() => void advanceDeliveryStatus(order)}>
+                                    {cfg.next}
+                                  </button>
+                                )}
+                                {order.status !== 'ENTREGUE' && order.status !== 'CANCELADO' && (
+                                  <button type="button" className="secondary-button" style={{ fontSize: 12, padding: '6px 10px', color: '#b91c1c', borderColor: '#fca5a5' }} onClick={() => cancelDeliveryOrder(order)}>
+                                    Cancelar
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                            {order.notes && <div style={{ marginTop: 8, fontSize: 12, color: '#789088', background: '#f9fbf9', borderRadius: 6, padding: '6px 10px' }}>📝 {order.notes}</div>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Painel direito: resumo do dia */}
+              <div className="panel" style={{ alignSelf: 'flex-start' }}>
+                <div className="panel-header">
+                  <div><span className="eyebrow">Resumo</span><h2>Delivery de hoje</h2></div>
+                  <Package size={22} />
+                </div>
+                {(() => {
+                  const today = new Date().toDateString();
+                  const entregues = deliveryOrdersAll.filter((o) => o.status === 'ENTREGUE' && new Date(o.createdAt).toDateString() === today).length;
+                  const emAndamento = deliveryOrders.filter((o) => !['ENTREGUE', 'CANCELADO'].includes(o.status)).length;
+                  const totalReceita = deliveryOrdersAll.filter((o) => o.status === 'ENTREGUE' && new Date(o.createdAt).toDateString() === today).reduce((s, o) => s + o.total, 0);
+                  return (
+                    <div style={{ display: 'grid', gap: 12 }}>
+                      {[
+                        { label: 'Em andamento', value: emAndamento, color: '#1e40af' },
+                        { label: 'Entregues', value: entregues, color: '#15803d' },
+                        { label: 'Receita delivery', value: formatCurrency(totalReceita), color: '#16211d', large: true },
+                      ].map((s) => (
+                        <div key={s.label} style={{ padding: 14, background: '#f9fbf9', borderRadius: 10, border: '1px solid #eef2ef' }}>
+                          <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#789088', marginBottom: 4 }}>{s.label}</div>
+                          <div style={{ fontSize: s.large ? 22 : 28, fontWeight: 800, color: s.color }}>{s.value}</div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </div>
+
+            </section>
+          );
+        })()}
+
         {activeModule === 'caixa' && (
           <section className="module-grid two-columns">
             <div className="panel metric-panel">
@@ -4221,80 +4920,142 @@ export function App() {
               </div>
             </div>
             <div className="panel">
-              <div className="panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16 }}>
+              <div className="panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
                 <div>
                   <span className="eyebrow">Relatório</span>
                   <h2>Resumo {reportSummary?.periodLabel ?? 'diário'}</h2>
                 </div>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
-                  <span style={{ fontSize: 13, color: '#6b7280' }}>Período</span>
-                  <select value={reportPeriod} onChange={(event) => setReportPeriod(event.target.value as ReportPeriod)}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 10 }}>
+                  {/* Toggle de período */}
+                  <div style={{ display: 'flex', background: '#f0f2f0', borderRadius: 10, padding: 3, gap: 2 }}>
                     {reportPeriods.map((option) => (
-                      <option key={option.value} value={option.value}>
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setReportPeriod(option.value)}
+                        style={{
+                          border: 'none', borderRadius: 8, padding: '6px 14px', fontSize: 13,
+                          fontWeight: reportPeriod === option.value ? 700 : 500, cursor: 'pointer',
+                          background: reportPeriod === option.value ? '#18201d' : 'transparent',
+                          color: reportPeriod === option.value ? '#f1c44e' : '#6b7a6b',
+                          transition: 'background 0.15s, color 0.15s', minHeight: 'unset',
+                        }}
+                      >
                         {option.label}
-                      </option>
+                      </button>
                     ))}
-                  </select>
-                </label>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    style={{ height: 34 }}
-                    onClick={() => void previewReportPdf()}
-                  >
-                    Visualizar PDF
-                  </button>
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    style={{ height: 34 }}
-                    onClick={() => void exportReportPdf()}
-                  >
-                    Exportar PDF
-                  </button>
+                  </div>
+                  {/* Seletor de data conforme período */}
+                  {reportPeriod === 'daily' && (
+                    <input
+                      type="date"
+                      value={reportRefDate}
+                      max={new Date().toISOString().slice(0, 10)}
+                      onChange={(e) => setReportRefDate(e.target.value)}
+                      style={{ fontSize: 13, padding: '5px 10px', borderRadius: 8, border: '1px solid #dbe3de', height: 34 }}
+                    />
+                  )}
+                  {reportPeriod === 'weekly' && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#6b7a6b' }}>
+                      <span>Semana de</span>
+                      <input
+                        type="date"
+                        value={reportRefDate}
+                        max={new Date().toISOString().slice(0, 10)}
+                        onChange={(e) => setReportRefDate(e.target.value)}
+                        style={{ fontSize: 13, padding: '5px 10px', borderRadius: 8, border: '1px solid #dbe3de', height: 34 }}
+                      />
+                    </div>
+                  )}
+                  {reportPeriod === 'monthly' && (
+                    <input
+                      type="month"
+                      value={reportRefDate.slice(0, 7)}
+                      max={new Date().toISOString().slice(0, 7)}
+                      onChange={(e) => setReportRefDate(`${e.target.value}-01`)}
+                      style={{ fontSize: 13, padding: '5px 10px', borderRadius: 8, border: '1px solid #dbe3de', height: 34 }}
+                    />
+                  )}
+                  {reportPeriod === 'yearly' && (
+                    <select
+                      value={reportRefDate.slice(0, 4)}
+                      onChange={(e) => setReportRefDate(`${e.target.value}-01-01`)}
+                      style={{ fontSize: 13, padding: '5px 10px', borderRadius: 8, border: '1px solid #dbe3de', height: 34 }}
+                    >
+                      {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map((y) => (
+                        <option key={y} value={y}>{y}</option>
+                      ))}
+                    </select>
+                  )}
+                  {/* Botões de exportação */}
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      style={{ height: 34, display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}
+                      onClick={() => void previewReportPdf()}
+                    >
+                      <ReceiptText size={15} />
+                      Visualizar
+                    </button>
+                    <button
+                      type="button"
+                      className="primary-button"
+                      style={{ height: 34, display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}
+                      onClick={() => void exportReportPdf()}
+                    >
+                      Exportar PDF
+                    </button>
+                  </div>
                 </div>
-                <ReceiptText size={22} />
               </div>
               {reportSummary ? (
-                <div style={{ display: 'grid', gap: 12 }}>
-                  <div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                      <div>
-                        <strong>Pedidos</strong>
-                        <p>{reportSummary.totalOrders}</p>
-                      </div>
-                      <div>
-                        <strong>Itens vendidos</strong>
-                        <p>{reportSummary.totalItems}</p>
-                      </div>
+                <div style={{ display: 'grid', gap: 16, marginTop: 4 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+                    <div style={{ background: '#f8faf8', border: '1px solid #dbe3de', borderRadius: 10, padding: '14px 16px' }}>
+                      <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.8px', textTransform: 'uppercase', color: '#7a8a7a', display: 'block', marginBottom: 6 }}>Pedidos</span>
+                      <strong style={{ fontSize: 22, color: '#18201d' }}>{reportSummary.totalOrders}</strong>
+                    </div>
+                    <div style={{ background: '#f8faf8', border: '1px solid #dbe3de', borderRadius: 10, padding: '14px 16px' }}>
+                      <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.8px', textTransform: 'uppercase', color: '#7a8a7a', display: 'block', marginBottom: 6 }}>Itens</span>
+                      <strong style={{ fontSize: 22, color: '#18201d' }}>{reportSummary.totalItems}</strong>
+                    </div>
+                    <div style={{ background: '#18201d', border: '1px solid #18201d', borderRadius: 10, padding: '14px 16px' }}>
+                      <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.8px', textTransform: 'uppercase', color: '#9ab09f', display: 'block', marginBottom: 6 }}>Faturamento</span>
+                      <strong style={{ fontSize: 18, color: '#f1c44e' }}>{formatCurrency(reportSummary.totalValue)}</strong>
                     </div>
                   </div>
                   <div>
-                    <strong>Faturamento</strong>
-                    <p>{formatCurrency(reportSummary.totalValue)}</p>
-                  </div>
-                  <div style={{ maxHeight: '260px', overflowY: 'auto' }}>
-                    <strong>Por mesa</strong>
-                    <div style={{ display: 'grid', gap: 8, marginTop: 8 }}>
-                      {reportSummary.tables.map((table) => (
-                        <div key={table.tableId} style={{ padding: 10, border: '1px solid #e5e7eb', borderRadius: 8 }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                            <span>{table.tableName}</span>
-                            <strong>{formatCurrency(table.totalValue)}</strong>
+                    <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: '#7a8a7a', display: 'block', marginBottom: 10 }}>Por origem</span>
+                    <div style={{ maxHeight: '220px', overflowY: 'auto', display: 'grid', gap: 6 }}>
+                      {[...reportSummary.tables].filter((t) => t.tableId !== '__delivery__').sort((a, b) => b.totalValue - a.totalValue).map((table) => (
+                        <div key={table.tableId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: '#f8faf8', border: '1px solid #dbe3de', borderRadius: 8 }}>
+                          <div>
+                            <span style={{ fontWeight: 600, fontSize: 13 }}>{table.tableName}</span>
+                            <span style={{ color: '#7a8a7a', fontSize: 12, marginLeft: 8 }}>{table.totalItems} itens</span>
                           </div>
-                          <div style={{ marginTop: 6, color: '#6b7280', fontSize: 13 }}>
-                            {table.totalItems} itens
-                          </div>
+                          <strong style={{ fontSize: 14, color: '#18201d' }}>{formatCurrency(table.totalValue)}</strong>
                         </div>
                       ))}
+                      {reportSummary.tables.find((t) => t.tableId === '__delivery__') && (() => {
+                        const d = reportSummary.tables.find((t) => t.tableId === '__delivery__')!;
+                        return (
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8 }}>
+                            <div>
+                              <span style={{ fontWeight: 600, fontSize: 13 }}>🚲 Delivery</span>
+                              <span style={{ color: '#7a8a7a', fontSize: 12, marginLeft: 8 }}>{d.totalItems} pedidos</span>
+                            </div>
+                            <strong style={{ fontSize: 14, color: '#92400e' }}>{formatCurrency(d.totalValue)}</strong>
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
                 </div>
               ) : hasReportAccess ? (
-                <p>Carregando relatório...</p>
+                <p style={{ color: '#7a8a7a', marginTop: 8 }}>Carregando relatório...</p>
               ) : (
-                <p>Seu perfil não tem acesso ao relatório financeiro.</p>
+                <p style={{ color: '#7a8a7a', marginTop: 8 }}>Seu perfil não tem acesso ao relatório financeiro.</p>
               )}
             </div>
 
@@ -4302,15 +5063,39 @@ export function App() {
               <div className="panel-header">
                 <div>
                   <span className="eyebrow">Histórico</span>
-                  <h2>Recibos do dia</h2>
+                  <h2>Recibos</h2>
                 </div>
               </div>
 
               <div style={{ display: 'grid', gap: 12 }}>
+                {/* Seletor de data */}
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <input
+                    type="date"
+                    value={receiptsDate}
+                    max={new Date().toISOString().slice(0, 10)}
+                    onChange={(e) => {
+                      setReceiptsDate(e.target.value);
+                      setDailyReceipts([]);
+                      setSelectedReceipt(null);
+                    }}
+                    style={{ flex: 1, fontSize: 13, padding: '6px 10px', borderRadius: 8, border: '1px solid #dbe3de' }}
+                  />
+                  <button
+                    className="primary-button"
+                    type="button"
+                    onClick={() => void loadDailyReceipts()}
+                    disabled={loadingReceipts}
+                    style={{ whiteSpace: 'nowrap' }}
+                  >
+                    Carregar
+                  </button>
+                </div>
+                {/* Busca por número */}
                 <div style={{ display: 'flex', gap: 8 }}>
                   <input
                     type="text"
-                    placeholder="Nº do recibo"
+                    placeholder="Nº do recibo (mesa)"
                     value={searchReceiptNumber}
                     onChange={(e) => setSearchReceiptNumber(e.target.value)}
                     inputMode="numeric"
@@ -4323,14 +5108,6 @@ export function App() {
                   >
                     Buscar
                   </button>
-                  <button
-                    className="primary-button"
-                    type="button"
-                    onClick={() => void loadDailyReceipts()}
-                    disabled={loadingReceipts}
-                  >
-                    Carregar dia
-                  </button>
                 </div>
 
                 {selectedReceipt && (
@@ -4338,7 +5115,7 @@ export function App() {
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
                       <div>
                         <strong>Recibo Nº</strong>
-                        <p style={{ margin: 0 }}>{String(selectedReceipt.receiptNumber).padStart(6, '0')}</p>
+                        <p style={{ margin: 0 }}>{selectedReceipt.receiptNumber ? String(selectedReceipt.receiptNumber).padStart(6, '0') : '—'}</p>
                       </div>
                       <div>
                         <strong>Mesa</strong>
@@ -4395,14 +5172,20 @@ export function App() {
                             type="button"
                             className="secondary-button"
                             onClick={() => setSelectedReceipt(receipt)}
-                            style={{ textAlign: 'left', padding: '8px 12px' }}
+                            style={{ textAlign: 'left', padding: '8px 12px', background: receipt.type === 'delivery' ? '#fffbeb' : undefined, borderColor: receipt.type === 'delivery' ? '#fde68a' : undefined }}
                           >
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                               <span>
-                                <strong>Nº {String(receipt.receiptNumber).padStart(6, '0')}</strong> - {receipt.tableName}
+                                {receipt.type === 'delivery'
+                                  ? <><strong>🚲 {receipt.receiptNumber ? `Nº ${String(receipt.receiptNumber).padStart(6, '0')} – ` : ''}{receipt.tableName}</strong></>
+                                  : <><strong>Nº {String(receipt.receiptNumber).padStart(6, '0')}</strong> - {receipt.tableName}</>
+                                }
                               </span>
                               <span style={{ fontWeight: 700 }}>{formatCurrency(receipt.total)}</span>
                             </div>
+                            {receipt.type === 'delivery' && receipt.status && (
+                              <div style={{ fontSize: 11, color: '#92400e', marginTop: 2 }}>{receipt.status} · {receipt.paymentMethod}</div>
+                            )}
                           </button>
                         ))}
                       </div>
@@ -4448,6 +5231,41 @@ export function App() {
                 Chave PIX <span style={{ fontSize: 11, color: '#789088', fontWeight: 400 }}>(email, CPF, CNPJ, telefone com +55 ou chave aleatória)</span>
                 <input value={storePixKey} onChange={(e) => setStorePixKey(e.target.value)} placeholder="Ex: +5511999999999 ou email@exemplo.com" autoComplete="off" />
               </label>
+              {/* Impressoras — só aparece no Electron */}
+              {(window as any).sistema?.listPrinters && (
+                <>
+                  <div style={{ borderTop: '1px solid #eef2ef', paddingTop: 14, marginTop: 4 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#789088', marginBottom: 10 }}>
+                      Impressoras térmicas
+                    </div>
+                    <label>
+                      Impressora do Caixa
+                      <select value={printerCashier} onChange={(e) => setPrinterCashier(e.target.value)}>
+                        <option value="">— Selecione —</option>
+                        {availablePrinters.map((p) => (
+                          <option key={p.name} value={p.name}>{p.name}{p.isDefault ? ' (padrão)' : ''}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label style={{ marginTop: 10 }}>
+                      Impressora da Cozinha <span style={{ fontSize: 11, color: '#789088', fontWeight: 400 }}>(imprime automaticamente ao criar delivery)</span>
+                      <select value={printerKitchen} onChange={(e) => setPrinterKitchen(e.target.value)}>
+                        <option value="">— Selecione —</option>
+                        {availablePrinters.map((p) => (
+                          <option key={p.name} value={p.name}>{p.name}{p.isDefault ? ' (padrão)' : ''}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <button type="button" className="secondary-button" style={{ marginTop: 8, fontSize: 12 }}
+                      onClick={() => {
+                        const sistema = (window as any).sistema;
+                        if (sistema?.listPrinters) sistema.listPrinters().then((list: any[]) => setAvailablePrinters(list));
+                      }}>
+                      🔄 Atualizar lista de impressoras
+                    </button>
+                  </div>
+                </>
+              )}
               <button className="primary-button" type="button" onClick={saveStoreSettings}>Salvar configurações</button>
             </div>
             <div className="panel">

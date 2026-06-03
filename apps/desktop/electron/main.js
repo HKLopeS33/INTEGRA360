@@ -105,6 +105,37 @@ ipcMain.handle('preview-report-pdf', async (event, html) => {
   return { canceled: false, filePath: tempPath };
 });
 
+// Lista impressoras disponíveis no sistema
+ipcMain.handle('list-printers', async (event) => {
+  try {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const printers = await win.webContents.getPrintersAsync();
+    return printers.map((p) => ({ name: p.name, isDefault: p.isDefault, status: p.status }));
+  } catch (e) {
+    return [];
+  }
+});
+
+// Imprime HTML silenciosamente em uma impressora específica
+ipcMain.handle('print-silent', async (event, html, printerName) => {
+  return new Promise((resolve) => {
+    const printWindow = new BrowserWindow({
+      show: false,
+      webPreferences: { offscreen: true }
+    });
+    printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+    printWindow.webContents.once('did-finish-load', () => {
+      printWindow.webContents.print(
+        { silent: true, deviceName: printerName, printBackground: true, margins: { marginType: 'none' } },
+        (success, reason) => {
+          printWindow.close();
+          resolve({ success, reason: reason ?? '' });
+        }
+      );
+    });
+  });
+});
+
 // IPC handlers para controle manual do updater pelo renderer
 ipcMain.handle('updater-check', () => {
   if (!app.isPackaged) return { status: 'dev' };
