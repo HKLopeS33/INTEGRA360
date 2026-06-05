@@ -50,6 +50,8 @@ export interface CompanyRow {
   state: string | null;
   country: string | null;
   pixKey: string | null;
+  kitchenPrinter: string | null;
+  cashierPrinter: string | null;
   active: boolean;
   subscription?: {
     id: string;
@@ -120,7 +122,7 @@ export async function getUserRowById(userId: string): Promise<UserRow | null> {
 export async function getCompanyById(companyId: string): Promise<CompanyRow | null> {
   const { data, error } = await supabase
     .from<CompanyRow>(COMPANIES_TABLE)
-    .select('id,name,email,cnpj,phone,address,city,state,country,pixKey,active,subscription:Subscription(id,status,monthlyFee,expiresAt,lastRenewed,lastLoginAt)')
+    .select('id,name,email,cnpj,phone,address,city,state,country,pixKey,kitchenPrinter,cashierPrinter,active,subscription:Subscription(id,status,monthlyFee,expiresAt,lastRenewed,lastLoginAt)')
     .eq('id', companyId)
     .maybeSingle();
 

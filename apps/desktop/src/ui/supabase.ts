@@ -16,6 +16,16 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   }
 });
 
+// Client sem sessão — usado para requisições públicas (cardápio de delivery)
+// Evita que JWT expirado do admin seja enviado junto com pedidos de clientes anônimos
+export const supabaseAnon = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: false,
+    autoRefreshToken: false,
+    storageKey: 'supabase-anon-public'
+  }
+});
+
 // Cliente com service role key — usado apenas para criar usuários via admin API
 // (necessário para aceitar emails com domínios internos como .local)
 // storageKey diferente evita conflito de GoTrueClient no mesmo contexto

@@ -5,7 +5,7 @@ import { generateKitchenTicketHTML } from './receipt';
 
 type ToastType = 'success' | 'error' | 'warning' | 'info';
 interface ToastItem { id: number; message: string; type: ToastType; removing?: boolean; }
-import { api } from './api.js';
+import { api, publicDeliveryApi } from './api.js';
 import { supabase } from './supabase.ts';
 import type { Order, Product, RestaurantTable } from './types.js';
 import { printReceipt } from './receipt';
@@ -238,6 +238,8 @@ export function App() {
   const [newProductCategoryId, setNewProductCategoryId] = useState('');
   const [categories, setCategories] = useState<Array<{ id: string; name: string }>>([]);
   const [editingProduct, setEditingProduct] = useState<any | null>(null);
+  const [newProductImageFile, setNewProductImageFile] = useState<File | null>(null);
+  const [newProductImagePreview, setNewProductImagePreview] = useState<string | null>(null);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [printerKitchen, setPrinterKitchen] = useState('');
   const [printerCashier, setPrinterCashier] = useState('');
@@ -262,6 +264,23 @@ export function App() {
   const [dlvProductNote, setDlvProductNote] = useState('');
   const [dlvTab, setDlvTab] = useState<'novo' | 'ativos'>('novo');
   const [menuTableId, setMenuTableId] = useState<string | null>(null);
+  // Delivery público (link para cliente)
+  const [publicDeliveryCompanyId, setPublicDeliveryCompanyId] = useState<string | null>(null);
+  const [publicDeliveryCompany, setPublicDeliveryCompany] = useState<{ id: string; name: string; menuBannerUrl?: string | null } | null>(null);
+  const [publicDeliveryCategories, setPublicDeliveryCategories] = useState<Array<{ id: string; name: string; sort: number; imageUrl?: string | null }>>([]);
+  const [publicDeliveryProducts, setPublicDeliveryProducts] = useState<Array<{ id: string; categoryId: string; name: string; description: string | null; price: number; available: boolean }>>([]);
+  const [publicDeliveryCart, setPublicDeliveryCart] = useState<Array<{ product: { id: string; name: string; price: number }; quantity: number; note: string }>>([]);
+  const [publicDeliveryStep, setPublicDeliveryStep] = useState<'menu' | 'checkout' | 'success'>('menu');
+  const [publicDeliveryName, setPublicDeliveryName] = useState('');
+  const [publicDeliveryPhone, setPublicDeliveryPhone] = useState('');
+  const [publicDeliveryAddress, setPublicDeliveryAddress] = useState('');
+  const [publicDeliveryPayment, setPublicDeliveryPayment] = useState('DINHEIRO');
+  const [publicDeliveryFee, setPublicDeliveryFee] = useState(0);
+  const [publicDeliveryNotes, setPublicDeliveryNotes] = useState('');
+  const [publicDeliverySubmitting, setPublicDeliverySubmitting] = useState(false);
+  const [publicDeliveryOrderId, setPublicDeliveryOrderId] = useState<string | null>(null);
+  const [publicDeliveryReceiptNumber, setPublicDeliveryReceiptNumber] = useState<number | null>(null);
+  const [publicDeliveryError, setPublicDeliveryError] = useState<string | null>(null);
   const [menuCart, setMenuCart] = useState<Array<{ product: Product; quantity: number; note: string }>>([]);
   const [menuModalTable, setMenuModalTable] = useState<RestaurantTable | null>(null);
   const [tableCart, setTableCart] = useState<Array<{ product: Product; quantity: number; note: string }>>([]);
@@ -292,6 +311,8 @@ export function App() {
   const [showInvoicesModal, setShowInvoicesModal] = useState(false);
   const [invoiceCompany, setInvoiceCompany] = useState<any | null>(null);
   const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
+  const [actionMenuPos, setActionMenuPos] = useState<{ top: number; right: number } | null>(null);
+  const closeActionMenu = () => { closeActionMenu(); setActionMenuPos(null); };
   const [confirmationRequest, setConfirmationRequest] = useState<{
     message: string;
     onConfirm: () => Promise<void> | void;
@@ -336,6 +357,7 @@ export function App() {
   const [newCompanyMonths, setNewCompanyMonths] = useState('1');
   const [newCompanyMonthlyFee, setNewCompanyMonthlyFee] = useState('0.00');
   const [newCompanyTableCount, setNewCompanyTableCount] = useState('10');
+  const [createFieldErrors, setCreateFieldErrors] = useState<Record<string, string>>({});
 
   // Super user reports state
   const [reportsTab, setReportsTab] = useState<'revenue' | 'products' | 'payments' | 'users' | 'audit' | 'health'>('revenue');
@@ -377,6 +399,18 @@ export function App() {
     if (tableId) {
       setMenuTableId(tableId);
       setActiveModule('menu');
+      return;
+    }
+    const deliveryId = params.get('delivery');
+    if (deliveryId) {
+      setPublicDeliveryCompanyId(deliveryId);
+      publicDeliveryApi.getMenu(deliveryId).then((data) => {
+        setPublicDeliveryCompany(data.company);
+        setPublicDeliveryCategories(data.categories);
+        setPublicDeliveryProducts(data.products);
+      }).catch(() => {
+        setPublicDeliveryError('Cardápio não encontrado ou loja inativa.');
+      });
     }
   }, []);
 
@@ -531,6 +565,50 @@ export function App() {
     }
   };
 
+  const setCreateFieldError = (field: string, msg: string) =>
+    setCreateFieldErrors(prev => ({ ...prev, [field]: msg }));
+  const clearCreateFieldError = (field: string) =>
+    setCreateFieldErrors(prev => { const n = { ...prev }; delete n[field]; return n; });
+
+  const checkFieldUnique = useCallback(async (field: 'cnpj' | 'companyEmail' | 'adminEmail' | 'companyName', value: string) => {
+    if (!value.trim()) { clearCreateFieldError(field); return; }
+    try {
+      if (field === 'cnpj') {
+        const { data } = await supabase.from('Company').select('id').eq('cnpj', value.trim()).maybeSingle();
+        data ? setCreateFieldError('cnpj', 'CNPJ já cadastrado.') : clearCreateFieldError('cnpj');
+      } else if (field === 'companyEmail') {
+        const { data } = await supabase.from('Company').select('id').eq('email', value.trim()).maybeSingle();
+        data ? setCreateFieldError('companyEmail', 'E-mail da empresa já cadastrado.') : clearCreateFieldError('companyEmail');
+      } else if (field === 'companyName') {
+        const { data } = await supabase.from('Company').select('id').ilike('name', value.trim()).maybeSingle();
+        data ? setCreateFieldError('companyName', 'Nome da empresa já cadastrado.') : clearCreateFieldError('companyName');
+      } else if (field === 'adminEmail') {
+        const { data } = await supabase.from('User').select('id').eq('email', value.trim()).maybeSingle();
+        data ? setCreateFieldError('adminEmail', 'E-mail do administrador já cadastrado.') : clearCreateFieldError('adminEmail');
+      }
+    } catch { /* silencioso */ }
+  }, []);
+
+  useEffect(() => {
+    const t = setTimeout(() => { void checkFieldUnique('companyName', newCompanyName); }, 500);
+    return () => clearTimeout(t);
+  }, [newCompanyName, checkFieldUnique]);
+
+  useEffect(() => {
+    const t = setTimeout(() => { void checkFieldUnique('cnpj', newCompanyCnpj); }, 500);
+    return () => clearTimeout(t);
+  }, [newCompanyCnpj, checkFieldUnique]);
+
+  useEffect(() => {
+    const t = setTimeout(() => { void checkFieldUnique('companyEmail', newCompanyEmail); }, 500);
+    return () => clearTimeout(t);
+  }, [newCompanyEmail, checkFieldUnique]);
+
+  useEffect(() => {
+    const t = setTimeout(() => { void checkFieldUnique('adminEmail', newAdminEmail); }, 500);
+    return () => clearTimeout(t);
+  }, [newAdminEmail, checkFieldUnique]);
+
   const submitCreateCompany = async () => {
     if (!newCompanyName.trim() || !newAdminEmail.trim() || !newAdminPassword.trim()) {
       return showToast('Preencha o nome da empresa e credenciais do administrador.', 'warning');
@@ -562,6 +640,7 @@ export function App() {
       setNewCompanyMonths('1');
       setNewCompanyMonthlyFee('0.00');
       setNewCompanyTableCount('10');
+      setCreateFieldErrors({});
 
       await loadCompanies();
       showToast('Empresa criada com sucesso!', 'success');
@@ -580,6 +659,19 @@ export function App() {
       } catch (e) {
         console.error(e);
         showToast('Falha ao suspender empresa.', 'error');
+      }
+    });
+  };
+
+  const handleDeleteCompany = async (id: string) => {
+    confirmAction('Excluir PERMANENTEMENTE essa empresa e todos os seus dados? Esta ação não pode ser desfeita.', async () => {
+      try {
+        await api.deleteCompany(id);
+        await loadCompanies();
+        showToast('Empresa excluída permanentemente.', 'success');
+      } catch (e) {
+        console.error(e);
+        showToast('Falha ao excluir empresa.', 'error');
       }
     });
   };
@@ -1035,6 +1127,60 @@ export function App() {
       // eslint-disable-next-line no-console
       console.error('Erro ao enviar pedido', error);
       showToast('Falha ao enviar o pedido.', 'error');
+    }
+  };
+
+  // ── Delivery público ──────────────────────────────────────────────────────
+
+  const getPublicDeliveryLink = () => {
+    const base = window.location.protocol === 'file:' ? 'http://127.0.0.1:5173' : window.location.origin;
+    return `${base}${window.location.pathname}?delivery=${currentUser?.companyId ?? ''}`;
+  };
+
+  const addToPublicCart = (product: { id: string; name: string; price: number }) => {
+    setPublicDeliveryCart((prev) => {
+      const existing = prev.find((i) => i.product.id === product.id);
+      if (existing) return prev.map((i) => i.product.id === product.id ? { ...i, quantity: i.quantity + 1 } : i);
+      return [...prev, { product, quantity: 1, note: '' }];
+    });
+  };
+
+  const updatePublicCartItem = (productId: string, updates: Partial<{ quantity: number; note: string }>) => {
+    setPublicDeliveryCart((prev) =>
+      prev.map((i) => i.product.id === productId ? { ...i, ...updates } : i).filter((i) => i.quantity > 0)
+    );
+  };
+
+  const submitPublicDeliveryOrder = async () => {
+    if (!publicDeliveryCompanyId) return;
+    if (publicDeliveryCart.length === 0) { setPublicDeliveryError('Adicione itens ao carrinho.'); return; }
+    if (!publicDeliveryName.trim()) { setPublicDeliveryError('Informe seu nome.'); return; }
+    if (!publicDeliveryAddress.trim()) { setPublicDeliveryError('Informe o endereço de entrega.'); return; }
+    setPublicDeliveryError(null);
+    setPublicDeliverySubmitting(true);
+    try {
+      const result = await publicDeliveryApi.createOrder(publicDeliveryCompanyId, {
+        customerName: publicDeliveryName,
+        customerPhone: publicDeliveryPhone || undefined,
+        customerAddress: publicDeliveryAddress,
+        paymentMethod: publicDeliveryPayment,
+        deliveryFee: publicDeliveryFee,
+        notes: publicDeliveryNotes || undefined,
+        items: publicDeliveryCart.map((i) => ({
+          productId: i.product.id,
+          productName: i.product.name,
+          quantity: i.quantity,
+          unitPrice: i.product.price,
+          note: i.note || undefined,
+        })),
+      });
+      setPublicDeliveryOrderId(result.id);
+      setPublicDeliveryReceiptNumber(result.receiptNumber ?? null);
+      setPublicDeliveryStep('success');
+    } catch (e: any) {
+      setPublicDeliveryError(e?.message ?? 'Falha ao enviar pedido. Tente novamente.');
+    } finally {
+      setPublicDeliverySubmitting(false);
     }
   };
 
@@ -1598,7 +1744,7 @@ export function App() {
       // Check if click is outside the menu container
       const menuElement = document.querySelector(`[data-action-menu-id="${openActionMenuId}"]`);
       if (menuElement && !menuElement.contains(target)) {
-        setOpenActionMenuId(null);
+        closeActionMenu();
       }
     };
     
@@ -2033,6 +2179,8 @@ export function App() {
     setNewProductPrice(String(product.price));
     setNewProductPreparationMinutes(String(product.preparationMinutes ?? 10));
     setNewProductCategoryId(product.categoryId ?? '');
+    setNewProductImageFile(null);
+    setNewProductImagePreview(product.imageUrl ?? null);
   };
 
   const cancelEdit = () => {
@@ -2042,6 +2190,8 @@ export function App() {
     setNewProductPrice('');
     setNewProductPreparationMinutes('10');
     setNewProductCategoryId(categories[0]?.id ?? '');
+    setNewProductImageFile(null);
+    setNewProductImagePreview(null);
   };
 
   const createProduct = async (event: FormEvent<HTMLFormElement>) => {
@@ -2053,22 +2203,31 @@ export function App() {
     }
     try {
       if (editingProduct) {
+        let imageUrl: string | null | undefined = undefined;
+        if (newProductImageFile) {
+          imageUrl = await api.uploadProductImage(newProductImageFile, editingProduct.id);
+        }
         await api.updateProduct(editingProduct.id, {
           name: newProductName,
           description: newProductDescription,
           price: normalizedPrice,
           preparationMinutes: Number(newProductPreparationMinutes || 0),
-          categoryId: newProductCategoryId || undefined
+          categoryId: newProductCategoryId || undefined,
+          ...(imageUrl !== undefined && { imageUrl }),
         });
         showToast('Produto atualizado!', 'success');
       } else {
-        await api.createProduct({
+        const created = await api.createProduct({
           name: newProductName,
           description: newProductDescription,
           price: normalizedPrice,
           preparationMinutes: Number(newProductPreparationMinutes || 0),
-          categoryId: newProductCategoryId || undefined
+          categoryId: newProductCategoryId || undefined,
         });
+        if (newProductImageFile) {
+          const imageUrl = await api.uploadProductImage(newProductImageFile, created.id);
+          await api.updateProduct(created.id, { imageUrl });
+        }
         showToast('Produto criado!', 'success');
       }
       cancelEdit();
@@ -2081,6 +2240,167 @@ export function App() {
   // Splash screen
   if (showSplash) {
     return <SplashScreen onDone={() => setShowSplash(false)} />;
+  }
+
+  // Página pública de delivery — deve ficar ANTES do login
+  if (publicDeliveryCompanyId) {
+    const cartTotal = publicDeliveryCart.reduce((s, i) => s + i.quantity * i.product.price, 0);
+    const grandTotal = cartTotal + publicDeliveryFee;
+    const cartCount = publicDeliveryCart.reduce((s, i) => s + i.quantity, 0);
+    const paymentLabels: Record<string, string> = {
+      DINHEIRO: 'Dinheiro', PIX: 'PIX', CREDITO: 'Cartão de crédito', DEBITO: 'Cartão de débito',
+    };
+    return (
+      <main style={{ minHeight: '100vh', background: '#f3f4f6', fontFamily: 'system-ui, sans-serif' }}>
+        <div style={{ background: '#18201d', color: '#fff', padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 12, position: 'sticky', top: 0, zIndex: 100 }}>
+          <div style={{ width: 40, height: 40, background: '#f1c44e', borderRadius: 10, display: 'grid', placeItems: 'center', fontWeight: 800, fontSize: 18, color: '#18201d' }}>
+            {publicDeliveryCompany?.name?.[0]?.toUpperCase() ?? '?'}
+          </div>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 16 }}>{publicDeliveryCompany?.name ?? 'Carregando...'}</div>
+            <div style={{ fontSize: 12, color: '#9ca3af' }}>Cardápio digital · Delivery</div>
+          </div>
+          {cartCount > 0 && publicDeliveryStep === 'menu' && (
+            <button type="button" onClick={() => setPublicDeliveryStep('checkout')}
+              style={{ marginLeft: 'auto', background: '#f1c44e', color: '#18201d', border: 'none', borderRadius: 8, padding: '8px 16px', fontWeight: 700, cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
+              {cartCount} {cartCount === 1 ? 'item' : 'itens'} · {formatCurrency(cartTotal)}
+            </button>
+          )}
+          {publicDeliveryStep === 'checkout' && (
+            <button type="button" onClick={() => setPublicDeliveryStep('menu')}
+              style={{ marginLeft: 'auto', background: 'transparent', color: '#9ca3af', border: '1px solid #374151', borderRadius: 8, padding: '8px 14px', cursor: 'pointer', fontSize: 13 }}>
+              Voltar ao cardapio
+            </button>
+          )}
+        </div>
+        <div style={{ maxWidth: 640, margin: '0 auto', padding: '20px 16px' }}>
+          {publicDeliveryError && (
+            <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 10, padding: '12px 16px', color: '#b91c1c', marginBottom: 16, fontSize: 14 }}>
+              {publicDeliveryError}
+            </div>
+          )}
+          {publicDeliveryStep === 'success' && (
+            <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+              <div style={{ fontSize: 64 }}>Pedido recebido!</div>
+              <h2 style={{ margin: '16px 0 8px', fontSize: 22 }}>Pedido confirmado</h2>
+              <p style={{ color: '#6b7280', marginBottom: 24 }}>Seu pedido foi enviado para <strong>{publicDeliveryCompany?.name}</strong>. Aguarde a confirmacao da loja.</p>
+              <div style={{ background: '#fff', borderRadius: 12, padding: 20, border: '1px solid #e5e7eb', marginBottom: 24 }}>
+                <div style={{ fontSize: 12, color: '#9ca3af', marginBottom: 4 }}>Número do pedido</div>
+                {publicDeliveryReceiptNumber != null
+                  ? <div style={{ fontWeight: 800, fontSize: 36, color: '#18201d', letterSpacing: 2 }}>#{publicDeliveryReceiptNumber}</div>
+                  : <div style={{ fontWeight: 700, fontSize: 14, color: '#374151', wordBreak: 'break-all' }}>{publicDeliveryOrderId}</div>
+                }
+              </div>
+              <button type="button" onClick={() => { setPublicDeliveryStep('menu'); setPublicDeliveryCart([]); setPublicDeliveryName(''); setPublicDeliveryPhone(''); setPublicDeliveryAddress(''); setPublicDeliveryNotes(''); }}
+                style={{ background: '#18201d', color: '#fff', border: 'none', borderRadius: 10, padding: '12px 24px', cursor: 'pointer', fontWeight: 600, fontSize: 15 }}>
+                Fazer novo pedido
+              </button>
+            </div>
+          )}
+          {publicDeliveryStep === 'checkout' && (
+            <div style={{ display: 'grid', gap: 16 }}>
+              <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #e5e7eb', overflow: 'hidden' }}>
+                <div style={{ padding: '14px 16px', borderBottom: '1px solid #f3f4f6', fontWeight: 700, fontSize: 15 }}>Resumo do pedido</div>
+                {publicDeliveryCart.map((item) => (
+                  <div key={item.product.id} style={{ padding: '10px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f9fafb' }}>
+                    <div>
+                      <span style={{ fontWeight: 600, fontSize: 14 }}>{item.quantity}x {item.product.name}</span>
+                      {item.note && <div style={{ fontSize: 12, color: '#9ca3af' }}>{item.note}</div>}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span style={{ fontSize: 14 }}>{formatCurrency(item.quantity * item.product.price)}</span>
+                      <button type="button" onClick={() => updatePublicCartItem(item.product.id, { quantity: item.quantity - 1 })}
+                        style={{ width: 24, height: 24, borderRadius: '50%', border: '1px solid #e5e7eb', background: '#f9fafb', cursor: 'pointer', fontSize: 14, display: 'grid', placeItems: 'center' }}>-</button>
+                    </div>
+                  </div>
+                ))}
+                <div style={{ padding: '10px 16px', display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#6b7280' }}><span>Subtotal</span><span>{formatCurrency(cartTotal)}</span></div>
+                {publicDeliveryFee > 0 && <div style={{ padding: '4px 16px 10px', display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#6b7280' }}><span>Taxa de entrega</span><span>{formatCurrency(publicDeliveryFee)}</span></div>}
+                <div style={{ padding: '10px 16px 14px', display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 16, borderTop: '1px solid #f3f4f6' }}><span>Total</span><span>{formatCurrency(grandTotal)}</span></div>
+              </div>
+              <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #e5e7eb', padding: 16, display: 'grid', gap: 12 }}>
+                <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>Seus dados</div>
+                <label style={{ display: 'grid', gap: 4, fontSize: 14 }}>Nome *<input value={publicDeliveryName} onChange={(e) => setPublicDeliveryName(e.target.value)} placeholder="Seu nome completo" style={{ padding: '10px 12px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 14 }} /></label>
+                <label style={{ display: 'grid', gap: 4, fontSize: 14 }}>Telefone<input value={publicDeliveryPhone} onChange={(e) => setPublicDeliveryPhone(e.target.value)} placeholder="(00) 00000-0000" type="tel" style={{ padding: '10px 12px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 14 }} /></label>
+                <label style={{ display: 'grid', gap: 4, fontSize: 14 }}>Endereco de entrega *<input value={publicDeliveryAddress} onChange={(e) => setPublicDeliveryAddress(e.target.value)} placeholder="Rua, numero, bairro" style={{ padding: '10px 12px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 14 }} /></label>
+                <label style={{ display: 'grid', gap: 4, fontSize: 14 }}>Forma de pagamento
+                  <select value={publicDeliveryPayment} onChange={(e) => setPublicDeliveryPayment(e.target.value)} style={{ padding: '10px 12px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 14, background: '#fff' }}>
+                    {Object.entries(paymentLabels).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                  </select>
+                </label>
+                <label style={{ display: 'grid', gap: 4, fontSize: 14 }}>Observacoes<textarea value={publicDeliveryNotes} onChange={(e) => setPublicDeliveryNotes(e.target.value)} placeholder="Alguma observacao?" rows={2} style={{ padding: '10px 12px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 14, resize: 'vertical' }} /></label>
+              </div>
+              <button type="button" onClick={() => void submitPublicDeliveryOrder()} disabled={publicDeliverySubmitting}
+                style={{ background: publicDeliverySubmitting ? '#9ca3af' : '#18201d', color: '#fff', border: 'none', borderRadius: 12, padding: '14px 20px', cursor: publicDeliverySubmitting ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: 16 }}>
+                {publicDeliverySubmitting ? 'Enviando...' : `Confirmar pedido · ${formatCurrency(grandTotal)}`}
+              </button>
+            </div>
+          )}
+          {publicDeliveryStep === 'menu' && (
+            <div style={{ display: 'grid', gap: 20 }}>
+              {/* Banner do cardápio */}
+              {publicDeliveryCompany?.menuBannerUrl && (
+                <div style={{ borderRadius: 14, overflow: 'hidden', boxShadow: '0 2px 12px rgba(0,0,0,0.10)' }}>
+                  <img src={publicDeliveryCompany.menuBannerUrl} alt="Banner" style={{ width: '100%', maxHeight: 200, objectFit: 'cover', display: 'block' }} />
+                </div>
+              )}
+              {publicDeliveryCategories.length === 0 && publicDeliveryProducts.length === 0 && !publicDeliveryError && (
+                <div style={{ textAlign: 'center', padding: 40, color: '#9ca3af' }}>Carregando cardapio...</div>
+              )}
+              {publicDeliveryCategories.map((cat) => {
+                const catProducts = publicDeliveryProducts.filter((p) => p.categoryId === cat.id);
+                if (catProducts.length === 0) return null;
+                return (
+                  <div key={cat.id}>
+                    {/* Header da categoria com foto */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                      {cat.imageUrl && (
+                        <img src={cat.imageUrl} alt={cat.name} style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 8, flexShrink: 0 }} />
+                      )}
+                      <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{cat.name}</h3>
+                    </div>
+                    <div style={{ display: 'grid', gap: 10 }}>
+                      {catProducts.map((product) => {
+                        const cartItem = publicDeliveryCart.find((i) => i.product.id === product.id);
+                        return (
+                          <div key={product.id} style={{ background: '#fff', borderRadius: 12, border: '1px solid #e5e7eb', overflow: 'hidden', display: 'flex', alignItems: 'stretch', gap: 0 }}>
+                            <div style={{ flex: 1, padding: '12px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 2 }}>{product.name}</div>
+                                {product.description && <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 6 }}>{product.description}</div>}
+                                <div style={{ fontWeight: 700, color: '#18201d', fontSize: 15 }}>{formatCurrency(product.price)}</div>
+                              </div>
+                              {cartItem ? (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                                  <button type="button" onClick={() => updatePublicCartItem(product.id, { quantity: cartItem.quantity - 1 })} style={{ width: 32, height: 32, borderRadius: '50%', border: '1px solid #e5e7eb', background: '#f9fafb', cursor: 'pointer', fontSize: 18, display: 'grid', placeItems: 'center' }}>-</button>
+                                  <span style={{ fontWeight: 700, minWidth: 20, textAlign: 'center' }}>{cartItem.quantity}</span>
+                                  <button type="button" onClick={() => updatePublicCartItem(product.id, { quantity: cartItem.quantity + 1 })} style={{ width: 32, height: 32, borderRadius: '50%', border: 'none', background: '#18201d', color: '#fff', cursor: 'pointer', fontSize: 18, display: 'grid', placeItems: 'center' }}>+</button>
+                                </div>
+                              ) : (
+                                <button type="button" onClick={() => addToPublicCart(product)} style={{ background: '#18201d', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 14px', cursor: 'pointer', fontWeight: 600, fontSize: 14, whiteSpace: 'nowrap', flexShrink: 0 }}>+ Adicionar</button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+              {cartCount > 0 && (
+                <div style={{ position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 200, width: 'calc(100% - 32px)', maxWidth: 608 }}>
+                  <button type="button" onClick={() => setPublicDeliveryStep('checkout')}
+                    style={{ width: '100%', background: '#18201d', color: '#fff', border: 'none', borderRadius: 12, padding: '14px 20px', cursor: 'pointer', fontWeight: 700, fontSize: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 4px 20px rgba(0,0,0,0.3)' }}>
+                    <span>{cartCount} {cartCount === 1 ? 'item' : 'itens'}</span>
+                    <span>Ver carrinho · {formatCurrency(cartTotal)}</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </main>
+    );
   }
 
   // Login screen
@@ -3357,12 +3677,44 @@ export function App() {
                         Criar
                       </button>
                     </div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                      {categories.length === 0 && <p style={{ fontSize: 13, color: '#789088', margin: 0 }}>Nenhuma categoria criada.</p>}
-                      {categories.map((cat) => (
-                        <span key={cat.id} style={{ background: '#eef2ef', border: '1px solid #dbe3de', borderRadius: 8, padding: '4px 12px', fontSize: 13, fontWeight: 500 }}>
-                          {cat.name}
-                        </span>
+                    {categories.length === 0 && <p style={{ fontSize: 13, color: '#789088', margin: 0 }}>Nenhuma categoria criada.</p>}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {(categories as Array<{ id: string; name: string; imageUrl?: string | null }>).map((cat) => (
+                        <div key={cat.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: '#f9fafb', borderRadius: 8, border: '1px solid #e5e7eb' }}>
+                          {cat.imageUrl
+                            ? <img src={cat.imageUrl} alt={cat.name} style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 6, flexShrink: 0 }} />
+                            : <div style={{ width: 48, height: 48, borderRadius: 6, background: '#eef2ef', display: 'grid', placeItems: 'center', fontSize: 20, flexShrink: 0 }}>?</div>
+                          }
+                          <span style={{ flex: 1, fontSize: 14, fontWeight: 500 }}>{cat.name}</span>
+                          <label style={{ cursor: 'pointer', background: '#fff', border: '1px dashed #d1d5db', borderRadius: 6, padding: '5px 10px', fontSize: 12, color: '#6b7280', whiteSpace: 'nowrap' }}>
+                            {cat.imageUrl ? 'Trocar foto' : '+ Foto'}
+                            <input type="file" accept="image/*" style={{ display: 'none' }}
+                              onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
+                                try {
+                                  const url = await api.uploadCategoryImage(file, cat.id);
+                                  await api.updateCategoryImage(cat.id, url);
+                                  await loadData();
+                                  showToast('Foto da categoria atualizada!', 'success');
+                                } catch (err) {
+                                  showToast((err as Error).message, 'error');
+                                }
+                              }} />
+                          </label>
+                          {cat.imageUrl && (
+                            <button type="button"
+                              onClick={async () => {
+                                await api.updateCategoryImage(cat.id, null);
+                                await loadData();
+                                showToast('Foto removida.', 'success');
+                              }}
+                              style={{ background: 'transparent', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: 16, padding: '4px 6px' }}
+                              title="Remover foto">
+                              x
+                            </button>
+                          )}
+                        </div>
                       ))}
                     </div>
                   </div>
@@ -3447,7 +3799,9 @@ export function App() {
                 <div className="form-grid">
                   <label>
                     Nome da empresa
-                    <input value={newCompanyName} onChange={(e) => setNewCompanyName(e.target.value)} placeholder="Nome da empresa" />
+                    <input value={newCompanyName} onChange={(e) => setNewCompanyName(e.target.value)} placeholder="Nome da empresa"
+                      style={createFieldErrors.companyName ? { borderColor: '#dc2626' } : {}} />
+                    {createFieldErrors.companyName && <span style={{ color: '#dc2626', fontSize: 12, marginTop: 2 }}>✕ {createFieldErrors.companyName}</span>}
                   </label>
                   <label>
                     Meses iniciais
@@ -3459,7 +3813,9 @@ export function App() {
                   </label>
                   <label>
                     CNPJ
-                    <input value={newCompanyCnpj} onChange={(e) => setNewCompanyCnpj(e.target.value)} placeholder="00.000.000/0000-00" />
+                    <input value={newCompanyCnpj} onChange={(e) => setNewCompanyCnpj(e.target.value)} placeholder="00.000.000/0000-00"
+                      style={createFieldErrors.cnpj ? { borderColor: '#dc2626' } : {}} />
+                    {createFieldErrors.cnpj && <span style={{ color: '#dc2626', fontSize: 12, marginTop: 2 }}>✕ {createFieldErrors.cnpj}</span>}
                   </label>
                   <label>
                     Mensalidade (R$)
@@ -3467,7 +3823,9 @@ export function App() {
                   </label>
                   <label>
                     Email empresa
-                    <input value={newCompanyEmail} onChange={(e) => setNewCompanyEmail(e.target.value)} placeholder="contato@exemplo.com" />
+                    <input value={newCompanyEmail} onChange={(e) => setNewCompanyEmail(e.target.value)} placeholder="contato@exemplo.com"
+                      style={createFieldErrors.companyEmail ? { borderColor: '#dc2626' } : {}} />
+                    {createFieldErrors.companyEmail && <span style={{ color: '#dc2626', fontSize: 12, marginTop: 2 }}>✕ {createFieldErrors.companyEmail}</span>}
                   </label>
                   <label>
                     Telefone
@@ -3490,17 +3848,25 @@ export function App() {
                     </label>
                     <label>
                       E-mail do administrador
-                      <input value={newAdminEmail} onChange={(e) => setNewAdminEmail(e.target.value)} placeholder="admin@empresa.com" />
+                      <input value={newAdminEmail} onChange={(e) => setNewAdminEmail(e.target.value)} placeholder="admin@empresa.com"
+                        style={createFieldErrors.adminEmail ? { borderColor: '#dc2626' } : {}} />
+                      {createFieldErrors.adminEmail && <span style={{ color: '#dc2626', fontSize: 12, marginTop: 2 }}>✕ {createFieldErrors.adminEmail}</span>}
                     </label>
                     <label>
                       Senha do administrador
-                      <input type="password" value={newAdminPassword} onChange={(e) => setNewAdminPassword(e.target.value)} placeholder="Senha forte" />
+                      <input type="password" value={newAdminPassword} onChange={(e) => setNewAdminPassword(e.target.value)} placeholder="Mínimo 6 caracteres" />
+                      {newAdminPassword.length > 0 && newAdminPassword.length < 6 && <span style={{ color: '#dc2626', fontSize: 12, marginTop: 2 }}>✕ Mínimo 6 caracteres.</span>}
                     </label>
                     <div />
                   </div>
 
                   <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-start' }}>
-                    <button className="primary-button" type="button" onClick={() => void submitCreateCompany()}>Criar</button>
+                    <button
+                      className="primary-button"
+                      type="button"
+                      disabled={Object.keys(createFieldErrors).length > 0 || (newAdminPassword.length > 0 && newAdminPassword.length < 6)}
+                      onClick={() => void submitCreateCompany()}
+                    >Criar</button>
                   </div>
                 </div>
               </div>
@@ -3690,27 +4056,34 @@ export function App() {
                               <button 
                                 type="button"
                                 className="secondary-button"
-                                onClick={() => setOpenActionMenuId(openActionMenuId === c.id ? null : c.id)}
+                                onClick={(e) => {
+                                  if (openActionMenuId === c.id) {
+                                    closeActionMenu();
+                                  } else {
+                                    const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
+                                    setActionMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+                                    setOpenActionMenuId(c.id);
+                                  }
+                                }}
                                 style={{ padding: '6px 8px' }}
                               >
                                 <MoreVertical size={16} />
                               </button>
-                              {openActionMenuId === c.id && (
+                              {openActionMenuId === c.id && actionMenuPos && (
                                 <div style={{
-                                  position: 'absolute',
-                                  top: '100%',
-                                  right: 0,
+                                  position: 'fixed',
+                                  top: actionMenuPos.top,
+                                  right: actionMenuPos.right,
                                   background: '#fff',
                                   border: '1px solid #e5e7eb',
                                   borderRadius: 8,
                                   boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
                                   minWidth: 160,
-                                  zIndex: 1000,
-                                  marginTop: 4
+                                  zIndex: 9999,
                                 }}>
                                   <button 
                                     type="button"
-                                    onClick={() => { void handleRenew(c); setOpenActionMenuId(null); }}
+                                    onClick={() => { void handleRenew(c); closeActionMenu(); }}
                                     style={{
                                       display: 'block',
                                       width: '100%',
@@ -3730,7 +4103,7 @@ export function App() {
                                   </button>
                                   <button 
                                     type="button"
-                                    onClick={() => { openEditModalWithAdmin(c); setOpenActionMenuId(null); }}
+                                    onClick={() => { openEditModalWithAdmin(c); closeActionMenu(); }}
                                     style={{
                                       display: 'block',
                                       width: '100%',
@@ -3750,7 +4123,7 @@ export function App() {
                                   </button>
                                   <button 
                                     type="button"
-                                    onClick={() => { void openUsersModal(c); setOpenActionMenuId(null); }}
+                                    onClick={() => { void openUsersModal(c); closeActionMenu(); }}
                                     style={{
                                       display: 'block',
                                       width: '100%',
@@ -3772,7 +4145,7 @@ export function App() {
                                     <>
                                       <button 
                                         type="button"
-                                        onClick={() => { void handleSuspendCompany(c.id); setOpenActionMenuId(null); }}
+                                        onClick={() => { void handleSuspendCompany(c.id); closeActionMenu(); }}
                                         style={{
                                           display: 'block',
                                           width: '100%',
@@ -3792,7 +4165,7 @@ export function App() {
                                       </button>
                                       <button 
                                         type="button"
-                                        onClick={() => { setInvoiceCompany(c); setShowInvoicesModal(true); setOpenActionMenuId(null); }}
+                                        onClick={() => { setInvoiceCompany(c); setShowInvoicesModal(true); closeActionMenu(); }}
                                         style={{
                                           display: 'block',
                                           width: '100%',
@@ -3813,7 +4186,7 @@ export function App() {
                                   ) : (
                                     <button 
                                       type="button"
-                                      onClick={() => { void handleReactivateCompany(c.id); setOpenActionMenuId(null); }}
+                                      onClick={() => { void handleReactivateCompany(c.id); closeActionMenu(); }}
                                       style={{
                                         display: 'block',
                                         width: '100%',
@@ -3831,6 +4204,26 @@ export function App() {
                                       Reativar
                                     </button>
                                   )}
+                                  <button
+                                    type="button"
+                                    onClick={() => { void handleDeleteCompany(c.id); closeActionMenu(); }}
+                                    style={{
+                                      display: 'block',
+                                      width: '100%',
+                                      textAlign: 'left',
+                                      padding: '8px 12px',
+                                      border: 'none',
+                                      borderTop: '1px solid #fee2e2',
+                                      background: 'transparent',
+                                      cursor: 'pointer',
+                                      fontSize: 14,
+                                      color: '#b91c1c'
+                                    }}
+                                    onMouseEnter={(e) => (e.currentTarget.style.background = '#fef2f2')}
+                                    onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                                  >
+                                    Excluir empresa
+                                  </button>
                                 </div>
                               )}
                             </div>
@@ -5268,6 +5661,83 @@ export function App() {
               )}
               <button className="primary-button" type="button" onClick={saveStoreSettings}>Salvar configurações</button>
             </div>
+
+            {/* Link público de Delivery */}
+            <div className="panel">
+              <div className="panel-header">
+                <div>
+                  <span className="eyebrow">Delivery</span>
+                  <h2>Link do cardápio online</h2>
+                </div>
+              </div>
+              <div style={{ padding: '0 0 8px' }}>
+                <p style={{ fontSize: 13, color: '#6b7280', marginBottom: 14 }}>
+                  Compartilhe este link com seus clientes. Ao acessar, eles verão o cardápio da sua loja e poderão fazer pedidos de delivery sem precisar de login.
+                </p>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <input
+                    readOnly
+                    value={getPublicDeliveryLink()}
+                    style={{ flex: 1, fontSize: 12, padding: '8px 10px', border: '1px solid #e5e7eb', borderRadius: 8, background: '#f9fafb', color: '#374151' }}
+                  />
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => {
+                      void navigator.clipboard.writeText(getPublicDeliveryLink());
+                      showToast('Link copiado!', 'success');
+                    }}
+                  >
+                    Copiar
+                  </button>
+                </div>
+                {currentUser?.companyId && (
+                  <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8 }}>
+                    <div style={{ fontSize: 12, color: '#6b7280' }}>QR Code para impressão ou exibição:</div>
+                    <img
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(getPublicDeliveryLink())}`}
+                      alt="QR Code delivery"
+                      style={{ width: 160, height: 160, borderRadius: 8, border: '1px solid #e5e7eb' }}
+                    />
+                  </div>
+                )}
+
+                <div style={{ borderTop: '1px solid #f3f4f6', marginTop: 20, paddingTop: 16 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Banner do cardápio</div>
+                  <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 12 }}>Imagem exibida no topo do cardápio online. Ideal: 1200×400px.</p>
+                  {currentCompany?.menuBannerUrl && (
+                    <div style={{ marginBottom: 10, position: 'relative', display: 'inline-block' }}>
+                      <img src={currentCompany.menuBannerUrl} alt="Banner" style={{ width: '100%', maxWidth: 400, height: 120, objectFit: 'cover', borderRadius: 8, border: '1px solid #e5e7eb', display: 'block' }} />
+                      <button type="button"
+                        onClick={async () => {
+                          await supabase.from('Company').update({ menuBannerUrl: null }).eq('id', currentUser?.companyId ?? '');
+                          void loadCurrentCompany();
+                          showToast('Banner removido.', 'success');
+                        }}
+                        style={{ position: 'absolute', top: 4, right: 4, background: 'rgba(0,0,0,0.5)', color: '#fff', border: 'none', borderRadius: 4, padding: '2px 8px', cursor: 'pointer', fontSize: 12 }}>
+                        Remover
+                      </button>
+                    </div>
+                  )}
+                  <label style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, background: '#f9fafb', border: '1px dashed #d1d5db', borderRadius: 8, padding: '8px 14px', fontSize: 13, color: '#374151' }}>
+                    {currentCompany?.menuBannerUrl ? 'Trocar banner' : '+ Adicionar banner'}
+                    <input type="file" accept="image/*" style={{ display: 'none' }}
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        try {
+                          await api.uploadMenuBanner(file);
+                          void loadCurrentCompany();
+                          showToast('Banner atualizado!', 'success');
+                        } catch (err) {
+                          showToast((err as Error).message, 'error');
+                        }
+                      }} />
+                  </label>
+                </div>
+              </div>
+            </div>
+
             <div className="panel">
               <div className="panel-header">
                 <div>

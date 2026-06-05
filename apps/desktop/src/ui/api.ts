@@ -1,5 +1,5 @@
 import type { Order, Product, RestaurantTable } from './types.js';
-import { supabase, getAuthToken, setAuthToken } from './supabase.ts';
+import { supabase, supabaseAnon, getAuthToken, setAuthToken } from './supabase.ts';
 import { getCompanyById, getCompanyForCurrentUser, getUserRowById, invalidateUserCache, loadCurrentUser, requireCompanyUser, requireCompanyUserWithRoles, requireSuperUser } from './supabase-db.ts';
 
 // Cria usuário no Supabase Auth via Admin REST API (service role key).
@@ -7,6 +7,7 @@ import { getCompanyById, getCompanyForCurrentUser, getUserRowById, invalidateUse
 // e confirmar o email automaticamente sem enviar mensagem.
 const SUPABASE_URL: string = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_SERVICE_KEY: string = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY as string;
+const SUPABASE_ANON_KEY: string = (import.meta.env.VITE_SUPABASE_ANON_KEY ?? import.meta.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY) as string;
 
 const createAuthUser = async (email: string, password: string, metadata: Record<string, any>) => {
   if (SUPABASE_SERVICE_KEY) {
@@ -47,6 +48,9 @@ const normalizeCompany = (company: any) => ({
   state: company.state,
   country: company.country,
   pixKey: company.pixKey ?? null,
+  kitchenPrinter: company.kitchenPrinter ?? null,
+  cashierPrinter: company.cashierPrinter ?? null,
+  menuBannerUrl: company.menuBannerUrl ?? null,
   active: company.active
 });
 
@@ -96,6 +100,108 @@ const buildReportQuery = (params?: Record<string, any>) => {
 
 const formatDate = (value: string | null) => (value ? new Date(value).toISOString() : null);
 
+// ── API pública de delivery (sem autenticação — acesso anon) ─────────────────
+
+// Helper para requisições públicas sem autenticação (bypass do cliente Supabase JS)
+const anonFetch = async (path: string, options?: RequestInit) => {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1${path}`, {
+    ...options,
+    headers: {
+      'apikey': SUPABASE_ANON_KEY,
+      'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+      'Content-Type': 'application/json',
+      ...(options?.headers ?? {}),
+    },
+  });
+  return res;
+};
+
+export const publicDeliveryApi = {
+  getMenu: async (companyId: string) => {
+    const [companyRes, categoriesRes, productsRes] = await Promise.all([
+      anonFetch(`/Company?id=eq.${encodeURIComponent(companyId)}&active=eq.true&select=id,name,menuBannerUrl&limit=1`),
+      anonFetch(`/Category?companyId=eq.${encodeURIComponent(companyId)}&active=eq.true&select=id,name,sort,imageUrl&order=sort.asc`),
+      anonFetch(`/Product?companyId=eq.${encodeURIComponent(companyId)}&active=eq.true&available=eq.true&select=id,categoryId,name,description,price,available&order=name.asc`),
+    ]);
+    if (!companyRes.ok) throw new Error('Empresa não encontrada ou inativa.');
+    const companies: any[] = await companyRes.json();
+    if (!companies.length) throw new Error('Empresa não encontrada ou inativa.');
+    const categories: any[] = await categoriesRes.json();
+    const products: any[] = await productsRes.json();
+    return {
+      company: companies[0] as { id: string; name: string; menuBannerUrl: string | null },
+      categories: categories as Array<{ id: string; name: string; sort: number; imageUrl: string | null }>,
+      products: products.map((p: any) => ({ ...p, price: Number(p.price) })) as Array<{ id: string; categoryId: string; name: string; description: string | null; price: number; available: boolean }>,
+    };
+  },
+
+  createOrder: async (companyId: string, payload: {
+    customerName: string;
+    customerPhone?: string;
+    customerAddress: string;
+    paymentMethod: string;
+    deliveryFee: number;
+    notes?: string;
+    items: Array<{ productId: string; productName: string; quantity: number; unitPrice: number; note?: string }>;
+  }) => {
+    const total = payload.items.reduce((s, i) => s + i.quantity * i.unitPrice, 0) + payload.deliveryFee;
+    // Gera o UUID no cliente para não precisar de SELECT após INSERT (evita RLS anon sem policy de leitura)
+    const orderId = crypto.randomUUID();
+
+    const orderRes = await anonFetch('/DeliveryOrder', {
+      method: 'POST',
+      headers: { 'Prefer': 'return=minimal' },
+      body: JSON.stringify({
+        id: orderId,
+        companyId,
+        customerName: payload.customerName.trim(),
+        customerPhone: payload.customerPhone?.trim() || null,
+        customerAddress: payload.customerAddress.trim(),
+        paymentMethod: payload.paymentMethod,
+        deliveryFee: payload.deliveryFee,
+        total,
+        notes: payload.notes?.trim() || null,
+        status: 'RECEBIDO',
+        updatedAt: new Date().toISOString(),
+      }),
+    });
+    if (!orderRes.ok) {
+      const body = await orderRes.text();
+      throw new Error(`Falha ao registrar pedido. (${orderRes.status}) ${body}`);
+    }
+
+    if (payload.items.length > 0) {
+      const itemsRes = await anonFetch('/DeliveryOrderItem', {
+        method: 'POST',
+        headers: { 'Prefer': 'return=minimal' },
+        body: JSON.stringify(payload.items.map((item) => ({
+          deliveryOrderId: orderId,
+          productId: item.productId,
+          productName: item.productName,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          note: item.note || null,
+        }))),
+      });
+      if (!itemsRes.ok) {
+        const body = await itemsRes.text();
+        throw new Error(`Falha ao salvar itens do pedido. (${itemsRes.status}) ${body}`);
+      }
+    }
+    // Busca o receiptNumber gerado pelo banco (SECURITY DEFINER via trigger)
+    let receiptNumber: number | null = null;
+    try {
+      const receiptRes = await anonFetch(`/DeliveryOrder?id=eq.${orderId}&select=receiptNumber&limit=1`);
+      if (receiptRes.ok) {
+        const rows: any[] = await receiptRes.json();
+        receiptNumber = rows[0]?.receiptNumber ?? null;
+      }
+    } catch { /* não crítico — exibe o número se disponível */ }
+
+    return { id: orderId, receiptNumber };
+  },
+};
+
 export const api = {
   login: async (email: string, password: string): Promise<{ accessToken: string; user: any; company?: any } | { error: string }> => {
     try {
@@ -140,7 +246,7 @@ export const api = {
     return { company: normalizeCompany(company) };
   },
 
-  updateCompanyProfile: async (payload: { name?: string; cnpj?: string; email?: string; phone?: string; address?: string; city?: string; state?: string; country?: string; pixKey?: string }) => {
+  updateCompanyProfile: async (payload: { name?: string; cnpj?: string; email?: string; phone?: string; address?: string; city?: string; state?: string; country?: string; pixKey?: string; kitchenPrinter?: string; cashierPrinter?: string }) => {
     const user = await requireCompanyUser();
     const { data, error } = await supabase
       .from('Company')
@@ -153,10 +259,12 @@ export const api = {
         city: payload.city,
         state: payload.state,
         country: payload.country,
-        pixKey: payload.pixKey
+        pixKey: payload.pixKey,
+        kitchenPrinter: payload.kitchenPrinter ?? null,
+        cashierPrinter: payload.cashierPrinter ?? null,
       })
       .eq('id', user.companyId)
-      .select('id,name,email,cnpj,phone,address,city,state,country,pixKey,active')
+      .select('id,name,email,cnpj,phone,address,city,state,country,pixKey,kitchenPrinter,cashierPrinter,menuBannerUrl,active')
       .single();
 
     if (error) {
@@ -276,7 +384,7 @@ export const api = {
     const user = await requireCompanyUser();
     const { data, error } = await supabase
       .from('Category')
-      .select('id,name,active')
+      .select('id,name,active,imageUrl')
       .eq('companyId', user.companyId)
       .eq('active', true)
       .order('sort', { ascending: true });
@@ -287,11 +395,39 @@ export const api = {
     return data || [];
   },
 
+  uploadCategoryImage: async (file: File, categoryId: string): Promise<string> => {
+    const user = await requireCompanyUserWithRoles(['ADMIN', 'GERENTE', 'ESTOQUE']);
+    const ext = file.name.split('.').pop() ?? 'jpg';
+    const path = `${user.companyId}/cat_${categoryId}.${ext}`;
+    const { error } = await supabase.storage.from('product-images').upload(path, file, { upsert: true, contentType: file.type });
+    if (error) throw new Error(error.message || 'Falha ao enviar imagem.');
+    const { data } = supabase.storage.from('product-images').getPublicUrl(path);
+    return data.publicUrl;
+  },
+
+  updateCategoryImage: async (categoryId: string, imageUrl: string | null): Promise<void> => {
+    const user = await requireCompanyUserWithRoles(['ADMIN', 'GERENTE', 'ESTOQUE']);
+    const { error } = await supabase.from('Category').update({ imageUrl }).eq('id', categoryId).eq('companyId', user.companyId);
+    if (error) throwSupabaseError(error, 'Falha ao atualizar imagem da categoria.');
+  },
+
+  uploadMenuBanner: async (file: File): Promise<string> => {
+    const user = await requireCompanyUserWithRoles(['ADMIN', 'GERENTE']);
+    const ext = file.name.split('.').pop() ?? 'jpg';
+    const path = `${user.companyId}/menu_banner.${ext}`;
+    const { error } = await supabase.storage.from('product-images').upload(path, file, { upsert: true, contentType: file.type });
+    if (error) throw new Error(error.message || 'Falha ao enviar banner.');
+    const { data } = supabase.storage.from('product-images').getPublicUrl(path);
+    // Salva a URL no perfil da empresa
+    await supabase.from('Company').update({ menuBannerUrl: data.publicUrl }).eq('id', user.companyId);
+    return data.publicUrl;
+  },
+
   products: async () => {
     const user = await requireCompanyUser();
     const { data, error } = await supabase
       .from('Product')
-      .select('id,categoryId,name,description,price,preparationMinutes,available')
+      .select('id,categoryId,name,description,price,preparationMinutes,available,imageUrl')
       .eq('companyId', user.companyId)
       .eq('active', true)
       .order('name', { ascending: true });
@@ -306,12 +442,23 @@ export const api = {
     }));
   },
 
+  uploadProductImage: async (file: File, productId: string): Promise<string> => {
+    const user = await requireCompanyUserWithRoles(['ADMIN', 'GERENTE', 'ESTOQUE']);
+    const ext = file.name.split('.').pop() ?? 'jpg';
+    const path = `${user.companyId}/${productId}.${ext}`;
+    const { error } = await supabase.storage.from('product-images').upload(path, file, { upsert: true, contentType: file.type });
+    if (error) throw new Error(error.message || 'Falha ao enviar imagem.');
+    const { data } = supabase.storage.from('product-images').getPublicUrl(path);
+    return data.publicUrl;
+  },
+
   createProduct: async (product: {
     categoryId?: string;
     name: string;
     description?: string;
     price: number;
     preparationMinutes?: number;
+    imageUrl?: string;
   }) => {
     const user = await requireCompanyUserWithRoles(['ADMIN', 'GERENTE', 'ESTOQUE']);
 
@@ -372,9 +519,10 @@ export const api = {
         internalCode: `PROD-${Date.now()}`,
         preparationMinutes: Number(product.preparationMinutes ?? 0),
         available: true,
-        active: true
+        active: true,
+        imageUrl: product.imageUrl ?? null,
       }])
-      .select('id,categoryId,name,description,price,preparationMinutes,available')
+      .select('id,categoryId,name,description,price,preparationMinutes,available,imageUrl')
       .single();
 
     if (error) {
@@ -394,6 +542,7 @@ export const api = {
     preparationMinutes?: number;
     categoryId?: string;
     available?: boolean;
+    imageUrl?: string | null;
   }) => {
     const user = await requireCompanyUserWithRoles(['ADMIN', 'GERENTE', 'ESTOQUE']);
     const { data, error } = await supabase
@@ -405,10 +554,11 @@ export const api = {
         ...(payload.preparationMinutes !== undefined && { preparationMinutes: Number(payload.preparationMinutes) }),
         ...(payload.categoryId !== undefined && { categoryId: payload.categoryId }),
         ...(payload.available !== undefined && { available: payload.available }),
+        ...('imageUrl' in payload && { imageUrl: payload.imageUrl ?? null }),
       })
       .eq('id', productId)
       .eq('companyId', user.companyId)
-      .select('id,categoryId,name,description,price,preparationMinutes,available')
+      .select('id,categoryId,name,description,price,preparationMinutes,available,imageUrl')
       .single();
     if (error) throwSupabaseError(error, 'Falha ao atualizar produto.');
     return { ...data, price: Number(data.price) };
@@ -1655,6 +1805,30 @@ export const api = {
     const { error } = await supabase.from('User').update({ active: true }).eq('id', userId);
     if (error) {
       throwSupabaseError(error, 'Falha ao reativar usuario.');
+    }
+    return { success: true };
+  },
+
+  deleteCompany: async (companyId: string) => {
+    await requireSuperUser();
+
+    // Busca todos os usuários da empresa para remover do Supabase Auth
+    const { data: users } = await supabase.from('User').select('id').eq('companyId', companyId);
+    if (users && users.length > 0 && SUPABASE_SERVICE_KEY) {
+      await Promise.all(users.map(async (u) => {
+        await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${u.id}`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
+            'apikey': SUPABASE_SERVICE_KEY
+          }
+        });
+      }));
+    }
+
+    const { error } = await supabase.from('Company').delete().eq('id', companyId);
+    if (error) {
+      throwSupabaseError(error, 'Falha ao excluir empresa.');
     }
     return { success: true };
   },
