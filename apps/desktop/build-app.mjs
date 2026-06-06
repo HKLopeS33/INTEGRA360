@@ -52,8 +52,12 @@ async function checkUnpacked() {
 
 async function checkNsisInstaller() {
   try {
+    const pkg = JSON.parse(await readFile(path.join(__dirname, 'package.json'), 'utf8'));
+    const version = pkg.version;
     const files = await readdir(distAppDir);
-    return files.find(f => f.endsWith('.exe') && f.includes('Setup'));
+    // Prioriza o arquivo da versão atual; fallback para qualquer Setup .exe
+    return files.find(f => f.endsWith('.exe') && f.includes('Setup') && f.includes(version))
+        || files.find(f => f.endsWith('.exe') && f.includes('Setup'));
   } catch {
     return null;
   }
