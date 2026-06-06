@@ -1176,8 +1176,11 @@ export function App() {
   // ── Delivery público ──────────────────────────────────────────────────────
 
   const getPublicDeliveryLink = () => {
-    const base = window.location.protocol === 'file:' ? 'http://127.0.0.1:5173' : window.location.origin;
-    return `${base}${window.location.pathname}?delivery=${currentUser?.companyId ?? ''}`;
+    // No Electron (protocolo file:) usa a URL pública configurada; no browser usa a origem atual
+    const base = window.location.protocol === 'file:'
+      ? (import.meta.env.VITE_PUBLIC_URL ?? 'https://CONFIGURE-VITE_PUBLIC_URL-no-.env')
+      : window.location.origin;
+    return `${base}/?delivery=${currentUser?.companyId ?? ''}`;
   };
 
   const addToPublicCart = (product: { id: string; name: string; price: number }) => {
@@ -1256,8 +1259,10 @@ export function App() {
   }, [orders]);
 
   const getMenuLinkForTable = (table: RestaurantTable) => {
-    const baseUrl = window.location.protocol === 'file:' ? 'http://127.0.0.1:5173' : window.location.origin;
-    return `${baseUrl}${window.location.pathname}?tableId=${encodeURIComponent(table.id)}`;
+    const baseUrl = window.location.protocol === 'file:'
+      ? (import.meta.env.VITE_PUBLIC_URL ?? 'https://CONFIGURE-VITE_PUBLIC_URL-no-.env')
+      : window.location.origin;
+    return `${baseUrl}/?tableId=${encodeURIComponent(table.id)}`;
   };
 
   const getQrCodeSrc = (url: string) =>
