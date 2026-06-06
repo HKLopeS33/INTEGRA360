@@ -270,7 +270,9 @@ export function App() {
   const [publicDeliveryCategories, setPublicDeliveryCategories] = useState<Array<{ id: string; name: string; sort: number; imageUrl?: string | null }>>([]);
   const [publicDeliveryProducts, setPublicDeliveryProducts] = useState<Array<{ id: string; categoryId: string; name: string; description: string | null; price: number; available: boolean }>>([]);
   const [publicDeliveryCart, setPublicDeliveryCart] = useState<Array<{ product: { id: string; name: string; price: number }; quantity: number; note: string }>>([]);
-  const [publicDeliveryStep, setPublicDeliveryStep] = useState<'menu' | 'checkout' | 'success'>('menu');
+  const [publicDeliveryStep, setPublicDeliveryStep] = useState<'menu' | 'checkout' | 'success' | 'tracking'>('menu');
+  const [publicDeliveryTrackingStatus, setPublicDeliveryTrackingStatus] = useState<string>('RECEBIDO');
+  const [publicDeliveryTrackingBar, setPublicDeliveryTrackingBar] = useState(0); // 0-100
   const [publicDeliveryName, setPublicDeliveryName] = useState('');
   const [publicDeliveryPhone, setPublicDeliveryPhone] = useState('');
   const [publicDeliveryAddress, setPublicDeliveryAddress] = useState('');
@@ -413,6 +415,47 @@ export function App() {
       });
     }
   }, []);
+
+  // Polling do status do pedido público (tela de acompanhamento)
+  useEffect(() => {
+    if (publicDeliveryStep !== 'tracking' || !publicDeliveryOrderId) return;
+
+    const FINAL = ['ENTREGUE', 'CANCELADO'];
+    let stopped = false;
+
+    const poll = async () => {
+      try {
+        const result = await publicDeliveryApi.getOrderStatus(publicDeliveryOrderId);
+        if (result && !stopped) {
+          setPublicDeliveryTrackingStatus(result.status);
+          if (result.receiptNumber != null) setPublicDeliveryReceiptNumber(result.receiptNumber);
+        }
+      } catch { /* silencioso */ }
+    };
+
+    poll();
+    const interval = setInterval(() => {
+      if (stopped) return;
+      poll().then(() => {
+        if (FINAL.includes(publicDeliveryTrackingStatus)) {
+          stopped = true;
+          clearInterval(interval);
+        }
+      });
+    }, 5000);
+
+    return () => { stopped = true; clearInterval(interval); };
+  }, [publicDeliveryStep, publicDeliveryOrderId]);
+
+  // Barra de progresso animada por etapa (loop contínuo)
+  useEffect(() => {
+    if (publicDeliveryStep !== 'tracking') return;
+    setPublicDeliveryTrackingBar(0);
+    const tick = setInterval(() => {
+      setPublicDeliveryTrackingBar((prev) => (prev >= 100 ? 0 : prev + 2));
+    }, 60);
+    return () => clearInterval(tick);
+  }, [publicDeliveryStep, publicDeliveryTrackingStatus]);
 
   useEffect(() => {
     if (currentUser?.id) {
@@ -2281,9 +2324,9 @@ export function App() {
           )}
           {publicDeliveryStep === 'success' && (
             <div style={{ textAlign: 'center', padding: '60px 20px' }}>
-              <div style={{ fontSize: 64 }}>Pedido recebido!</div>
-              <h2 style={{ margin: '16px 0 8px', fontSize: 22 }}>Pedido confirmado</h2>
-              <p style={{ color: '#6b7280', marginBottom: 24 }}>Seu pedido foi enviado para <strong>{publicDeliveryCompany?.name}</strong>. Aguarde a confirmacao da loja.</p>
+              <div style={{ fontSize: 64 }}>✅</div>
+              <h2 style={{ margin: '16px 0 8px', fontSize: 22 }}>Pedido confirmado!</h2>
+              <p style={{ color: '#6b7280', marginBottom: 24 }}>Seu pedido foi enviado para <strong>{publicDeliveryCompany?.name}</strong>. Aguarde a confirmação da loja.</p>
               <div style={{ background: '#fff', borderRadius: 12, padding: 20, border: '1px solid #e5e7eb', marginBottom: 24 }}>
                 <div style={{ fontSize: 12, color: '#9ca3af', marginBottom: 4 }}>Número do pedido</div>
                 {publicDeliveryReceiptNumber != null
@@ -2291,12 +2334,121 @@ export function App() {
                   : <div style={{ fontWeight: 700, fontSize: 14, color: '#374151', wordBreak: 'break-all' }}>{publicDeliveryOrderId}</div>
                 }
               </div>
-              <button type="button" onClick={() => { setPublicDeliveryStep('menu'); setPublicDeliveryCart([]); setPublicDeliveryName(''); setPublicDeliveryPhone(''); setPublicDeliveryAddress(''); setPublicDeliveryNotes(''); }}
-                style={{ background: '#18201d', color: '#fff', border: 'none', borderRadius: 10, padding: '12px 24px', cursor: 'pointer', fontWeight: 600, fontSize: 15 }}>
-                Fazer novo pedido
-              </button>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center' }}>
+                <button type="button"
+                  onClick={() => { setPublicDeliveryTrackingStatus('RECEBIDO'); setPublicDeliveryStep('tracking'); }}
+                  style={{ background: '#18201d', color: '#fff', border: 'none', borderRadius: 10, padding: '13px 28px', cursor: 'pointer', fontWeight: 700, fontSize: 15, width: '100%', maxWidth: 320 }}>
+                  🔍 Acompanhar pedido
+                </button>
+                <button type="button" onClick={() => { setPublicDeliveryStep('menu'); setPublicDeliveryCart([]); setPublicDeliveryName(''); setPublicDeliveryPhone(''); setPublicDeliveryAddress(''); setPublicDeliveryNotes(''); }}
+                  style={{ background: 'transparent', color: '#6b7280', border: '1px solid #e5e7eb', borderRadius: 10, padding: '11px 24px', cursor: 'pointer', fontWeight: 500, fontSize: 14, width: '100%', maxWidth: 320 }}>
+                  Fazer novo pedido
+                </button>
+              </div>
             </div>
           )}
+          {publicDeliveryStep === 'tracking' && (() => {
+            const STAGES: Array<{ key: string; label: string; icon: string; desc: string }> = [
+              { key: 'RECEBIDO',           label: 'Aguardando aprovação', icon: '⏳', desc: 'O restaurante ainda não confirmou seu pedido.' },
+              { key: 'EM_PREPARO',         label: 'Em preparo',           icon: '👨‍🍳', desc: 'Seu pedido está sendo preparado.' },
+              { key: 'SAIU_PARA_ENTREGA', label: 'Saiu para entrega',    icon: '🛵', desc: 'Seu pedido está a caminho!' },
+              { key: 'ENTREGUE',           label: 'Entregue',             icon: '🎉', desc: 'Pedido entregue. Bom apetite!' },
+            ];
+            const isCancelled = publicDeliveryTrackingStatus === 'CANCELADO';
+            const currentIdx = isCancelled ? -1 : STAGES.findIndex((s) => s.key === publicDeliveryTrackingStatus);
+            const currentStage = isCancelled ? null : STAGES[currentIdx];
+            const isFinished = publicDeliveryTrackingStatus === 'ENTREGUE';
+
+            return (
+              <div style={{ padding: '32px 0 40px' }}>
+                {/* Header */}
+                <div style={{ textAlign: 'center', marginBottom: 32 }}>
+                  <div style={{ fontSize: 52 }}>{isCancelled ? '❌' : isFinished ? '🎉' : currentStage?.icon ?? '⏳'}</div>
+                  <h2 style={{ margin: '12px 0 6px', fontSize: 20, fontWeight: 800 }}>
+                    {isCancelled ? 'Pedido cancelado' : isFinished ? 'Entregue!' : currentStage?.label ?? 'Aguardando...'}
+                  </h2>
+                  <p style={{ color: '#6b7280', fontSize: 14, margin: 0 }}>
+                    {isCancelled ? 'Seu pedido foi cancelado pelo restaurante.' : isFinished ? 'Obrigado pela preferência!' : currentStage?.desc ?? ''}
+                  </p>
+                  {publicDeliveryReceiptNumber != null && (
+                    <div style={{ display: 'inline-block', background: '#f3f4f6', borderRadius: 8, padding: '4px 14px', marginTop: 10, fontSize: 13, color: '#374151', fontWeight: 600 }}>
+                      Pedido #{publicDeliveryReceiptNumber}
+                    </div>
+                  )}
+                </div>
+
+                {/* Etapas */}
+                {!isCancelled && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 0, margin: '0 0 32px' }}>
+                    {STAGES.map((stage, idx) => {
+                      const done = idx < currentIdx;
+                      const active = idx === currentIdx;
+                      const pending = idx > currentIdx;
+                      return (
+                        <div key={stage.key}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 0' }}>
+                            {/* Círculo de status */}
+                            <div style={{
+                              width: 40, height: 40, borderRadius: '50%', flexShrink: 0,
+                              background: done ? '#16a34a' : active ? '#18201d' : '#f3f4f6',
+                              border: active ? '3px solid #18201d' : done ? '3px solid #16a34a' : '2px solid #e5e7eb',
+                              display: 'grid', placeItems: 'center', fontSize: 18,
+                              transition: 'background 0.4s',
+                            }}>
+                              {done ? <span style={{ color: '#fff', fontSize: 16 }}>✓</span> : <span style={{ filter: pending ? 'grayscale(1) opacity(0.4)' : 'none' }}>{stage.icon}</span>}
+                            </div>
+                            {/* Texto */}
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontWeight: active ? 700 : done ? 600 : 400, fontSize: 15, color: pending ? '#9ca3af' : '#18201d' }}>
+                                {stage.label}
+                              </div>
+                              {active && <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>{stage.desc}</div>}
+                            </div>
+                          </div>
+
+                          {/* Barra de progresso animada (somente na etapa ativa e não final) */}
+                          {active && !isFinished && (
+                            <div style={{ marginLeft: 54, marginBottom: 4 }}>
+                              <div style={{ height: 4, borderRadius: 4, background: '#e5e7eb', overflow: 'hidden' }}>
+                                <div style={{
+                                  height: '100%', borderRadius: 4,
+                                  background: 'linear-gradient(90deg, #18201d, #4ade80)',
+                                  width: `${publicDeliveryTrackingBar}%`,
+                                  transition: 'width 0.06s linear',
+                                }} />
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Linha conectora entre etapas */}
+                          {idx < STAGES.length - 1 && (
+                            <div style={{ marginLeft: 19, width: 2, height: 16, background: done ? '#16a34a' : '#e5e7eb' }} />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Botão de voltar */}
+                <div style={{ textAlign: 'center' }}>
+                  {isFinished || isCancelled ? (
+                    <button type="button"
+                      onClick={() => { setPublicDeliveryStep('menu'); setPublicDeliveryCart([]); setPublicDeliveryName(''); setPublicDeliveryPhone(''); setPublicDeliveryAddress(''); setPublicDeliveryNotes(''); }}
+                      style={{ background: '#18201d', color: '#fff', border: 'none', borderRadius: 10, padding: '12px 28px', cursor: 'pointer', fontWeight: 600, fontSize: 15 }}>
+                      Fazer novo pedido
+                    </button>
+                  ) : (
+                    <button type="button"
+                      onClick={() => setPublicDeliveryStep('success')}
+                      style={{ background: 'transparent', color: '#6b7280', border: '1px solid #e5e7eb', borderRadius: 10, padding: '10px 20px', cursor: 'pointer', fontSize: 14 }}>
+                      ← Voltar
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
           {publicDeliveryStep === 'checkout' && (
             <div style={{ display: 'grid', gap: 16 }}>
               <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #e5e7eb', overflow: 'hidden' }}>
@@ -5613,7 +5765,7 @@ export function App() {
                 <input value={storeAddress} onChange={(e) => setStoreAddress(e.target.value)} placeholder="Rua, número - Bairro" />
               </label>
               <label>
-                Cidade <span style={{ fontSize: 11, color: '#789088', fontWeight: 400 }}>(usada no QR PIX — obrigatório)</span>
+                Cidade <span>(usada no QR PIX — obrigatório)</span>
                 <input value={storeCity} onChange={(e) => setStoreCity(e.target.value)} placeholder="Ex: Recife" />
               </label>
               <label>
@@ -5621,7 +5773,7 @@ export function App() {
                 <input value={storePhone} onChange={(e) => setStorePhone(e.target.value)} placeholder="(00) 0000-0000" />
               </label>
               <label>
-                Chave PIX <span style={{ fontSize: 11, color: '#789088', fontWeight: 400 }}>(email, CPF, CNPJ, telefone com +55 ou chave aleatória)</span>
+                Chave PIX <span>(email, CPF, CNPJ, telefone com +55 ou chave aleatória)</span>
                 <input value={storePixKey} onChange={(e) => setStorePixKey(e.target.value)} placeholder="Ex: +5511999999999 ou email@exemplo.com" autoComplete="off" />
               </label>
               {/* Impressoras — só aparece no Electron */}
@@ -5738,7 +5890,7 @@ export function App() {
               </div>
             </div>
 
-            <div className="panel">
+            <div className="panel settings-list">
               <div className="panel-header">
                 <div>
                   <span className="eyebrow">Segurança</span>

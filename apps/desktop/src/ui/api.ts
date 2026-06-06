@@ -200,6 +200,14 @@ export const publicDeliveryApi = {
 
     return { id: orderId, receiptNumber };
   },
+
+  getOrderStatus: async (orderId: string): Promise<{ status: string; receiptNumber: number | null } | null> => {
+    const res = await anonFetch(`/DeliveryOrder?id=eq.${encodeURIComponent(orderId)}&select=status,receiptNumber&limit=1`);
+    if (!res.ok) return null;
+    const rows: any[] = await res.json();
+    if (!rows.length) return null;
+    return { status: rows[0].status, receiptNumber: rows[0].receiptNumber ?? null };
+  },
 };
 
 export const api = {

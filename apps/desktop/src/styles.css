@@ -611,19 +611,23 @@ h2 {
 }
 
 .product-form input,
-.product-form textarea {
+.product-form textarea,
+.product-form select {
   background: #f8faf8;
   border: 1px solid #cfd9d3;
   border-radius: 8px;
+  box-sizing: border-box;
   color: #18201d;
   font: inherit;
   min-height: 42px;
   padding: 10px 12px;
   resize: vertical;
+  width: 100%;
 }
 
 .product-form input:focus,
-.product-form textarea:focus {
+.product-form textarea:focus,
+.product-form select:focus {
   border-color: #18201d;
   outline: 2px solid #f1c44e;
 }
@@ -635,14 +639,37 @@ h2 {
 }
 
 .settings-list label {
-  align-items: center;
+  display: grid;
+  gap: 5px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #42504a;
+}
+
+.settings-list label input,
+.settings-list label select {
   background: #f8faf8;
   border: 1px solid #dbe3de;
   border-radius: 8px;
-  display: flex;
-  gap: 10px;
-  min-height: 48px;
+  color: #18201d;
+  font: inherit;
+  font-weight: 400;
+  min-height: 42px;
   padding: 10px 12px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.settings-list label input:focus,
+.settings-list label select:focus {
+  border-color: #18201d;
+  outline: 2px solid #f1c44e;
+}
+
+.settings-list label span {
+  font-size: 11px;
+  font-weight: 400;
+  color: #789088;
 }
 
 .catalog-list {
