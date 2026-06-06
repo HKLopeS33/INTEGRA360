@@ -2,7 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { writeFile } from 'node:fs/promises';
+import { writeFile, rm } from 'node:fs/promises';
 import updaterPkg from 'electron-updater';
 const { autoUpdater } = updaterPkg;
 
@@ -204,6 +204,13 @@ function setupAutoUpdater(win) {
   autoUpdater.on('error', (err) => {
     console.error('[AutoUpdater] erro:', err?.message ?? err);
     send('error', { message: err?.message ?? 'Erro desconhecido' });
+    // Limpa o cache do updater para evitar que uma falha anterior bloqueie futuras tentativas
+    const cacheDir = path.join(app.getPath('userData'), '..', '@integra360desktop-updater');
+    rm(cacheDir, { recursive: true, force: true })
+      .then(() => console.log('[AutoUpdater] cache limpo após erro'))
+      .catch(() => {});
+    // Tenta novamente em 5 minutos após falha (em vez de esperar 2 horas)
+    setTimeout(() => autoUpdater.checkForUpdates().catch(() => {}), 5 * 60 * 1000);
   });
 
   // Verifica ao iniciar — após o renderer estar pronto
