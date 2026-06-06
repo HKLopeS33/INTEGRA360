@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { copyFile, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
@@ -104,8 +104,18 @@ async function build() {
       const installer = await checkNsisInstaller();
       if (installer) {
         nsisOk = true;
+        // Renomeia para o formato com hífens que o electron-updater/latest.yml espera
+        // GitHub converte espaços em pontos, então garantimos o nome correto aqui
+        const installerPath = path.join(distAppDir, installer);
+        const fixedName = installer.replace(/\s+/g, '-');
+        const fixedPath = path.join(distAppDir, fixedName);
+        if (installer !== fixedName) {
+          await rename(installerPath, fixedPath);
+          await rename(installerPath + '.blockmap', fixedPath + '.blockmap').catch(() => {});
+          console.log(`🔧 Renomeado: "${installer}" → "${fixedName}"`);
+        }
         console.log('\n✅ Build completo!');
-        console.log(`📍 Instalador: dist-app/${installer}`);
+        console.log(`📍 Instalador: dist-app/${fixedName}`);
         console.log('   Envie esse único arquivo para o cliente instalar.\n');
       }
     } catch {
