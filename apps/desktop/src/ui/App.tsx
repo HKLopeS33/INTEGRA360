@@ -270,7 +270,7 @@ export function App() {
   const [publicDeliveryCategories, setPublicDeliveryCategories] = useState<Array<{ id: string; name: string; sort: number; imageUrl?: string | null }>>([]);
   const [publicDeliveryProducts, setPublicDeliveryProducts] = useState<Array<{ id: string; categoryId: string; name: string; description: string | null; price: number; available: boolean }>>([]);
   const [publicDeliveryCart, setPublicDeliveryCart] = useState<Array<{ product: { id: string; name: string; price: number }; quantity: number; note: string }>>([]);
-  const [publicDeliveryStep, setPublicDeliveryStep] = useState<'menu' | 'checkout' | 'success' | 'tracking'>('menu');
+  const [publicDeliveryStep, setPublicDeliveryStep] = useState<'menu' | 'checkout' | 'payment' | 'success' | 'tracking'>('menu');
   const [publicDeliveryTrackingStatus, setPublicDeliveryTrackingStatus] = useState<string>('RECEBIDO');
   const [publicDeliveryTrackingBar, setPublicDeliveryTrackingBar] = useState(0); // 0-100
   const [publicDeliveryName, setPublicDeliveryName] = useState('');
@@ -283,6 +283,11 @@ export function App() {
   const [publicDeliveryOrderId, setPublicDeliveryOrderId] = useState<string | null>(null);
   const [publicDeliveryReceiptNumber, setPublicDeliveryReceiptNumber] = useState<number | null>(null);
   const [publicDeliveryError, setPublicDeliveryError] = useState<string | null>(null);
+  const [publicDeliveryMpAvailable, setPublicDeliveryMpAvailable] = useState(false);
+  const [publicPixCharge, setPublicPixCharge] = useState<{ qrCode: string | null; qrCodeBase64: string | null; ticketUrl: string | null } | null>(null);
+  const [publicPixLoading, setPublicPixLoading] = useState(false);
+  const [publicPixError, setPublicPixError] = useState<string | null>(null);
+  const [publicPixPaymentStatus, setPublicPixPaymentStatus] = useState<string>('PENDENTE');
   const [menuCart, setMenuCart] = useState<Array<{ product: Product; quantity: number; note: string }>>([]);
   const [menuModalTable, setMenuModalTable] = useState<RestaurantTable | null>(null);
   const [tableCart, setTableCart] = useState<Array<{ product: Product; quantity: number; note: string }>>([]);
@@ -334,6 +339,14 @@ export function App() {
   const [newUserActive, setNewUserActive] = useState(true);
   const [profilePhoto, setProfilePhoto] = useState('');
   const [storeName, setStoreName] = useState('Integra360');
+  const [storeTableCount, setStoreTableCount] = useState('10');
+  const [storeTableCountOriginal, setStoreTableCountOriginal] = useState(10);
+  const [savingTableCount, setSavingTableCount] = useState(false);
+  const [mpConnected, setMpConnected] = useState(false);
+  const [mpConnectedAt, setMpConnectedAt] = useState<string | null>(null);
+  const [mpAccessTokenInput, setMpAccessTokenInput] = useState('');
+  const [mpPublicKeyInput, setMpPublicKeyInput] = useState('');
+  const [mpSaving, setMpSaving] = useState(false);
   const [storeCnpj, setStoreCnpj] = useState('');
   const [storeAddress, setStoreAddress] = useState('');
   const [storePhone, setStorePhone] = useState('');
@@ -413,6 +426,7 @@ export function App() {
       }).catch(() => {
         setPublicDeliveryError('Cardápio não encontrado ou loja inativa.');
       });
+      publicDeliveryApi.isMercadoPagoAvailable(deliveryId).then(setPublicDeliveryMpAvailable).catch(() => setPublicDeliveryMpAvailable(false));
     }
   }, []);
 
@@ -522,7 +536,70 @@ export function App() {
       void loadDeliveryOrders();
       void loadCategories();
     }
+    if (activeModule === 'ajustes' && (role === 'ADMIN' || role === 'GERENTE')) {
+      api.getMyCompanyTableCount()
+        .then((count) => { setStoreTableCount(String(count)); setStoreTableCountOriginal(count); })
+        .catch((e) => console.error('Erro ao carregar quantidade de mesas', e));
+      api.getMercadoPagoStatus()
+        .then((status) => { setMpConnected(status.connected); setMpConnectedAt(status.connectedAt); })
+        .catch((e) => console.error('Erro ao carregar status do Mercado Pago', e));
+    }
   }, [activeModule]);
+
+  const connectMercadoPago = async () => {
+    if (!mpAccessTokenInput.trim()) {
+      return showToast('Informe o access token do Mercado Pago.', 'warning');
+    }
+    setMpSaving(true);
+    try {
+      await api.connectMercadoPago(mpAccessTokenInput.trim(), mpPublicKeyInput.trim() || undefined);
+      setMpAccessTokenInput('');
+      setMpPublicKeyInput('');
+      const status = await api.getMercadoPagoStatus();
+      setMpConnected(status.connected);
+      setMpConnectedAt(status.connectedAt);
+      showToast('Mercado Pago conectado com sucesso.', 'success');
+    } catch (e: any) {
+      console.error(e);
+      showToast(e?.message || 'Falha ao conectar Mercado Pago.', 'error');
+    } finally {
+      setMpSaving(false);
+    }
+  };
+
+  const disconnectMercadoPago = async () => {
+    setMpSaving(true);
+    try {
+      await api.disconnectMercadoPago();
+      setMpConnected(false);
+      setMpConnectedAt(null);
+      showToast('Mercado Pago desconectado.', 'success');
+    } catch (e: any) {
+      console.error(e);
+      showToast(e?.message || 'Falha ao desconectar Mercado Pago.', 'error');
+    } finally {
+      setMpSaving(false);
+    }
+  };
+
+  const saveTableCount = async () => {
+    const desired = Math.max(0, Math.floor(Number(storeTableCount) || 0));
+    if (desired === storeTableCountOriginal) return;
+    setSavingTableCount(true);
+    try {
+      const result = await api.setMyCompanyTableCount(desired);
+      if (result.added > 0) showToast(`${result.added} mesa(s) adicionada(s).`, 'success');
+      if (result.removed > 0) showToast(`${result.removed} mesa(s) removida(s).`, 'success');
+      setStoreTableCountOriginal(result.total);
+      setStoreTableCount(String(result.total));
+      await loadData();
+    } catch (e: any) {
+      console.error(e);
+      showToast(e?.message || 'Falha ao atualizar quantidade de mesas.', 'error');
+    } finally {
+      setSavingTableCount(false);
+    }
+  };
 
   const formatRemaining = (expiresAt: string | null) => {
     if (!expiresAt) return { text: '—', days: null, expired: false, urgent: false };
@@ -955,6 +1032,41 @@ export function App() {
     showToast('Configurações salvas.', 'success');
   };
 
+  const generateMercadoPagoPixCharge = async (tabId: string, amount: number) => {
+    setMpChargeLoading(true);
+    setMpCharge(null);
+    try {
+      const charge = await api.createMercadoPagoPixCharge({ tabId, amount, description: `Comanda — ${storeName}` });
+      setMpCharge({ mpPaymentId: charge.mpPaymentId, status: charge.status, qrCodeBase64: charge.qrCodeBase64, qrCode: charge.qrCode });
+    } catch (e: any) {
+      console.error(e);
+      showToast(e?.message || 'Falha ao gerar cobrança Pix via Mercado Pago.', 'error');
+    } finally {
+      setMpChargeLoading(false);
+    }
+  };
+
+  const checkMercadoPagoChargeStatus = async () => {
+    if (!mpCharge) return;
+    setMpChargeChecking(true);
+    try {
+      const result = await api.getMercadoPagoPaymentStatus(mpCharge.mpPaymentId);
+      if (result) {
+        setMpCharge((prev) => (prev ? { ...prev, status: result.status } : prev));
+        if (result.status === 'approved') {
+          showToast('Pagamento confirmado pelo Mercado Pago!', 'success');
+        } else {
+          showToast(`Status atual: ${result.status}`, 'info');
+        }
+      }
+    } catch (e: any) {
+      console.error(e);
+      showToast(e?.message || 'Falha ao consultar status do pagamento.', 'error');
+    } finally {
+      setMpChargeChecking(false);
+    }
+  };
+
   const submitPasswordChange = async () => {
     if (!newPassword || !confirmPassword) {
       return showToast('Preencha a nova senha e a confirmação.', 'warning');
@@ -1031,9 +1143,9 @@ export function App() {
       await loadCompanies();
       setShowEditModal(false);
       showToast('Empresa e usuário atualizados.', 'success');
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      showToast('Falha ao atualizar empresa/usuário.', 'error');
+      showToast(e?.message || 'Falha ao atualizar empresa/usuário.', 'error');
     }
   };
 
@@ -1222,13 +1334,54 @@ export function App() {
       });
       setPublicDeliveryOrderId(result.id);
       setPublicDeliveryReceiptNumber(result.receiptNumber ?? null);
-      setPublicDeliveryStep('success');
+      if (publicDeliveryPayment === 'PIX_ONLINE') {
+        // Não envia o pedido para o estabelecimento ainda — primeiro o cliente
+        // precisa pagar e o MP confirmar via webhook.
+        setPublicPixPaymentStatus('PENDENTE');
+        setPublicDeliveryStep('payment');
+        void generatePublicPixCharge(result.id);
+      } else {
+        setPublicDeliveryStep('success');
+      }
     } catch (e: any) {
       setPublicDeliveryError(e?.message ?? 'Falha ao enviar pedido. Tente novamente.');
     } finally {
       setPublicDeliverySubmitting(false);
     }
   };
+
+  const generatePublicPixCharge = async (orderId: string) => {
+    if (!publicDeliveryCompanyId) return;
+    setPublicPixLoading(true);
+    setPublicPixError(null);
+    try {
+      const charge = await publicDeliveryApi.createPixCharge(publicDeliveryCompanyId, orderId, undefined);
+      setPublicPixCharge({ qrCode: charge.qrCode, qrCodeBase64: charge.qrCodeBase64, ticketUrl: charge.ticketUrl });
+    } catch (e: any) {
+      setPublicPixError(e?.message ?? 'Falha ao gerar cobrança Pix.');
+    } finally {
+      setPublicPixLoading(false);
+    }
+  };
+
+  // Polling do status de pagamento (tela de pagamento Pix)
+  useEffect(() => {
+    if (publicDeliveryStep !== 'payment' || !publicDeliveryOrderId) return;
+    let stopped = false;
+    const poll = async () => {
+      try {
+        const result = await publicDeliveryApi.getOrderStatus(publicDeliveryOrderId);
+        if (stopped || !result) return;
+        setPublicPixPaymentStatus(result.paymentStatus);
+        if (result.paymentStatus === 'PAGO') {
+          setPublicDeliveryStep('success');
+        }
+      } catch { /* ignore */ }
+    };
+    void poll();
+    const interval = setInterval(poll, 4000);
+    return () => { stopped = true; clearInterval(interval); };
+  }, [publicDeliveryStep, publicDeliveryOrderId]);
 
   const openTabs = useMemo(() => {
     const grouped = new Map<string, {
@@ -1372,6 +1525,7 @@ export function App() {
     paymentsCount: number;
     totalPayments: number;
   } | null>(null);
+  const [isCashOpen, setIsCashOpen] = useState(false);
   const [currentCashClosingAmount, setCurrentCashClosingAmount] = useState('');
   const [initialCashAmount, setInitialCashAmount] = useState('100.00');
   const [reportSummary, setReportSummary] = useState<{
@@ -1400,6 +1554,9 @@ export function App() {
   const [pixPendingTabId, setPixPendingTabId] = useState<string | null>(null);
   const [showPixModal, setShowPixModal] = useState(false);
   const [confirmingPix, setConfirmingPix] = useState(false);
+  const [mpCharge, setMpCharge] = useState<{ mpPaymentId: string; status: string; qrCodeBase64: string | null; qrCode: string | null } | null>(null);
+  const [mpChargeLoading, setMpChargeLoading] = useState(false);
+  const [mpChargeChecking, setMpChargeChecking] = useState(false);
 
   const closeCloseModal = () => {
     setShowCloseModal(false);
@@ -1880,14 +2037,16 @@ export function App() {
     const hasOrdersAccess = role ? ['GARCOM', 'CAIXA', 'GERENTE', 'FINANCEIRO', 'ESTOQUE', 'SUPER', 'ADMIN'].includes(role) : false;
 
     try {
-      const [tablesResult, productsResult, ordersResult, kitchenResult, cashResult, reportResult, deliveryKitchenResult] = await Promise.allSettled([
+      const [tablesResult, productsResult, ordersResult, kitchenResult, cashResult, cashOpenResult, reportResult, deliveryKitchenResult, mpStatusResult] = await Promise.allSettled([
         api.tables(),
         api.products(),
         hasOrdersAccess ? api.orders() : Promise.resolve([] as Order[]),
         hasKitchenAccess ? api.kitchenQueue() : Promise.resolve([] as Order[]),
         hasCashAccess ? api.cashRegisterCurrent() : Promise.resolve(null),
+        api.isCashRegisterOpen(),
         hasReportAccess ? api.reportSummary(reportPeriod, reportRefDate) : Promise.resolve(null),
-        hasKitchenAccess ? api.listDeliveryOrders('EM_PREPARO') : Promise.resolve([])
+        hasKitchenAccess ? api.listDeliveryOrders('EM_PREPARO') : Promise.resolve([]),
+        hasCashAccess ? api.getMercadoPagoStatus() : Promise.resolve(null)
       ]);
 
       setApiStatus('online');
@@ -1896,6 +2055,8 @@ export function App() {
       if (ordersResult.status === 'fulfilled') setOrders(ordersResult.value);
       if (kitchenResult.status === 'fulfilled') setKitchenOrders(kitchenResult.value);
       if (cashResult.status === 'fulfilled') setCashRegister(cashResult.value ?? null);
+      if (cashOpenResult.status === 'fulfilled') setIsCashOpen(cashOpenResult.value);
+      if (mpStatusResult.status === 'fulfilled' && mpStatusResult.value) setMpConnected(mpStatusResult.value.connected);
       if (reportResult.status === 'fulfilled') setReportSummary(reportResult.value ?? null);
       if (deliveryKitchenResult.status === 'fulfilled') setKitchenDeliveryOrders(deliveryKitchenResult.value as DeliveryOrder[]);
       initialLoadDone.current = true;
@@ -2296,7 +2457,8 @@ export function App() {
     const grandTotal = cartTotal + publicDeliveryFee;
     const cartCount = publicDeliveryCart.reduce((s, i) => s + i.quantity, 0);
     const paymentLabels: Record<string, string> = {
-      DINHEIRO: 'Dinheiro', PIX: 'PIX', CREDITO: 'Cartão de crédito', DEBITO: 'Cartão de débito',
+      DINHEIRO: 'Dinheiro', PIX: 'PIX (na entrega)', CREDITO: 'Cartão de crédito', DEBITO: 'Cartão de débito',
+      ...(publicDeliveryMpAvailable ? { PIX_ONLINE: 'PIX online (pagar agora)' } : {}),
     };
     return (
       <main style={{ minHeight: '100vh', background: '#f3f4f6', fontFamily: 'system-ui, sans-serif' }}>
@@ -2325,6 +2487,48 @@ export function App() {
           {publicDeliveryError && (
             <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 10, padding: '12px 16px', color: '#b91c1c', marginBottom: 16, fontSize: 14 }}>
               {publicDeliveryError}
+            </div>
+          )}
+          {publicDeliveryStep === 'payment' && (
+            <div style={{ textAlign: 'center', padding: '40px 20px' }}>
+              <div style={{ fontSize: 48 }}>💳</div>
+              <h2 style={{ margin: '12px 0 6px', fontSize: 20 }}>Pague com Pix para confirmar</h2>
+              <p style={{ color: '#6b7280', marginBottom: 20, fontSize: 14 }}>
+                Seu pedido só será enviado para <strong>{publicDeliveryCompany?.name}</strong> após a confirmação do pagamento.
+              </p>
+              {publicPixLoading && <p style={{ color: '#6b7280' }}>Gerando cobrança Pix...</p>}
+              {publicPixError && (
+                <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 10, padding: '12px 16px', color: '#b91c1c', marginBottom: 16, fontSize: 14 }}>
+                  {publicPixError}
+                  <div style={{ marginTop: 10 }}>
+                    <button type="button" onClick={() => publicDeliveryOrderId && void generatePublicPixCharge(publicDeliveryOrderId)}
+                      style={{ background: '#18201d', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 16px', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>
+                      Tentar novamente
+                    </button>
+                  </div>
+                </div>
+              )}
+              {publicPixCharge && (
+                <div style={{ background: '#fff', borderRadius: 12, padding: 20, border: '1px solid #e5e7eb', marginBottom: 20, display: 'inline-block' }}>
+                  {publicPixCharge.qrCodeBase64 && (
+                    <img src={`data:image/png;base64,${publicPixCharge.qrCodeBase64}`} alt="QR Code Pix" style={{ width: 220, height: 220, display: 'block', margin: '0 auto 12px' }} />
+                  )}
+                  {publicPixCharge.qrCode && (
+                    <div style={{ display: 'grid', gap: 6 }}>
+                      <div style={{ fontSize: 12, color: '#9ca3af' }}>Pix copia e cola</div>
+                      <textarea readOnly value={publicPixCharge.qrCode} rows={3}
+                        style={{ width: 280, fontSize: 11, padding: 8, border: '1px solid #e5e7eb', borderRadius: 8, resize: 'none' }} />
+                      <button type="button" onClick={() => { navigator.clipboard?.writeText(publicPixCharge.qrCode || ''); showToast('Código Pix copiado!', 'success'); }}
+                        style={{ background: '#18201d', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 16px', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>
+                        Copiar código
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+              <div style={{ color: '#6b7280', fontSize: 13 }}>
+                ⏳ Aguardando confirmação do pagamento... a página atualiza automaticamente.
+              </div>
             </div>
           )}
           {publicDeliveryStep === 'success' && (
@@ -2853,6 +3057,45 @@ export function App() {
                   </div>
                 </div>
               )}
+              {closePaymentMethod === 'PIX' && mpConnected && (
+                <div className="close-modal-pix" style={{ marginTop: 8 }}>
+                  <div className="close-modal-pix-label">🔄 Pix dinâmico via Mercado Pago (confirmação automática)</div>
+                  {!mpCharge ? (
+                    <button type="button" className="secondary-button" disabled={mpChargeLoading} onClick={() => void generateMercadoPagoPixCharge(tabId, total)}>
+                      {mpChargeLoading ? 'Gerando cobrança...' : `Gerar cobrança Pix — ${formatCurrency(total)}`}
+                    </button>
+                  ) : (
+                    <div style={{ display: 'grid', gap: 8 }}>
+                      {mpCharge.qrCodeBase64 && (
+                        <img
+                          src={`data:image/png;base64,${mpCharge.qrCodeBase64}`}
+                          alt="QR Code Pix Mercado Pago"
+                          style={{ width: 180, height: 180, alignSelf: 'center' }}
+                        />
+                      )}
+                      <p style={{ margin: 0, fontSize: 13 }}>
+                        Status: <strong>{mpCharge.status === 'approved' ? 'Pago ✅' : mpCharge.status}</strong>
+                      </p>
+                      <div className="close-modal-pix-actions">
+                        {mpCharge.qrCode && (
+                          <button type="button" className="secondary-button" onClick={() => {
+                            navigator.clipboard.writeText(mpCharge.qrCode!);
+                            showToast('Código Pix copiado.', 'success');
+                          }}>
+                            Copiar código Pix
+                          </button>
+                        )}
+                        <button type="button" className="secondary-button" disabled={mpChargeChecking} onClick={() => void checkMercadoPagoChargeStatus()}>
+                          {mpChargeChecking ? 'Verificando...' : 'Verificar pagamento'}
+                        </button>
+                        <button type="button" className="secondary-button" onClick={() => setMpCharge(null)}>
+                          Gerar nova cobrança
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Ações */}
               <div className="close-modal-actions">
@@ -3023,6 +3266,12 @@ export function App() {
                 <button className="secondary-button" type="button" onClick={() => void loadData()}>Atualizar</button>
               </div>
 
+              {!isCashOpen ? (
+                <div style={{ padding: '32px 16px', textAlign: 'center', color: '#789088' }}>
+                  <p style={{ fontWeight: 600, marginBottom: 6 }}>Caixa fechado</p>
+                  <p style={{ fontSize: 13 }}>As mesas ficam disponíveis para pedidos somente após a abertura do caixa.</p>
+                </div>
+              ) : (
               <div className="tables-grid">
                 {tables.map((table) => (
                   <div
@@ -3065,6 +3314,7 @@ export function App() {
                   </div>
                 ))}
               </div>
+              )}
             </div>
 
             <div className="panel order-panel">
@@ -5781,6 +6031,82 @@ export function App() {
                 Chave PIX <span>(email, CPF, CNPJ, telefone com +55 ou chave aleatória)</span>
                 <input value={storePixKey} onChange={(e) => setStorePixKey(e.target.value)} placeholder="Ex: +5511999999999 ou email@exemplo.com" autoComplete="off" />
               </label>
+              {(role === 'ADMIN' || role === 'GERENTE') && (
+                <div style={{ borderTop: '1px solid #eef2ef', paddingTop: 14, marginTop: 4 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#789088', marginBottom: 10 }}>
+                    Salão
+                  </div>
+                  <label>
+                    Quantidade de mesas
+                    <input
+                      type="number"
+                      min={0}
+                      value={storeTableCount}
+                      onChange={(e) => setStoreTableCount(e.target.value)}
+                    />
+                  </label>
+                  <p style={{ margin: '6px 0 0', fontSize: 12, color: '#9ca3af' }}>
+                    Atual: {storeTableCountOriginal}. Aumentar adiciona novas mesas numeradas em sequência; diminuir remove as de maior número que estiverem livres (mesas ocupadas não são removidas).
+                  </p>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    style={{ marginTop: 8 }}
+                    disabled={savingTableCount || Math.max(0, Math.floor(Number(storeTableCount) || 0)) === storeTableCountOriginal}
+                    onClick={() => void saveTableCount()}
+                  >
+                    {savingTableCount ? 'Salvando...' : 'Aplicar quantidade de mesas'}
+                  </button>
+                </div>
+              )}
+              {(role === 'ADMIN' || role === 'GERENTE') && (
+                <div style={{ borderTop: '1px solid #eef2ef', paddingTop: 14, marginTop: 4 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#789088', marginBottom: 10 }}>
+                    Mercado Pago
+                  </div>
+                  {mpConnected ? (
+                    <div style={{ display: 'grid', gap: 8 }}>
+                      <p style={{ margin: 0, fontSize: 13, color: '#15803d', fontWeight: 600 }}>
+                        ✓ Conectado{mpConnectedAt ? ` em ${new Date(mpConnectedAt).toLocaleString()}` : ''}
+                      </p>
+                      <p style={{ margin: 0, fontSize: 12, color: '#9ca3af' }}>
+                        As cobranças Pix dinâmicas serão geradas pela conta do Mercado Pago desta empresa.
+                      </p>
+                      <button type="button" className="secondary-button" disabled={mpSaving} onClick={() => void disconnectMercadoPago()} style={{ width: 'fit-content' }}>
+                        {mpSaving ? 'Aguarde...' : 'Desconectar'}
+                      </button>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'grid', gap: 8 }}>
+                      <p style={{ margin: 0, fontSize: 12, color: '#9ca3af' }}>
+                        Cole o <strong>Access Token</strong> da sua conta do Mercado Pago (Painel do desenvolvedor → Suas integrações → Credenciais de produção) para habilitar cobranças Pix dinâmicas com confirmação automática.
+                      </p>
+                      <label>
+                        Access Token
+                        <input
+                          type="password"
+                          value={mpAccessTokenInput}
+                          onChange={(e) => setMpAccessTokenInput(e.target.value)}
+                          placeholder="APP_USR-..."
+                          autoComplete="off"
+                        />
+                      </label>
+                      <label>
+                        Public Key <span style={{ fontSize: 11, fontWeight: 400 }}>(opcional)</span>
+                        <input
+                          value={mpPublicKeyInput}
+                          onChange={(e) => setMpPublicKeyInput(e.target.value)}
+                          placeholder="APP_USR-..."
+                          autoComplete="off"
+                        />
+                      </label>
+                      <button type="button" className="primary-button" disabled={mpSaving} onClick={() => void connectMercadoPago()} style={{ width: 'fit-content' }}>
+                        {mpSaving ? 'Conectando...' : 'Conectar Mercado Pago'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
               {/* Impressoras — só aparece no Electron */}
               {(window as any).sistema?.listPrinters && (
                 <>

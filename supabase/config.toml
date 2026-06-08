@@ -1,0 +1,13 @@
+project_id = "runszwefsbvcukzwxryp"
+
+# Authenticated company users (token read from the Authorization header and validated).
+[functions.mercado-pago-pix]
+verify_jwt = true
+
+# Public/anonymous endpoints — called by customers on the public delivery link
+# and by Mercado Pago's webhook, neither of which carries a Supabase user JWT.
+[functions.mercado-pago-public-pix]
+verify_jwt = false
+
+[functions.mercado-pago-webhook]
+verify_jwt = false

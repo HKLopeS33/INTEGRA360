@@ -148,6 +148,10 @@ export const publicDeliveryApi = {
     // Gera o UUID no cliente para não precisar de SELECT após INSERT (evita RLS anon sem policy de leitura)
     const orderId = crypto.randomUUID();
 
+    // Pedidos pagos online (Mercado Pago) só são liberados para o estabelecimento
+    // após confirmação do pagamento via webhook — ficam "aguardando pagamento" até lá.
+    const isOnlinePayment = payload.paymentMethod === 'PIX_ONLINE';
+
     const orderRes = await anonFetch('/DeliveryOrder', {
       method: 'POST',
       headers: { 'Prefer': 'return=minimal' },
@@ -161,7 +165,8 @@ export const publicDeliveryApi = {
         deliveryFee: payload.deliveryFee,
         total,
         notes: payload.notes?.trim() || null,
-        status: 'RECEBIDO',
+        status: isOnlinePayment ? 'AGUARDANDO_PAGAMENTO' : 'RECEBIDO',
+        paymentStatus: isOnlinePayment ? 'PENDENTE' : 'PAGO',
         updatedAt: new Date().toISOString(),
       }),
     });
@@ -201,12 +206,42 @@ export const publicDeliveryApi = {
     return { id: orderId, receiptNumber };
   },
 
-  getOrderStatus: async (orderId: string): Promise<{ status: string; receiptNumber: number | null } | null> => {
-    const res = await anonFetch(`/DeliveryOrder?id=eq.${encodeURIComponent(orderId)}&select=status,receiptNumber&limit=1`);
+  getOrderStatus: async (orderId: string): Promise<{ status: string; receiptNumber: number | null; paymentStatus: string } | null> => {
+    const res = await anonFetch(`/DeliveryOrder?id=eq.${encodeURIComponent(orderId)}&select=status,receiptNumber,paymentStatus&limit=1`);
     if (!res.ok) return null;
     const rows: any[] = await res.json();
     if (!rows.length) return null;
-    return { status: rows[0].status, receiptNumber: rows[0].receiptNumber ?? null };
+    return { status: rows[0].status, receiptNumber: rows[0].receiptNumber ?? null, paymentStatus: rows[0].paymentStatus ?? 'PAGO' };
+  },
+
+  // Checks whether a company has Mercado Pago connected — used to decide
+  // whether to offer the online-Pix option on the public order form.
+  isMercadoPagoAvailable: async (companyId: string): Promise<boolean> => {
+    try {
+      const res = await anonFetch(`/Company?id=eq.${encodeURIComponent(companyId)}&select=mercadoPagoConnectedAt&limit=1`);
+      if (!res.ok) return false;
+      const rows: any[] = await res.json();
+      return !!rows[0]?.mercadoPagoConnectedAt;
+    } catch {
+      return false;
+    }
+  },
+
+  // Creates a Mercado Pago Pix charge for an order that is awaiting payment.
+  // Calls the public Edge Function (no Supabase auth session for anonymous customers).
+  createPixCharge: async (companyId: string, deliveryOrderId: string, payerEmail?: string) => {
+    const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL ?? (import.meta as any).env.NEXT_PUBLIC_SUPABASE_URL;
+    const anonKey = (import.meta as any).env.VITE_SUPABASE_ANON_KEY ?? (import.meta as any).env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+    const res = await fetch(`${supabaseUrl}/functions/v1/mercado-pago-public-pix`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${anonKey}`, 'apikey': anonKey },
+      body: JSON.stringify({ companyId, deliveryOrderId, payerEmail }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data?.error) {
+      throw new Error(data?.error || 'Falha ao gerar cobrança Pix.');
+    }
+    return data as { mpPaymentId: string; status: string; qrCode: string | null; qrCodeBase64: string | null; ticketUrl: string | null };
   },
 };
 
@@ -662,8 +697,11 @@ export const api = {
       .from('DeliveryOrder')
       .select('id,customerName,customerPhone,customerAddress,status,paymentMethod,deliveryFee,total,notes,createdAt,closedAt')
       .eq('companyId', user.companyId)
+      // Pedidos com pagamento online pendente ainda não foram confirmados pelo
+      // Mercado Pago — não devem aparecer para o estabelecimento até o pagamento ser aprovado.
+      .neq('status', 'AGUARDANDO_PAGAMENTO')
       .order('createdAt', { ascending: false });
-    if (status === 'all') { /* sem filtro — retorna todos */ }
+    if (status === 'all') { /* sem filtro — retorna todos (exceto aguardando pagamento) */ }
     else if (status) query = query.eq('status', status);
     else query = query.neq('status', 'ENTREGUE').neq('status', 'CANCELADO');
 
@@ -1450,6 +1488,20 @@ export const api = {
     }));
   },
 
+  // Lightweight check available to any company user (e.g. waiters) — used to
+  // gate table/order access until the cashier opens the register for the day.
+  isCashRegisterOpen: async () => {
+    const user = await requireCompanyUser();
+    const { data, error } = await supabase
+      .from('CashRegister')
+      .select('id')
+      .eq('companyId', user.companyId)
+      .eq('status', 'ABERTO')
+      .maybeSingle();
+    if (error) throwSupabaseError(error, 'Falha ao verificar status do caixa.');
+    return !!data;
+  },
+
   cashRegisterCurrent: async () => {
     const user = await requireCompanyUserWithRoles(['ADMIN', 'CAIXA', 'FINANCEIRO', 'GERENTE']);
     const { data: cashRegister, error } = await supabase
@@ -1779,6 +1831,130 @@ export const api = {
     }
 
     return { success: true };
+  },
+
+  // --- Mercado Pago integration ---
+  // The access token is write-only from the client's perspective: it's saved
+  // via a SECURITY DEFINER RPC and never selectable afterwards. Charges are
+  // created/queried through an Edge Function that holds the only readable copy
+  // (via the service-role key), so the secret never reaches the browser bundle.
+
+  connectMercadoPago: async (accessToken: string, publicKey?: string) => {
+    await requireCompanyUserWithRoles(['ADMIN', 'GERENTE']);
+    const { error } = await supabase.rpc('set_company_mercado_pago_token', {
+      p_access_token: accessToken,
+      p_public_key: publicKey ?? null
+    });
+    if (error) throwSupabaseError(error, 'Falha ao conectar Mercado Pago.');
+    return { success: true };
+  },
+
+  disconnectMercadoPago: async () => {
+    await requireCompanyUserWithRoles(['ADMIN', 'GERENTE']);
+    const { error } = await supabase.rpc('set_company_mercado_pago_token', {
+      p_access_token: '',
+      p_public_key: null
+    });
+    if (error) throwSupabaseError(error, 'Falha ao desconectar Mercado Pago.');
+    return { success: true };
+  },
+
+  getMercadoPagoStatus: async (): Promise<{ connected: boolean; publicKey: string | null; connectedAt: string | null }> => {
+    await requireCompanyUser();
+    const { data, error } = await supabase.rpc('get_company_mercado_pago_status');
+    if (error) throwSupabaseError(error, 'Falha ao consultar status do Mercado Pago.');
+    const row = Array.isArray(data) ? data[0] : data;
+    return {
+      connected: !!row?.connected,
+      publicKey: row?.public_key ?? null,
+      connectedAt: row?.connected_at ?? null
+    };
+  },
+
+  createMercadoPagoPixCharge: async (payload: { tabId?: string; deliveryOrderId?: string; amount: number; description?: string; payerEmail?: string }) => {
+    await requireCompanyUser();
+    const { data, error } = await supabase.functions.invoke('mercado-pago-pix', { body: payload });
+    if (error) {
+      const message = (error as any)?.context?.error || (error as any)?.message || 'Falha ao gerar cobrança Pix via Mercado Pago.';
+      throw new Error(message);
+    }
+    if (data?.error) throw new Error(data.error);
+    return data as { mpPaymentId: string; status: string; qrCode: string | null; qrCodeBase64: string | null; ticketUrl: string | null };
+  },
+
+  getMercadoPagoPaymentStatus: async (mpPaymentId: string) => {
+    await requireCompanyUser();
+    const { data, error } = await supabase
+      .from('MercadoPagoPayment')
+      .select('mpPaymentId,status,paidAt')
+      .eq('mpPaymentId', mpPaymentId)
+      .maybeSingle();
+    if (error) throwSupabaseError(error, 'Falha ao consultar status do pagamento.');
+    return data ?? null;
+  },
+
+  getMyCompanyTableCount: async () => {
+    const user = await requireCompanyUser();
+    const { count, error } = await supabase
+      .from('RestaurantTable')
+      .select('id', { count: 'exact', head: true })
+      .eq('companyId', user.companyId);
+    if (error) throwSupabaseError(error, 'Falha ao contar mesas da empresa.');
+    return count ?? 0;
+  },
+
+  // Adjusts the number of tables for the current user's company up or down to match `tableCount`.
+  // Available to ADMIN/GERENTE (store owners/managers) for self-service from "Ajustes".
+  // When increasing, appends new numbered tables after the current highest number.
+  // When decreasing, removes the highest-numbered EMPTY tables first (never deletes occupied ones).
+  setMyCompanyTableCount: async (tableCount: number) => {
+    const user = await requireCompanyUserWithRoles(['ADMIN', 'GERENTE']);
+    const companyId = user.companyId;
+    const target = Math.max(0, Math.floor(Number(tableCount) || 0));
+
+    const { data: tables, error: fetchError } = await supabase
+      .from('RestaurantTable')
+      .select('id,number,status')
+      .eq('companyId', companyId)
+      .order('number', { ascending: true });
+    if (fetchError) throwSupabaseError(fetchError, 'Falha ao carregar mesas da empresa.');
+
+    const current = tables ?? [];
+    const currentCount = current.length;
+
+    if (target === currentCount) {
+      return { success: true, added: 0, removed: 0, total: currentCount };
+    }
+
+    if (target > currentCount) {
+      const highest = current.reduce((max, t: any) => Math.max(max, Number(t.number) || 0), 0);
+      const toAdd = target - currentCount;
+      const newRows = Array.from({ length: toAdd }, (_, index) => ({
+        companyId,
+        number: highest + index + 1,
+        name: `Mesa ${highest + index + 1}`,
+        capacity: 4
+      }));
+      const { error: insertError } = await supabase.from('RestaurantTable').insert(newRows);
+      if (insertError) throwSupabaseError(insertError, 'Falha ao adicionar mesas.');
+      return { success: true, added: toAdd, removed: 0, total: target };
+    }
+
+    // target < currentCount: remove highest-numbered tables that are not occupied
+    const toRemove = currentCount - target;
+    const removable = [...current]
+      .filter((t: any) => String(t.status ?? '').toUpperCase() !== 'OCUPADA')
+      .sort((a: any, b: any) => (Number(b.number) || 0) - (Number(a.number) || 0))
+      .slice(0, toRemove);
+
+    if (removable.length < toRemove) {
+      throw new Error(`Não é possível remover ${toRemove} mesa(s): existem mesas ocupadas entre as que seriam removidas. Libere-as antes de diminuir a quantidade.`);
+    }
+
+    const idsToRemove = removable.map((t: any) => t.id);
+    const { error: deleteError } = await supabase.from('RestaurantTable').delete().in('id', idsToRemove);
+    if (deleteError) throwSupabaseError(deleteError, 'Falha ao remover mesas.');
+    return { success: true, added: 0, removed: idsToRemove.length, total: target };
   },
 
   suspendCompany: async (companyId: string) => {
