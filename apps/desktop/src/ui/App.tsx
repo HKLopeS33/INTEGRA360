@@ -1,5 +1,5 @@
 import { type FormEvent, type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Banknote, ChefHat, LayoutDashboard, LogOut, ReceiptText, Settings, ShoppingBag, Utensils, Users, AlertTriangle, CheckCircle, Clock, TrendingUp, DollarSign, ShoppingCart, Target, MoreVertical, X, Info, AlertCircle, Bike, Phone, MapPin, User, Plus, Trash2, Package } from 'lucide-react';
+import { Banknote, ChefHat, LayoutDashboard, LogOut, ReceiptText, Settings, ShoppingBag, Utensils, Users, AlertTriangle, CheckCircle, Clock, TrendingUp, DollarSign, ShoppingCart, Target, MoreVertical, X, Info, AlertCircle, Bike, Phone, MapPin, User, Plus, Trash2, Package, Building, Activity } from 'lucide-react';
 import type { DeliveryOrder } from './types.js';
 import { generateKitchenTicketHTML } from './receipt';
 
@@ -4595,11 +4595,17 @@ export function App() {
         {activeModule === 'cadastros' && (
           <section className="module-grid">
             <div className="panel">
-              <div className="panel-header">
+              <div className="panel-header super-panel-header">
                 <div>
                   <span className="eyebrow">Novo cliente</span>
                   <h2>Criar restaurante / login</h2>
                 </div>
+              </div>
+              <div style={{ background: 'linear-gradient(135deg, #667eea22 0%, #764ba222 100%)', borderRadius: 10, padding: '14px 16px', marginBottom: 20, border: '1.5px solid #c4b5fd', display: 'flex', alignItems: 'center', gap: 12 }}>
+                <Building size={22} style={{ color: '#7c3aed', flexShrink: 0 }} />
+                <p style={{ margin: 0, fontSize: 13, color: '#4c1d95' }}>
+                  Preencha os dados abaixo para criar um novo restaurante e seu administrador. O acesso será liberado imediatamente após a criação.
+                </p>
               </div>
 
               <div style={{ padding: 12 }} className="product-form">
@@ -5186,11 +5192,11 @@ export function App() {
                   <div style={{ display: 'grid', gap: 24 }}>
                     {topProductsReport && (
                       <div>
-                        <h3 style={{ marginBottom: 18, fontSize: 18, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <Target size={24} style={{ color: '#667eea' }} />
+                        <h3 style={{ marginBottom: 16, fontSize: 17, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <Target size={22} style={{ color: '#667eea' }} />
                           Top 10 Produtos Mais Vendidos
                         </h3>
-                        <div style={{ overflowX: 'auto', borderRadius: 10, border: '1px solid #e5e7eb' }}>
+                        <div className="super-table-wrap" style={{ overflowX: 'auto', borderRadius: 10, border: '1px solid #e5e7eb' }}>
                           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                             <thead>
                               <tr style={{ borderBottom: '2px solid #e5e7eb', backgroundColor: '#f9fafb' }}>
@@ -5221,11 +5227,11 @@ export function App() {
 
                     {lowPerformanceReport && (
                       <div>
-                        <h3 style={{ marginBottom: 18, fontSize: 18, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <AlertTriangle size={24} style={{ color: '#f59e0b' }} />
-                          Produtos com Baixo Desempenho (menos de 5 vendas)
+                        <h3 style={{ marginBottom: 16, fontSize: 17, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <AlertTriangle size={22} style={{ color: '#f59e0b' }} />
+                          Produtos com Baixo Desempenho <span style={{ fontSize: 13, fontWeight: 500, color: '#9ca3af' }}>(menos de 5 vendas)</span>
                         </h3>
-                        <div style={{ overflowX: 'auto', borderRadius: 10, border: '2px solid #fbbf24' }}>
+                        <div className="super-table-wrap" style={{ overflowX: 'auto', borderRadius: 10, border: '2px solid #fbbf24' }}>
                           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                             <thead>
                               <tr style={{ borderBottom: '2px solid #fbbf24', backgroundColor: '#fffbeb' }}>
@@ -5260,24 +5266,33 @@ export function App() {
               {/* Payments Report */}
               {reportsTab === 'payments' && (
                 <div>
-                  <div style={{ display: 'grid', gap: 24 }}>
+                  <div style={{ display: 'grid', gap: 28 }}>
                     {paymentMethodsReport && (
                       <div>
-                        <h3 style={{ marginBottom: 18, fontSize: 18, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <Banknote size={24} style={{ color: '#10b981' }} />
-                          Distribuição de Formas de Pagamento
+                        <h3 style={{ marginBottom: 16, fontSize: 17, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <Banknote size={22} style={{ color: '#10b981' }} />
+                          Formas de Pagamento
                         </h3>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14, marginBottom: 20 }}>
-                          {paymentMethodsReport.methods?.map((method: any) => (
-                            <div key={method.method} className="panel" style={{ padding: 18, borderRadius: 10, border: '2px solid #e5e7eb' }}>
-                              <div style={{ color: '#10b981', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>{method.method}</div>
-                              <div style={{ fontSize: 22, fontWeight: 800, color: '#1f2937', marginBottom: 8 }}>{formatCurrency(method.totalAmount)}</div>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span style={{ color: '#6b7280', fontSize: 12 }}>{method.count} transações</span>
-                                <span style={{ backgroundColor: '#d1fae5', color: '#065f46', padding: '4px 10px', borderRadius: 6, fontSize: 12, fontWeight: 600 }}>{method.percentage}%</span>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+                          {paymentMethodsReport.methods?.map((method: any, idx: number) => {
+                            const colors = [
+                              { bg: '#f0fdf4', border: '#86efac', label: '#166534', badge: '#dcfce7', badgeText: '#166534' },
+                              { bg: '#eff6ff', border: '#93c5fd', label: '#1e40af', badge: '#dbeafe', badgeText: '#1e40af' },
+                              { bg: '#fdf4ff', border: '#d8b4fe', label: '#6b21a8', badge: '#f3e8ff', badgeText: '#6b21a8' },
+                              { bg: '#fff7ed', border: '#fdba74', label: '#9a3412', badge: '#ffedd5', badgeText: '#9a3412' },
+                            ];
+                            const c = colors[idx % colors.length];
+                            return (
+                              <div key={method.method} style={{ padding: 16, borderRadius: 10, border: `2px solid ${c.border}`, background: c.bg }}>
+                                <div style={{ color: c.label, fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>{method.method}</div>
+                                <div style={{ fontSize: 22, fontWeight: 800, color: '#1f2937', marginBottom: 10 }}>{formatCurrency(method.totalAmount)}</div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <span style={{ color: '#6b7280', fontSize: 12 }}>{method.count} transações</span>
+                                  <span style={{ backgroundColor: c.badge, color: c.badgeText, padding: '3px 10px', borderRadius: 6, fontSize: 12, fontWeight: 700 }}>{method.percentage}%</span>
+                                </div>
                               </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </div>
                     )}
@@ -5335,85 +5350,121 @@ export function App() {
 
               {/* Users Report */}
               {reportsTab === 'users' && (
-                <div>
-                  <div style={{ display: 'grid', gap: 24 }}>
-                    {userActivityReport && (
-                      <div>
-                        <h3>Usuários Mais Ativos</h3>
-                        <div style={{ overflowX: 'auto' }}>
-                          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                            <thead>
-                              <tr style={{ borderBottom: '2px solid #e5e7eb' }}>
-                                <th style={{ padding: 12, textAlign: 'left', fontWeight: 600 }}>Usuário</th>
-                                <th style={{ padding: 12, textAlign: 'left', fontWeight: 600 }}>Email</th>
-                                <th style={{ padding: 12, textAlign: 'left', fontWeight: 600 }}>Função</th>
-                                <th style={{ padding: 12, textAlign: 'right', fontWeight: 600 }}>Pedidos</th>
-                                <th style={{ padding: 12, textAlign: 'right', fontWeight: 600 }}>Itens Vendidos</th>
+                <div style={{ display: 'grid', gap: 28 }}>
+                  {userActivityReport && (
+                    <div>
+                      <h3 style={{ marginBottom: 16, fontSize: 17, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <Users size={22} style={{ color: '#667eea' }} />
+                        Usuários Mais Ativos
+                      </h3>
+                      <div className="super-table-wrap" style={{ overflowX: 'auto', borderRadius: 10, border: '1px solid #e5e7eb' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 520 }}>
+                          <thead>
+                            <tr style={{ borderBottom: '2px solid #e5e7eb', backgroundColor: '#f9fafb' }}>
+                              <th style={{ padding: '13px 16px', textAlign: 'left', fontWeight: 700, color: '#1f2937', fontSize: 13 }}>Usuário</th>
+                              <th style={{ padding: '13px 16px', textAlign: 'left', fontWeight: 700, color: '#1f2937', fontSize: 13 }}>Email</th>
+                              <th style={{ padding: '13px 16px', textAlign: 'center', fontWeight: 700, color: '#1f2937', fontSize: 13 }}>Função</th>
+                              <th style={{ padding: '13px 16px', textAlign: 'right', fontWeight: 700, color: '#1f2937', fontSize: 13 }}>Pedidos</th>
+                              <th style={{ padding: '13px 16px', textAlign: 'right', fontWeight: 700, color: '#1f2937', fontSize: 13 }}>Itens</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {userActivityReport.users?.length === 0 && (
+                              <tr><td colSpan={5} style={{ padding: 32, textAlign: 'center', color: '#9ca3af' }}>Nenhum usuário ativo no período</td></tr>
+                            )}
+                            {userActivityReport.users?.map((user: any, idx: number) => (
+                              <tr key={user.userId} style={{ borderBottom: '1px solid #f3f4f6', backgroundColor: idx % 2 === 0 ? '#fff' : '#f9fafb' }}>
+                                <td style={{ padding: '13px 16px', fontWeight: 600, color: '#1f2937' }}>{user.userName}</td>
+                                <td style={{ padding: '13px 16px', color: '#6b7280', fontSize: 13 }}>{user.userEmail}</td>
+                                <td style={{ padding: '13px 16px', textAlign: 'center' }}>
+                                  <span style={{ background: '#ede9fe', color: '#5b21b6', padding: '3px 10px', borderRadius: 6, fontSize: 12, fontWeight: 600 }}>{user.userRole}</span>
+                                </td>
+                                <td style={{ padding: '13px 16px', textAlign: 'right', fontWeight: 700, color: '#1f2937' }}>{user.ordersCreated}</td>
+                                <td style={{ padding: '13px 16px', textAlign: 'right', color: '#6b7280' }}>{user.itemsSold}</td>
                               </tr>
-                            </thead>
-                            <tbody>
-                              {userActivityReport.users?.map((user: any) => (
-                                <tr key={user.userId} style={{ borderBottom: '1px solid #ececec' }}>
-                                  <td style={{ padding: 12 }}>{user.userName}</td>
-                                  <td style={{ padding: 12 }}>{user.userEmail}</td>
-                                  <td style={{ padding: 12 }}>{user.userRole}</td>
-                                  <td style={{ padding: 12, textAlign: 'right' }}>{user.ordersCreated}</td>
-                                  <td style={{ padding: 12, textAlign: 'right' }}>{user.itemsSold}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
-                    )}
+                    </div>
+                  )}
 
-                    {subscriptionReport && (
-                      <div>
-                        <h3>Status de Assinaturas</h3>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 12 }}>
-                          {subscriptionReport.subscriptions?.map((sub: any) => (
-                            <div key={sub.status} className="panel" style={{ padding: 16 }}>
-                              <div style={{ color: '#6b7280', fontSize: 12, fontWeight: 800 }}>{sub.status} ({sub.count})</div>
-                              <div style={{ marginTop: 8, fontSize: 12, color: '#5d6c66' }}>
-                                {sub.companies?.slice(0, 3).map((c: any) => (
-                                  <div key={c.companyId}>{c.companyName}</div>
+                  {subscriptionReport && (
+                    <div>
+                      <h3 style={{ marginBottom: 16, fontSize: 17, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <CheckCircle size={22} style={{ color: '#10b981' }} />
+                        Status de Assinaturas
+                      </h3>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
+                        {subscriptionReport.subscriptions?.map((sub: any) => {
+                          const isAtivo = sub.status?.toUpperCase() === 'ATIVO';
+                          const isSuspend = sub.status?.toUpperCase().includes('SUSPEND') || sub.status?.toUpperCase().includes('INATIVO');
+                          const bg = isAtivo ? '#f0fdf4' : isSuspend ? '#fef2f2' : '#fffbeb';
+                          const border = isAtivo ? '#86efac' : isSuspend ? '#fca5a5' : '#fcd34d';
+                          const labelColor = isAtivo ? '#166534' : isSuspend ? '#991b1b' : '#92400e';
+                          return (
+                            <div key={sub.status} className="panel" style={{ padding: 16, background: bg, border: `2px solid ${border}`, borderRadius: 10 }}>
+                              <div style={{ color: labelColor, fontSize: 13, fontWeight: 800, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                {sub.status} <span style={{ background: border, color: labelColor, borderRadius: 99, padding: '2px 8px', fontSize: 12 }}>{sub.count}</span>
+                              </div>
+                              <div style={{ marginTop: 6, fontSize: 12, color: '#5d6c66' }}>
+                                {sub.companies?.slice(0, 4).map((c: any) => (
+                                  <div key={c.companyId} style={{ padding: '2px 0', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>• {c.companyName}</div>
                                 ))}
-                                {sub.companies?.length > 3 && <div style={{ fontStyle: 'italic' }}>+ {sub.companies.length - 3} mais</div>}
+                                {sub.companies?.length > 4 && <div style={{ fontStyle: 'italic', marginTop: 4, color: '#9ca3af' }}>+{sub.companies.length - 4} mais</div>}
                               </div>
                             </div>
-                          ))}
-                        </div>
+                          );
+                        })}
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
               )}
 
               {/* Audit Report */}
               {reportsTab === 'audit' && auditLogReport && (
                 <div>
-                  <h3>Histórico de Auditoria (últimas 100 ações)</h3>
-                  <div style={{ overflowX: 'auto', maxHeight: '60vh', overflowY: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <h3 style={{ marginBottom: 16, fontSize: 17, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <Activity size={22} style={{ color: '#f59e0b' }} />
+                    Histórico de Auditoria <span style={{ fontSize: 13, fontWeight: 500, color: '#9ca3af' }}>(últimas 100 ações)</span>
+                  </h3>
+                  <div className="super-table-wrap" style={{ overflowX: 'auto', maxHeight: '62vh', overflowY: 'auto', borderRadius: 10, border: '1px solid #e5e7eb' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 560 }}>
                       <thead>
-                        <tr style={{ borderBottom: '2px solid #e5e7eb', position: 'sticky', top: 0, background: '#f9fafb' }}>
-                          <th style={{ padding: 12, textAlign: 'left', fontWeight: 600 }}>Data/Hora</th>
-                          <th style={{ padding: 12, textAlign: 'left', fontWeight: 600 }}>Usuário</th>
-                          <th style={{ padding: 12, textAlign: 'left', fontWeight: 600 }}>Ação</th>
-                          <th style={{ padding: 12, textAlign: 'left', fontWeight: 600 }}>Entidade</th>
-                          <th style={{ padding: 12, textAlign: 'left', fontWeight: 600 }}>Restaurante</th>
+                        <tr style={{ borderBottom: '2px solid #e5e7eb', backgroundColor: '#f9fafb', position: 'sticky', top: 0, zIndex: 1 }}>
+                          <th style={{ padding: '13px 16px', textAlign: 'left', fontWeight: 700, color: '#1f2937', fontSize: 13, whiteSpace: 'nowrap' }}>Data/Hora</th>
+                          <th style={{ padding: '13px 16px', textAlign: 'left', fontWeight: 700, color: '#1f2937', fontSize: 13 }}>Usuário</th>
+                          <th style={{ padding: '13px 16px', textAlign: 'center', fontWeight: 700, color: '#1f2937', fontSize: 13 }}>Ação</th>
+                          <th style={{ padding: '13px 16px', textAlign: 'left', fontWeight: 700, color: '#1f2937', fontSize: 13 }}>Entidade</th>
+                          <th style={{ padding: '13px 16px', textAlign: 'left', fontWeight: 700, color: '#1f2937', fontSize: 13 }}>Restaurante</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {auditLogReport.logs?.map((log: any) => (
-                          <tr key={log.id} style={{ borderBottom: '1px solid #ececec' }}>
-                            <td style={{ padding: 12, fontSize: 12 }}>{new Date(log.createdAt).toLocaleString('pt-BR')}</td>
-                            <td style={{ padding: 12 }}>{log.userName}</td>
-                            <td style={{ padding: 12 }}><span style={{ background: '#dbeafe', padding: '2px 6px', borderRadius: 4, fontSize: 12 }}>{log.action}</span></td>
-                            <td style={{ padding: 12, fontSize: 12 }}>{log.entity}</td>
-                            <td style={{ padding: 12 }}>{log.companyName}</td>
-                          </tr>
-                        ))}
+                        {auditLogReport.logs?.length === 0 && (
+                          <tr><td colSpan={5} style={{ padding: 32, textAlign: 'center', color: '#9ca3af' }}>Nenhuma ação registrada no período</td></tr>
+                        )}
+                        {auditLogReport.logs?.map((log: any, idx: number) => {
+                          const action = (log.action || '').toUpperCase();
+                          const actionStyle = action.includes('DELETE') || action.includes('DELET')
+                            ? { bg: '#fee2e2', color: '#991b1b' }
+                            : action.includes('CREATE') || action.includes('INSERT')
+                            ? { bg: '#dcfce7', color: '#166534' }
+                            : action.includes('UPDATE') || action.includes('EDIT')
+                            ? { bg: '#fef3c7', color: '#92400e' }
+                            : { bg: '#dbeafe', color: '#1e40af' };
+                          return (
+                            <tr key={log.id} style={{ borderBottom: '1px solid #f3f4f6', backgroundColor: idx % 2 === 0 ? '#fff' : '#f9fafb' }}>
+                              <td style={{ padding: '11px 16px', fontSize: 12, color: '#6b7280', whiteSpace: 'nowrap' }}>{new Date(log.createdAt).toLocaleString('pt-BR')}</td>
+                              <td style={{ padding: '11px 16px', fontWeight: 600, color: '#1f2937', fontSize: 13 }}>{log.userName}</td>
+                              <td style={{ padding: '11px 16px', textAlign: 'center' }}>
+                                <span style={{ background: actionStyle.bg, color: actionStyle.color, padding: '3px 10px', borderRadius: 6, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{log.action}</span>
+                              </td>
+                              <td style={{ padding: '11px 16px', fontSize: 12, color: '#6b7280' }}>{log.entity}</td>
+                              <td style={{ padding: '11px 16px', color: '#374151', fontSize: 13 }}>{log.companyName}</td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -5422,59 +5473,58 @@ export function App() {
 
               {/* Health Report */}
               {reportsTab === 'health' && healthReport && (
-                <div>
-                  <h3>Saúde do Sistema</h3>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginBottom: 20 }}>
-                    <div className="panel" style={{ padding: 16 }}>
-                      <div style={{ color: '#6b7280', fontSize: 12, fontWeight: 800 }}>Empresas</div>
-                      <div style={{ fontSize: 24, fontWeight: 800, marginTop: 6 }}>{healthReport.companies?.total}</div>
-                      <div style={{ color: '#9ca3af', fontSize: 12, marginTop: 4 }}>
-                        {healthReport.companies?.byStatus?.map((s: any) => (
-                          <div key={s.status}>{s.status}: {s.count}</div>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="panel" style={{ padding: 16 }}>
-                      <div style={{ color: '#6b7280', fontSize: 12, fontWeight: 800 }}>Usuários Totais</div>
-                      <div style={{ fontSize: 24, fontWeight: 800, marginTop: 6 }}>{healthReport.users?.total}</div>
-                      <div style={{ color: '#9ca3af', fontSize: 12, marginTop: 4, maxHeight: 60, overflowY: 'auto' }}>
-                        {healthReport.users?.byRole?.map((r: any) => (
-                          <div key={r.role}>{r.role}: {r.count}</div>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="panel" style={{ padding: 16 }}>
-                      <div style={{ color: '#6b7280', fontSize: 12, fontWeight: 800 }}>Mesas Cadastradas</div>
-                      <div style={{ fontSize: 24, fontWeight: 800, marginTop: 6 }}>{healthReport.tables}</div>
-                    </div>
-                    <div className="panel" style={{ padding: 16 }}>
-                      <div style={{ color: '#6b7280', fontSize: 12, fontWeight: 800 }}>Produtos Cadastrados</div>
-                      <div style={{ fontSize: 24, fontWeight: 800, marginTop: 6 }}>{healthReport.products}</div>
-                    </div>
-                    <div className="panel" style={{ padding: 16 }}>
-                      <div style={{ color: '#6b7280', fontSize: 12, fontWeight: 800 }}>Pedidos Processados</div>
-                      <div style={{ fontSize: 24, fontWeight: 800, marginTop: 6 }}>{healthReport.orders}</div>
-                    </div>
-                    <div className="panel" style={{ padding: 16 }}>
-                      <div style={{ color: '#6b7280', fontSize: 12, fontWeight: 800 }}>Assinaturas Ativas</div>
-                      <div style={{ fontSize: 24, fontWeight: 800, marginTop: 6 }}>{healthReport.subscriptions?.active}</div>
+                <div style={{ display: 'grid', gap: 28 }}>
+                  <div>
+                    <h3 style={{ marginBottom: 16, fontSize: 17, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <Activity size={22} style={{ color: '#ef4444' }} />
+                      Saúde do Sistema
+                    </h3>
+                    <div className="super-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 14 }}>
+                      {[
+                        { label: 'Empresas', value: healthReport.companies?.total ?? 0, icon: <Building size={26} style={{ opacity: 0.7 }} />, bg: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                          sub: healthReport.companies?.byStatus?.map((s: any) => `${s.status}: ${s.count}`).join(' · ') },
+                        { label: 'Usuários', value: healthReport.users?.total ?? 0, icon: <Users size={26} style={{ opacity: 0.7 }} />, bg: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+                          sub: healthReport.users?.byRole?.slice(0,3).map((r: any) => `${r.role}: ${r.count}`).join(' · ') },
+                        { label: 'Assinaturas Ativas', value: healthReport.subscriptions?.active ?? 0, icon: <CheckCircle size={26} style={{ opacity: 0.7 }} />, bg: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)', sub: null },
+                        { label: 'Mesas', value: healthReport.tables ?? 0, icon: <ShoppingBag size={26} style={{ opacity: 0.7 }} />, bg: 'linear-gradient(135deg, #fa8231 0%, #f7b731 100%)', sub: null },
+                        { label: 'Produtos', value: healthReport.products ?? 0, icon: <ShoppingCart size={26} style={{ opacity: 0.7 }} />, bg: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)', sub: null },
+                        { label: 'Pedidos', value: healthReport.orders ?? 0, icon: <TrendingUp size={26} style={{ opacity: 0.7 }} />, bg: 'linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%)', sub: null },
+                      ].map((kpi) => (
+                        <div key={kpi.label} className="panel" style={{ padding: 16, background: kpi.bg, color: '#fff', borderRadius: 12 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 11, fontWeight: 600, opacity: 0.9, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{kpi.label}</div>
+                              <div className="kpi-value" style={{ fontSize: 28, fontWeight: 800, lineHeight: 1.1 }}>{kpi.value}</div>
+                              {kpi.sub && <div style={{ fontSize: 11, opacity: 0.8, marginTop: 6, lineHeight: 1.4 }}>{kpi.sub}</div>}
+                            </div>
+                            <span className="kpi-icon">{kpi.icon}</span>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                  
-                  {hourlyPeaksReport && (
+
+                  {hourlyPeaksReport && hourlyPeaksReport.peakHours?.length > 0 && (
                     <div>
-                      <h4>Horários de Pico (Top 8)</h4>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
-                        {hourlyPeaksReport.peakHours?.map((peak: any) => (
-                          <div key={peak.hour} className="panel" style={{ padding: 12 }}>
-                            <div style={{ fontWeight: 600 }}>{peak.hour}</div>
-                            <div style={{ marginTop: 8, fontSize: 12 }}>
-                              <div>Pedidos: {peak.orders}</div>
-                              <div>Itens: {peak.items}</div>
-                              <div style={{ fontWeight: 600, marginTop: 4 }}>{formatCurrency(peak.revenue)}</div>
+                      <h3 style={{ marginBottom: 16, fontSize: 17, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <Clock size={22} style={{ color: '#8b5cf6' }} />
+                        Horários de Pico <span style={{ fontSize: 13, fontWeight: 500, color: '#9ca3af' }}>(Top 8)</span>
+                      </h3>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
+                        {hourlyPeaksReport.peakHours?.map((peak: any, idx: number) => {
+                          const intensity = idx === 0 ? '#7c3aed' : idx <= 2 ? '#8b5cf6' : '#a78bfa';
+                          return (
+                            <div key={peak.hour} className="panel" style={{ padding: 14, borderRadius: 10, border: `2px solid ${idx === 0 ? '#7c3aed' : '#e5e7eb'}`, position: 'relative', overflow: 'hidden' }}>
+                              {idx === 0 && <div style={{ position: 'absolute', top: 6, right: 8, fontSize: 10, fontWeight: 800, color: '#7c3aed', textTransform: 'uppercase', letterSpacing: '0.05em' }}>🔥 Pico</div>}
+                              <div style={{ fontSize: 18, fontWeight: 800, color: intensity, marginBottom: 8 }}>{peak.hour}</div>
+                              <div style={{ fontSize: 12, color: '#6b7280', display: 'grid', gap: 3 }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Pedidos</span><strong style={{ color: '#1f2937' }}>{peak.orders}</strong></div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Itens</span><strong style={{ color: '#1f2937' }}>{peak.items}</strong></div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}><span>Receita</span><strong style={{ color: '#059669' }}>{formatCurrency(peak.revenue)}</strong></div>
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   )}
