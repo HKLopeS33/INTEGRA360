@@ -53,7 +53,10 @@
       "dist/**/*",
       "dist/main.js",
       "dist/preload.cjs",
-      "dist/package.json"
+      "dist/package.json",
+      "dist/icon.ico",
+      "dist/icon.png",
+      "dist/splash.png"
     ],
     "win": {
       "target": [

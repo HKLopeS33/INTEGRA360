@@ -10,12 +10,19 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const devUrl = process.env.VITE_DEV_SERVER_URL ?? 'http://127.0.0.1:5173';
 
 const createWindow = () => {
+  // Icon path: in packaged mode lives in resources/app/dist/; in dev, in electron/
+  const iconFile = process.platform === 'win32' ? 'icon.ico' : 'icon.png';
+  const iconPath = app.isPackaged
+    ? path.join(process.resourcesPath, 'app', 'dist', iconFile)
+    : path.join(__dirname, '..', 'assets', iconFile);
+
   const window = new BrowserWindow({
     width: 1360,
     height: 860,
     minWidth: 1100,
     minHeight: 720,
     title: 'Integra360',
+    icon: iconPath,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       nodeIntegration: false,

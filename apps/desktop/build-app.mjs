@@ -101,6 +101,12 @@ async function build() {
     // preload.cjs usa require() — extensão .cjs garante CommonJS independente do package.json pai
     await copyFile(path.join(__dirname, 'electron/preload.cjs'), path.join(distDir, 'preload.cjs'));
 
+    // Copia os ícones para dist/ para que fiquem acessíveis no app empacotado
+    const iconsDir = path.join(__dirname, 'assets');
+    await copyFile(path.join(iconsDir, 'icon.ico'), path.join(distDir, 'icon.ico')).catch(() => {});
+    await copyFile(path.join(iconsDir, 'icon.png'), path.join(distDir, 'icon.png')).catch(() => {});
+    await copyFile(path.join(iconsDir, 'splash.png'), path.join(distDir, 'splash.png')).catch(() => {});
+
     console.log('🔨 Empacotando com electron-builder...');
     let nsisOk = false;
     try {
