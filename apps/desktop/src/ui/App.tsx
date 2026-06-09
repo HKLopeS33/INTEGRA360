@@ -239,6 +239,10 @@ export function App() {
   const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'error'>('idle');
   const [updateVersion, setUpdateVersion] = useState<string | null>(null);
   const [updateProgress, setUpdateProgress] = useState<number>(0);
+  // Android in-app updater
+  const [androidUpdateAvailable, setAndroidUpdateAvailable] = useState(false);
+  const [androidUpdateVersion, setAndroidUpdateVersion] = useState<string | null>(null);
+  const [androidUpdateUrl, setAndroidUpdateUrl] = useState<string | null>(null);
   const [activeModule, setActiveModule] = useState<ActiveModule>('mesas');
   const [newProductName, setNewProductName] = useState('');
   const [newProductDescription, setNewProductDescription] = useState('');
@@ -472,6 +476,41 @@ export function App() {
       }
     }
   }, []);
+
+  // ── Verificador de atualização para Android (APK sideloaded) ──────────────
+  useEffect(() => {
+    const isAndroid = !!(window as any).Capacitor?.isNativePlatform?.();
+    if (!isAndroid) return;
+
+    const checkAndroidUpdate = async () => {
+      try {
+        const res = await fetch('https://api.github.com/repos/HKLopeS33/INTEGRA360/releases/latest', {
+          headers: { Accept: 'application/vnd.github+json' },
+        });
+        if (!res.ok) return;
+        const release = await res.json();
+        const latestTag: string = (release.tag_name ?? '').replace(/^v/, '');
+        const current = APP_VERSION;
+        if (latestTag && latestTag !== current) {
+          // Busca o asset .apk no release
+          const apkAsset = (release.assets ?? []).find((a: any) =>
+            (a.name ?? '').toLowerCase().endsWith('.apk')
+          );
+          setAndroidUpdateVersion(latestTag);
+          setAndroidUpdateUrl(apkAsset?.browser_download_url ?? release.html_url);
+          setAndroidUpdateAvailable(true);
+        }
+      } catch {
+        // silencioso — sem internet ou erro de rede
+      }
+    };
+
+    checkAndroidUpdate();
+    // Re-verifica a cada 2 horas
+    const interval = setInterval(checkAndroidUpdate, 2 * 60 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
+  // ──────────────────────────────────────────────────────────────────────────
 
   // Polling do status do pedido público (tela de acompanhamento)
   useEffect(() => {
@@ -3050,6 +3089,30 @@ export function App() {
     // ── Login / Recuperar senha ──
     return (
       <main className="app-shell login-screen">
+        {/* Banner de atualização Android — visível mesmo na tela de login */}
+        {androidUpdateAvailable && androidUpdateUrl && (
+          <div style={{
+            position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999,
+            background: 'linear-gradient(90deg, #16a34a 0%, #15803d 100%)',
+            color: '#fff', padding: '10px 16px',
+            display: 'flex', alignItems: 'center', gap: 10,
+            boxShadow: '0 2px 12px rgba(0,0,0,0.25)',
+          }}>
+            <span style={{ fontSize: 20 }}>🔄</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 700, fontSize: 14 }}>Nova versão disponível: v{androidUpdateVersion}</div>
+              <div style={{ fontSize: 12, opacity: 0.9 }}>Toque para baixar e instalar</div>
+            </div>
+            <button type="button" onClick={() => { window.open(androidUpdateUrl, '_system'); }}
+              style={{ background: '#fff', color: '#16a34a', border: 'none', borderRadius: 8, padding: '8px 16px', fontWeight: 800, fontSize: 13, cursor: 'pointer', flexShrink: 0 }}>
+              Atualizar
+            </button>
+            <button type="button" onClick={() => setAndroidUpdateAvailable(false)}
+              style={{ background: 'rgba(255,255,255,0.2)', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 10px', fontSize: 13, cursor: 'pointer', flexShrink: 0 }}>
+              ✕
+            </button>
+          </div>
+        )}
         <div className="login-wrapper">
           <div className="login-card">
             <div className="login-brand">
@@ -3263,6 +3326,38 @@ export function App() {
   // Main app screen
   return (
     <main className="app-shell authenticated">
+      {/* ── Banner de atualização Android ───────────────────────────── */}
+      {androidUpdateAvailable && androidUpdateUrl && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999,
+          background: 'linear-gradient(90deg, #16a34a 0%, #15803d 100%)',
+          color: '#fff', padding: '10px 16px',
+          display: 'flex', alignItems: 'center', gap: 10,
+          boxShadow: '0 2px 12px rgba(0,0,0,0.25)',
+        }}>
+          <span style={{ fontSize: 20 }}>🔄</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 700, fontSize: 14 }}>Nova versão disponível: v{androidUpdateVersion}</div>
+            <div style={{ fontSize: 12, opacity: 0.9 }}>Toque em Atualizar para baixar e instalar</div>
+          </div>
+          <button
+            type="button"
+            onClick={() => { window.open(androidUpdateUrl, '_system'); }}
+            style={{ background: '#fff', color: '#16a34a', border: 'none', borderRadius: 8, padding: '8px 16px', fontWeight: 800, fontSize: 13, cursor: 'pointer', flexShrink: 0 }}
+          >
+            Atualizar
+          </button>
+          <button
+            type="button"
+            onClick={() => setAndroidUpdateAvailable(false)}
+            style={{ background: 'rgba(255,255,255,0.2)', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 10px', fontSize: 13, cursor: 'pointer', flexShrink: 0 }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
+      {/* ──────────────────────────────────────────────────────────────── */}
+
       {showCloseModal && selectedTable && (() => {
         const tableOrders = selectedTableOrders;
         const map = new Map<string, { quantity: number; unitPrice: number }>();
