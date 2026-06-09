@@ -364,6 +364,11 @@ button {
   margin-bottom: 24px;
 }
 
+/* Logout na topbar: oculto no desktop, aparece no mobile via media query */
+.topbar-logout-mobile {
+  display: none;
+}
+
 h1,
 h2,
 h3,
@@ -1243,10 +1248,30 @@ h2 {
     overflow: hidden;
   }
 
-  /* Oculta marca/logo e botão de logout (sem espaço na barra estreita) */
+  /* Oculta marca/logo e botão de logout da sidebar (sem espaço na barra estreita) */
   .sidebar .brand,
   .logout-button {
     display: none !important;
+  }
+
+  /* Logout na topbar — visível apenas no mobile */
+  .topbar-logout-mobile {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    border: 1.5px solid #e5e7eb;
+    background: #fff;
+    color: #6b7280;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .topbar-logout-mobile:hover {
+    background: #fee2e2;
+    border-color: #fca5a5;
+    color: #dc2626;
   }
 
   /* Nav list: linha horizontal, ocupa toda a barra */
@@ -1446,6 +1471,98 @@ h2 {
   .close-modal-value-row { padding: 0 16px 12px; }
   .close-modal-pix { margin: 0 16px 12px; }
   .close-modal-actions { padding: 12px 16px 16px; }
+
+  /* ── Super Admin: responsivo em todos os smartphones ── */
+  .super-panel-header {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 10px !important;
+  }
+
+  .super-panel-header > div:last-child {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .super-panel-header select {
+    width: 100%;
+    font-size: 13px;
+    flex: unset !important;
+  }
+
+  .super-period-toggle {
+    width: 100% !important;
+    justify-content: space-between;
+  }
+
+  .super-period-toggle button {
+    flex: 1;
+    padding: 7px 4px !important;
+    font-size: 12px !important;
+  }
+
+  .super-report-tabs {
+    gap: 6px !important;
+  }
+
+  .super-report-tabs button {
+    font-size: 12px !important;
+    padding: 8px 10px !important;
+    min-height: 36px !important;
+  }
+
+  /* KPI cards: 2 colunas iguais */
+  .super-kpi-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px !important;
+  }
+
+  .super-kpi-grid > div {
+    padding: 12px !important;
+  }
+
+  .super-kpi-grid .kpi-value {
+    font-size: 20px !important;
+  }
+
+  .super-kpi-grid .kpi-icon {
+    display: none !important;
+  }
+
+  /* Tabelas: scroll horizontal */
+  .super-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .super-table-wrap table th,
+  .super-table-wrap table td {
+    padding: 10px 8px !important;
+    font-size: 12px !important;
+    white-space: nowrap;
+  }
+
+  /* Cadastros / Usuários */
+  .super-companies-grid {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  .super-company-card {
+    padding: 12px !important;
+  }
+
+  .super-company-card-actions {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .super-company-card-actions button {
+    flex: 1;
+    min-width: 80px;
+    font-size: 12px !important;
+    padding: 8px 8px !important;
+  }
 }
 
 /* ── 375px: iPhone SE / telas pequenas ── */
@@ -1565,93 +1682,12 @@ h2 {
     font-size: 12px;
   }
 
-  /* ── Super Admin: painel financeiro e demais telas ── */
-  .super-panel-header {
-    flex-direction: column !important;
-    align-items: flex-start !important;
-    gap: 10px !important;
-  }
-
-  .super-panel-header > div:last-child {
-    width: 100%;
-    flex-wrap: wrap;
-  }
-
-  .super-panel-header select {
-    width: 100%;
-    font-size: 13px;
-  }
-
-  .super-period-toggle {
-    width: 100%;
-    justify-content: space-between;
-  }
-
-  .super-period-toggle button {
-    flex: 1;
-    padding: 7px 4px !important;
-    font-size: 12px !important;
-  }
-
-  .super-report-tabs {
-    gap: 6px !important;
-  }
-
-  .super-report-tabs button {
-    font-size: 12px !important;
-    padding: 8px 10px !important;
-    min-height: 36px !important;
-  }
-
-  .super-kpi-grid {
-    grid-template-columns: repeat(2, 1fr) !important;
-    gap: 10px !important;
+  /* Super admin ≤390: ainda mais compacto */
+  .super-kpi-grid .kpi-value {
+    font-size: 17px !important;
   }
 
   .super-kpi-grid > div {
-    padding: 14px !important;
-  }
-
-  .super-kpi-grid .kpi-value {
-    font-size: 22px !important;
-  }
-
-  .super-kpi-grid .kpi-icon {
-    display: none;
-  }
-
-  /* Tabelas super admin: scroll horizontal preservado */
-  .super-table-wrap {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  .super-table-wrap table th,
-  .super-table-wrap table td {
-    padding: 10px 8px !important;
-    font-size: 12px !important;
-    white-space: nowrap;
-  }
-
-  /* Cadastros / Usuários super admin */
-  .super-companies-grid {
-    grid-template-columns: 1fr !important;
-    gap: 10px !important;
-  }
-
-  .super-company-card {
-    padding: 12px !important;
-  }
-
-  .super-company-card-actions {
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-
-  .super-company-card-actions button {
-    flex: 1;
-    min-width: 80px;
-    font-size: 12px !important;
-    padding: 8px 8px !important;
+    padding: 10px !important;
   }
 }

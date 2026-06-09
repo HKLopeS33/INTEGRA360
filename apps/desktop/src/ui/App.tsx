@@ -3597,6 +3597,15 @@ export function App() {
               );
             })()}
             <div className={`connection ${apiStatus}`}>{apiStatus === 'online' ? 'API online' : 'API offline'}</div>
+            {/* Logout visível apenas no mobile (sidebar oculta o botão normal) */}
+            <button
+              type="button"
+              className="topbar-logout-mobile"
+              onClick={handleLogout}
+              title="Sair"
+            >
+              <LogOut size={18} />
+            </button>
           </div>
         </header>
 
@@ -5124,7 +5133,7 @@ export function App() {
               {reportsTab === 'revenue' && revenueReport && (
                 <div>
                   <h3 style={{ marginBottom: 14, fontSize: 17, fontWeight: 700 }}>Faturamento por Período</h3>
-                  <div className="super-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14, marginBottom: 24 }}>
+                  <div className="super-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 14, marginBottom: 24 }}>
                     {[
                       { label: 'Total de Faturamento', value: formatCurrency(revenueReport.totalValue), bg: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', icon: <DollarSign size={28} style={{ opacity: 0.7 }} /> },
                       { label: 'Total de Pedidos', value: revenueReport.totalOrders, bg: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', icon: <ShoppingCart size={28} style={{ opacity: 0.7 }} /> },
