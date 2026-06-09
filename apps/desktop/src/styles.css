@@ -676,6 +676,61 @@ h2 {
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
 }
 
+/* Sub-abas de Ajustes — scroll horizontal sem scrollbar visível */
+.ajustes-subtabs {
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  flex-shrink: 0;
+}
+.ajustes-subtabs::-webkit-scrollbar { display: none; }
+.ajustes-subtabs button {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* Indicador de scroll lateral — escondido no desktop */
+.ajustes-subtabs-hint {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  /* Gradiente + seta aparece no mobile */
+  .ajustes-subtabs-hint {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 2px; /* acima da borda inferior */
+    width: 44px;
+    background: linear-gradient(to right, transparent, #fff 55%);
+    pointer-events: none;
+    z-index: 2;
+  }
+
+  .ajustes-subtabs-hint span {
+    font-size: 18px;
+    color: #789088;
+    font-weight: 700;
+    line-height: 1;
+    animation: hint-pulse 1.6s ease-in-out infinite;
+  }
+}
+
+@keyframes hint-pulse {
+  0%, 100% { opacity: 1;   transform: translateX(0); }
+  50%       { opacity: 0.4; transform: translateX(3px); }
+}
+
+/* Botões de ação da mesa — horizontal no desktop, coluna no mobile */
+.table-action-buttons {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 /* ── Toast notifications ── */
 .toast-container {
   position: fixed;
@@ -1114,15 +1169,22 @@ h2 {
   align-items: center;
 }
 
+/* ── Tablet: sidebar recolhe para ícones ── */
 @media (max-width: 1100px) {
   .app-shell.authenticated {
     grid-template-columns: 92px 1fr;
   }
 
   .brand div:last-child,
+  .nav-item span,
+  .logout-button span {
+    display: none;
+  }
+
   .nav-item,
   .logout-button {
-    font-size: 0;
+    justify-content: center;
+    padding: 10px;
   }
 
   .content-grid,
@@ -1132,5 +1194,370 @@ h2 {
 
   .form-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+/* ── Mobile / Smartphone ≤ 640px — base mobile ── */
+@media (max-width: 640px) {
+
+  /* Zero scroll horizontal em qualquer elemento */
+  *, *::before, *::after {
+    max-width: 100%;
+  }
+
+  html, body {
+    overflow-x: hidden;
+    max-width: 100vw;
+  }
+
+  /* ── Shell: coluna única, workspace em cima, barra embaixo ── */
+  .app-shell.authenticated {
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr auto;
+    height: 100dvh;
+    overflow: hidden;
+    max-width: 100vw;
+  }
+
+  /* ── Sidebar → barra de navegação fixa na base ── */
+  .sidebar {
+    order: 2;
+    flex-direction: row;
+    padding: 0;
+    gap: 0;
+    height: 58px;
+    min-height: 58px;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 200;
+    border-top: 1px solid #1a2e28;
+    align-items: stretch;
+    justify-content: stretch;
+    overflow: hidden;
+  }
+
+  /* Oculta marca/logo e botão de logout (sem espaço na barra estreita) */
+  .sidebar .brand,
+  .logout-button {
+    display: none !important;
+  }
+
+  /* Nav list: linha horizontal, ocupa toda a barra */
+  .nav-list {
+    display: flex;
+    flex-direction: row;
+    gap: 0;
+    width: 100%;
+    align-items: stretch;
+  }
+
+  /* Cada botão de nav: coluna (ícone + label), igual espaço */
+  .nav-item {
+    flex: 1;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    min-height: unset;
+    height: 58px;
+    padding: 5px 2px 6px;
+    border-radius: 0;
+    gap: 2px;
+  }
+
+  .nav-item svg {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+  }
+
+  /* Label do ícone */
+  .nav-item span {
+    display: block !important;
+    font-size: 8.5px;
+    font-weight: 600;
+    line-height: 1.1;
+    text-align: center;
+    color: #6b8078;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 52px;
+  }
+
+  /* Item ativo */
+  .nav-item.active {
+    background: #1c2e26;
+    border-top: 2px solid #f1c44e;
+  }
+  .nav-item.active span {
+    color: #f1c44e;
+  }
+  .nav-item.active svg {
+    color: #f1c44e;
+  }
+
+  /* ── Workspace: scroll interno, padding base da barra ── */
+  .workspace {
+    order: 1;
+    padding: 14px 12px 72px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    height: calc(100dvh - 58px);
+    box-sizing: border-box;
+  }
+
+  /* ── Topbar ── */
+  .topbar {
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  h1 { font-size: 19px; letter-spacing: -0.3px; }
+  h2 { font-size: 15px; }
+  h3 { font-size: 13px; }
+  .eyebrow { font-size: 10px; }
+
+  .connection {
+    font-size: 11px;
+    padding: 5px 9px;
+  }
+
+  /* ── Grids: sempre coluna única ── */
+  .content-grid,
+  .module-grid,
+  .module-grid.two-columns,
+  .form-grid,
+  .catalog-list {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  /* ── Panels ── */
+  .panel {
+    padding: 12px 12px;
+    border-radius: 10px;
+  }
+
+  .panel-header {
+    margin-bottom: 12px;
+  }
+
+  /* Botões de ação da mesa: coluna no mobile ≤640 */
+  .table-action-buttons {
+    flex-direction: column;
+    width: 100%;
+    gap: 6px;
+  }
+
+  .table-action-buttons button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* ── Mesas: 3 por linha em 425px ── */
+  .tables-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+
+  .table-tile {
+    min-height: 76px;
+    padding: 8px;
+    gap: 6px;
+    font-size: 13px;
+  }
+
+  /* ── Botões: tamanho de toque confortável ── */
+  .primary-button,
+  .secondary-button {
+    min-height: 42px;
+    font-size: 13px;
+    padding: 9px 12px;
+  }
+
+  /* ── Listas de produto/pedido ── */
+  .product-row {
+    min-height: 60px;
+    padding: 10px;
+  }
+
+  .order-card,
+  .kitchen-row {
+    min-height: 50px;
+    padding: 10px;
+    gap: 8px;
+  }
+
+  /* ── Settings ── */
+  .settings-list label input,
+  .settings-list label select {
+    min-height: 40px;
+    font-size: 14px;
+  }
+
+  /* ── Toast: largura total no topo ── */
+  .toast-container {
+    top: 10px;
+    right: 10px;
+    left: 10px;
+    align-items: stretch;
+  }
+
+  .toast {
+    min-width: unset;
+    max-width: unset;
+    width: 100%;
+    font-size: 13px;
+  }
+
+  /* ── Modal fechar comanda: sobe do rodapé (bottom sheet) ── */
+  .confirm-overlay {
+    align-items: flex-end;
+    padding-bottom: 58px; /* acima da barra de nav */
+  }
+
+  .close-modal {
+    width: 100%;
+    border-radius: 16px 16px 0 0;
+    max-height: 88dvh;
+    overflow-y: auto;
+  }
+
+  .confirm-dialog {
+    width: 94%;
+    border-radius: 14px;
+    padding: 20px 16px;
+    margin-bottom: 12px;
+  }
+
+  .close-modal-header { padding: 16px 16px 12px; }
+  .close-modal-items  { padding: 10px 16px; }
+  .close-modal-total  { margin: 0 16px 12px; }
+  .close-modal-section-label { padding: 0 16px; }
+  .close-modal-payment-options { padding: 0 16px 12px; }
+  .close-modal-value-row { padding: 0 16px 12px; }
+  .close-modal-pix { margin: 0 16px 12px; }
+  .close-modal-actions { padding: 12px 16px 16px; }
+}
+
+/* ── 375px: iPhone SE / telas pequenas ── */
+@media (max-width: 390px) {
+
+  /* Workspace com padding lateral mínimo */
+  .workspace {
+    padding: 10px 8px 72px;
+  }
+
+  /* Títulos ainda menores */
+  h1 { font-size: 17px; }
+  h2 { font-size: 14px; }
+
+  /* Mesas: 2 colunas em 375px (3 ficaria pequeno demais) */
+  .tables-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .table-tile {
+    min-height: 72px;
+    padding: 8px;
+    font-size: 12px;
+  }
+
+  /* Panel sem padding lateral excessivo */
+  .panel {
+    padding: 10px 10px;
+    border-radius: 10px;
+  }
+
+  /* Panel header: empilha quando apertado */
+  .panel-header {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  /* Botões de ação da mesa: coluna em telas pequenas */
+  .table-action-buttons {
+    flex-direction: column;
+    width: 100%;
+    gap: 6px;
+  }
+
+  .table-action-buttons button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* Botões menores */
+  .primary-button,
+  .secondary-button {
+    min-height: 40px;
+    font-size: 12px;
+    padding: 8px 10px;
+  }
+
+  /* Nav inferior: ícones maiores, label sumiço em 375 se necessário */
+  .nav-item svg {
+    width: 22px;
+    height: 22px;
+  }
+
+  .nav-item span {
+    font-size: 7.5px;
+    max-width: 44px;
+  }
+
+  /* Order cards compactos */
+  .order-card,
+  .kitchen-row {
+    padding: 8px;
+    gap: 6px;
+    min-height: 46px;
+    font-size: 13px;
+  }
+
+  /* Topbar: botão de atualizar não estoura */
+  .topbar {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .topbar button,
+  .topbar .connection {
+    font-size: 11px;
+    padding: 5px 8px;
+  }
+
+  /* Settings list: labels menores */
+  .settings-list label {
+    font-size: 12px;
+  }
+
+  .settings-list label input,
+  .settings-list label select {
+    min-height: 38px;
+    font-size: 13px;
+    padding: 8px 10px;
+  }
+
+  /* Modais */
+  .close-modal-header { padding: 14px 12px 10px; }
+  .close-modal-items  { padding: 8px 12px; }
+  .close-modal-total  { margin: 0 12px 10px; font-size: 14px; }
+  .close-modal-section-label { padding: 0 12px; }
+  .close-modal-payment-options { padding: 0 12px 10px; gap: 6px; }
+  .close-modal-value-row { padding: 0 12px 10px; gap: 8px; }
+  .close-modal-pix { margin: 0 12px 10px; }
+  .close-modal-actions { padding: 10px 12px 14px; gap: 8px; }
+
+  /* Botões de pagamento no modal: 3 por linha */
+  .close-modal-pay-btn {
+    min-width: 60px;
+    padding: 8px 10px;
+    font-size: 12px;
   }
 }

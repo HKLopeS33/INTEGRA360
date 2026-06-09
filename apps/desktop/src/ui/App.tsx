@@ -218,6 +218,12 @@ export function App() {
   const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  // Recuperação de senha
+  const [loginView, setLoginView] = useState<'login' | 'recover' | 'privacy' | 'terms' | 'support'>('login');
+  const [recoverEmail, setRecoverEmail] = useState('');
+  const [recoverSent, setRecoverSent] = useState(false);
+  const [recoverLoading, setRecoverLoading] = useState(false);
+  const [recoverError, setRecoverError] = useState('');
 
   // App state
   const [tables, setTables] = useState<RestaurantTable[]>([]);
@@ -226,6 +232,9 @@ export function App() {
   const [kitchenOrders, setKitchenOrders] = useState<Order[]>([]);
   const [kitchenDeliveryOrders, setKitchenDeliveryOrders] = useState<DeliveryOrder[]>([]);
   const [selectedTableId, setSelectedTableId] = useState<string>('mesa_1');
+  const lastTableTapRef = useRef<{ id: string; time: number } | null>(null);
+  const [menuModalTab, setMenuModalTab] = useState<'menu' | 'cart'>('menu');
+  const isMobile = typeof window !== 'undefined' && window.innerWidth <= 640;
   const [apiStatus, setApiStatus] = useState<'online' | 'offline'>('offline');
   const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'error'>('idle');
   const [updateVersion, setUpdateVersion] = useState<string | null>(null);
@@ -339,6 +348,7 @@ export function App() {
   const [newUserActive, setNewUserActive] = useState(true);
   const [profilePhoto, setProfilePhoto] = useState('');
   const [storeName, setStoreName] = useState('Integra360');
+  const [ajustesSubTab, setAjustesSubTab] = useState<'loja' | 'tecnico' | 'pagamentos'>('loja');
   const [storeTableCount, setStoreTableCount] = useState('10');
   const [storeTableCountOriginal, setStoreTableCountOriginal] = useState(10);
   const [savingTableCount, setSavingTableCount] = useState(false);
@@ -2000,6 +2010,24 @@ export function App() {
     }
   };
 
+  const handlePasswordRecover = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!recoverEmail.trim()) { setRecoverError('Informe seu e-mail.'); return; }
+    setRecoverLoading(true);
+    setRecoverError('');
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(recoverEmail.trim(), {
+        redirectTo: window.location.origin + window.location.pathname,
+      });
+      if (error) throw error;
+      setRecoverSent(true);
+    } catch (err: any) {
+      setRecoverError(err?.message ?? 'Não foi possível enviar o e-mail. Tente novamente.');
+    } finally {
+      setRecoverLoading(false);
+    }
+  };
+
   const role = currentUser?.role;
   const hasReportAccess = role ? ['CAIXA', 'FINANCEIRO', 'GERENTE', 'SUPER', 'ADMIN'].includes(role) : false;
 
@@ -2698,7 +2726,7 @@ export function App() {
             </div>
           )}
           {publicDeliveryStep === 'menu' && (
-            <div style={{ display: 'grid', gap: 20 }}>
+            <div style={{ display: 'grid', gap: 20, paddingBottom: cartCount > 0 ? 88 : 0 }}>
               {/* Banner do cardápio */}
               {publicDeliveryCompany?.menuBannerUrl && (
                 <div style={{ borderRadius: 14, overflow: 'hidden', boxShadow: '0 2px 12px rgba(0,0,0,0.10)' }}>
@@ -2766,6 +2794,98 @@ export function App() {
 
   // Login screen
   if (!isAuthenticated) {
+    const CONTACT_EMAIL = 'contatoflorestaja@hotmail.com';
+    const CONTACT_PHONE = '(87) 99971-0850';
+    const CONTACT_WHATSAPP = '5587999710850';
+    const APP_VERSION_DISPLAY = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.3.0';
+
+    // ── Política de Privacidade ──
+    if (loginView === 'privacy') return (
+      <main className="app-shell login-screen">
+        <div className="login-wrapper" style={{ alignItems: 'flex-start', paddingTop: 32 }}>
+          <div className="login-card" style={{ maxWidth: 640, padding: '32px 28px' }}>
+            <button type="button" onClick={() => setLoginView('login')} style={{ background: 'none', border: 'none', color: '#789088', cursor: 'pointer', fontSize: 13, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 4 }}>← Voltar ao login</button>
+            <h1 className="login-title" style={{ fontSize: 22, marginBottom: 6 }}>Política de Privacidade</h1>
+            <p style={{ fontSize: 12, color: '#9ca3af', marginBottom: 20 }}>Última atualização: junho de 2026 · Versão {APP_VERSION_DISPLAY}</p>
+            <div style={{ display: 'grid', gap: 16, fontSize: 13, color: '#374151', lineHeight: 1.7 }}>
+              <section><strong style={{ fontSize: 14, color: '#18201d' }}>1. Quem somos</strong><p style={{ marginTop: 6 }}>O <strong>Integra360</strong> é um sistema de gestão para restaurantes e estabelecimentos alimentícios, desenvolvido e operado por Floresta Já. Nosso contato: <a href={`mailto:${CONTACT_EMAIL}`} style={{ color: '#18201d' }}>{CONTACT_EMAIL}</a> · {CONTACT_PHONE}.</p></section>
+              <section><strong style={{ fontSize: 14, color: '#18201d' }}>2. Dados coletados</strong><p style={{ marginTop: 6 }}>Coletamos apenas os dados necessários para o funcionamento do sistema: nome e e-mail do usuário, nome e dados fiscais do estabelecimento (CNPJ, endereço, telefone), dados de pedidos e pagamentos processados pelo estabelecimento, e dados de uso para melhoria do serviço. <strong>Não coletamos dados de cartão de crédito</strong> — pagamentos são processados pelo Mercado Pago conforme sua própria política.</p></section>
+              <section><strong style={{ fontSize: 14, color: '#18201d' }}>3. Uso dos dados</strong><p style={{ marginTop: 6 }}>Os dados são utilizados exclusivamente para: autenticação e segurança, emissão de recibos e comprovantes, processamento de pedidos, e melhoria do serviço. Não vendemos nem compartilhamos seus dados com terceiros para fins comerciais.</p></section>
+              <section><strong style={{ fontSize: 14, color: '#18201d' }}>4. Armazenamento e segurança</strong><p style={{ marginTop: 6 }}>Os dados são armazenados com segurança na plataforma Supabase (infraestrutura AWS), com criptografia em trânsito (TLS) e em repouso. Tokens de acesso a serviços de pagamento são armazenados server-side e nunca expostos ao cliente.</p></section>
+              <section><strong style={{ fontSize: 14, color: '#18201d' }}>5. Seus direitos (LGPD)</strong><p style={{ marginTop: 6 }}>Conforme a Lei Geral de Proteção de Dados (Lei 13.709/2018), você tem direito a: acessar seus dados, corrigir informações incorretas, solicitar a exclusão de dados, e revogar consentimentos. Para exercer esses direitos, entre em contato pelo e-mail <a href={`mailto:${CONTACT_EMAIL}`} style={{ color: '#18201d' }}>{CONTACT_EMAIL}</a>.</p></section>
+              <section><strong style={{ fontSize: 14, color: '#18201d' }}>6. Retenção de dados</strong><p style={{ marginTop: 6 }}>Dados de usuários e pedidos são retidos enquanto a conta estiver ativa. Após o encerramento, os dados são anonimizados ou excluídos em até 90 dias, salvo obrigação legal.</p></section>
+              <section><strong style={{ fontSize: 14, color: '#18201d' }}>7. Cookies e rastreamento</strong><p style={{ marginTop: 6 }}>O sistema utiliza apenas cookies de sessão essenciais para autenticação. Não utilizamos cookies de rastreamento ou publicidade.</p></section>
+              <section><strong style={{ fontSize: 14, color: '#18201d' }}>8. Contato</strong><p style={{ marginTop: 6 }}>Dúvidas sobre privacidade? Fale conosco: <a href={`mailto:${CONTACT_EMAIL}`} style={{ color: '#18201d' }}>{CONTACT_EMAIL}</a> ou {CONTACT_PHONE}.</p></section>
+            </div>
+          </div>
+        </div>
+      </main>
+    );
+
+    // ── Termos de Uso ──
+    if (loginView === 'terms') return (
+      <main className="app-shell login-screen">
+        <div className="login-wrapper" style={{ alignItems: 'flex-start', paddingTop: 32 }}>
+          <div className="login-card" style={{ maxWidth: 640, padding: '32px 28px' }}>
+            <button type="button" onClick={() => setLoginView('login')} style={{ background: 'none', border: 'none', color: '#789088', cursor: 'pointer', fontSize: 13, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 4 }}>← Voltar ao login</button>
+            <h1 className="login-title" style={{ fontSize: 22, marginBottom: 6 }}>Termos de Uso</h1>
+            <p style={{ fontSize: 12, color: '#9ca3af', marginBottom: 20 }}>Última atualização: junho de 2026 · Versão {APP_VERSION_DISPLAY}</p>
+            <div style={{ display: 'grid', gap: 16, fontSize: 13, color: '#374151', lineHeight: 1.7 }}>
+              <section><strong style={{ fontSize: 14, color: '#18201d' }}>1. Aceitação</strong><p style={{ marginTop: 6 }}>Ao utilizar o Integra360 você concorda com estes termos. Caso não concorde, não utilize o sistema.</p></section>
+              <section><strong style={{ fontSize: 14, color: '#18201d' }}>2. Uso permitido</strong><p style={{ marginTop: 6 }}>O sistema é licenciado para uso pelo estabelecimento contratante e seus funcionários autorizados, exclusivamente para fins de gestão interna. É proibido compartilhar credenciais ou revender o acesso.</p></section>
+              <section><strong style={{ fontSize: 14, color: '#18201d' }}>3. Responsabilidades</strong><p style={{ marginTop: 6 }}>O usuário é responsável pela veracidade dos dados cadastrados, pela segurança de suas credenciais, e pelo uso adequado do sistema conforme a legislação vigente.</p></section>
+              <section><strong style={{ fontSize: 14, color: '#18201d' }}>4. Disponibilidade</strong><p style={{ marginTop: 6 }}>Buscamos manter o serviço disponível 24/7, mas não garantimos disponibilidade ininterrupta. Manutenções serão comunicadas com antecedência quando possível.</p></section>
+              <section><strong style={{ fontSize: 14, color: '#18201d' }}>5. Propriedade intelectual</strong><p style={{ marginTop: 6 }}>O Integra360 e todo o seu conteúdo são propriedade da Floresta Já. É proibida a reprodução, engenharia reversa ou redistribuição sem autorização.</p></section>
+              <section><strong style={{ fontSize: 14, color: '#18201d' }}>6. Contato</strong><p style={{ marginTop: 6 }}><a href={`mailto:${CONTACT_EMAIL}`} style={{ color: '#18201d' }}>{CONTACT_EMAIL}</a> · {CONTACT_PHONE}</p></section>
+            </div>
+          </div>
+        </div>
+      </main>
+    );
+
+    // ── Suporte / Ajuda ──
+    if (loginView === 'support') return (
+      <main className="app-shell login-screen">
+        <div className="login-wrapper">
+          <div className="login-card" style={{ maxWidth: 480 }}>
+            <button type="button" onClick={() => setLoginView('login')} style={{ background: 'none', border: 'none', color: '#789088', cursor: 'pointer', fontSize: 13, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 4 }}>← Voltar ao login</button>
+            <div className="login-brand">
+              <div className="login-brand-mark">🛟</div>
+              <h1 className="login-title" style={{ fontSize: 20 }}>Central de Ajuda</h1>
+              <p className="login-subtitle">Estamos aqui para te ajudar</p>
+            </div>
+            <div style={{ display: 'grid', gap: 12, marginTop: 8 }}>
+              <a href={`https://wa.me/${CONTACT_WHATSAPP}?text=Ol%C3%A1%2C%20preciso%20de%20suporte%20no%20Integra360`} target="_blank" rel="noopener noreferrer"
+                style={{ display: 'flex', alignItems: 'center', gap: 14, background: '#f0fdf4', border: '1.5px solid #bbf7d0', borderRadius: 12, padding: '14px 16px', textDecoration: 'none', color: '#15803d' }}>
+                <span style={{ fontSize: 28 }}>💬</span>
+                <div><div style={{ fontWeight: 700, fontSize: 15 }}>WhatsApp</div><div style={{ fontSize: 13, color: '#4ade80' }}>{CONTACT_PHONE}</div></div>
+              </a>
+              <a href={`mailto:${CONTACT_EMAIL}?subject=Suporte Integra360`}
+                style={{ display: 'flex', alignItems: 'center', gap: 14, background: '#eff6ff', border: '1.5px solid #93c5fd', borderRadius: 12, padding: '14px 16px', textDecoration: 'none', color: '#1e40af' }}>
+                <span style={{ fontSize: 28 }}>✉️</span>
+                <div><div style={{ fontWeight: 700, fontSize: 15 }}>E-mail</div><div style={{ fontSize: 13, color: '#60a5fa' }}>{CONTACT_EMAIL}</div></div>
+              </a>
+              <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 12, padding: '14px 16px' }}>
+                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8, color: '#374151' }}>📋 Perguntas frequentes</div>
+                {[
+                  ['Esqueci minha senha', 'Use a opção "Esqueci minha senha" na tela de login para receber um link de redefinição por e-mail.'],
+                  ['Como abrir o caixa?', 'Acesse a aba "Caixa" no menu lateral e clique em "Abrir caixa".'],
+                  ['Como adicionar mesas?', 'Vá em Ajustes → Configurações Técnicas → Quantidade de mesas.'],
+                  ['Como configurar o Mercado Pago?', 'Vá em Ajustes → Pagamentos → Mercado Pago e insira seu Access Token.'],
+                ].map(([q, a]) => (
+                  <details key={q} style={{ borderBottom: '1px solid #f3f4f6', paddingBottom: 8, marginBottom: 8 }}>
+                    <summary style={{ cursor: 'pointer', fontWeight: 600, fontSize: 13, color: '#374151' }}>{q}</summary>
+                    <p style={{ fontSize: 13, color: '#6b7280', marginTop: 6, lineHeight: 1.5 }}>{a}</p>
+                  </details>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    );
+
+    // ── Login / Recuperar senha ──
     return (
       <main className="app-shell login-screen">
         <div className="login-wrapper">
@@ -2773,44 +2893,106 @@ export function App() {
             <div className="login-brand">
               <div className="login-brand-mark">S</div>
               <h1 className="login-title">Integra360</h1>
-              <p className="login-subtitle">Faça login para continuar</p>
+              <p className="login-subtitle">{loginView === 'recover' ? 'Redefinição de senha' : 'Faça login para continuar'}</p>
             </div>
 
-            <form onSubmit={handleLogin} className="login-form">
-              <div className="login-field">
-                <label htmlFor="email">E-mail</label>
-                <input
-                  id="email"
-                  type="email"
-                  value={loginEmail}
-                  onChange={(e) => setLoginEmail(e.target.value)}
-                  placeholder="seu@email.com"
-                  autoComplete="email"
-                  disabled={isLoggingIn}
-                />
+            {/* ── Formulário de recuperação de senha ── */}
+            {loginView === 'recover' ? (
+              <div className="login-form">
+                {recoverSent ? (
+                  <div style={{ textAlign: 'center', padding: '12px 0' }}>
+                    <div style={{ fontSize: 40, marginBottom: 12 }}>📧</div>
+                    <p style={{ fontWeight: 700, fontSize: 15, color: '#15803d', marginBottom: 8 }}>E-mail enviado!</p>
+                    <p style={{ fontSize: 13, color: '#6b7280', lineHeight: 1.6 }}>Verifique sua caixa de entrada em <strong>{recoverEmail}</strong> e clique no link para criar uma nova senha.</p>
+                    <button type="button" onClick={() => { setLoginView('login'); setRecoverSent(false); setRecoverEmail(''); }} style={{ marginTop: 20, background: 'none', border: 'none', color: '#789088', cursor: 'pointer', fontSize: 13, textDecoration: 'underline' }}>← Voltar ao login</button>
+                  </div>
+                ) : (
+                  <form onSubmit={handlePasswordRecover}>
+                    <div className="login-field" style={{ marginBottom: 16 }}>
+                      <label htmlFor="recover-email">E-mail cadastrado</label>
+                      <input
+                        id="recover-email"
+                        type="email"
+                        value={recoverEmail}
+                        onChange={(e) => setRecoverEmail(e.target.value)}
+                        placeholder="seu@email.com"
+                        autoComplete="email"
+                        disabled={recoverLoading}
+                      />
+                    </div>
+                    {recoverError && <div className="login-error" style={{ marginBottom: 12 }}>{recoverError}</div>}
+                    <button type="submit" className="login-button" disabled={recoverLoading}>
+                      {recoverLoading ? 'Enviando...' : 'Enviar link de redefinição'}
+                    </button>
+                    <button type="button" onClick={() => { setLoginView('login'); setRecoverError(''); }} style={{ width: '100%', marginTop: 10, background: 'none', border: 'none', color: '#789088', cursor: 'pointer', fontSize: 13 }}>← Voltar ao login</button>
+                  </form>
+                )}
               </div>
+            ) : (
+              /* ── Formulário de login ── */
+              <form onSubmit={handleLogin} className="login-form">
+                <div className="login-field">
+                  <label htmlFor="email">E-mail</label>
+                  <input
+                    id="email"
+                    type="email"
+                    value={loginEmail}
+                    onChange={(e) => setLoginEmail(e.target.value)}
+                    placeholder="seu@email.com"
+                    autoComplete="email"
+                    disabled={isLoggingIn}
+                  />
+                </div>
+                <div className="login-field">
+                  <label htmlFor="password" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    Senha
+                    <button type="button" onClick={() => { setLoginView('recover'); setRecoverEmail(loginEmail); setRecoverError(''); setRecoverSent(false); }}
+                      style={{ background: 'none', border: 'none', color: '#789088', cursor: 'pointer', fontSize: 12, fontWeight: 600, padding: 0 }}>
+                      Esqueci minha senha
+                    </button>
+                  </label>
+                  <input
+                    id="password"
+                    type="password"
+                    value={loginPassword}
+                    onChange={(e) => setLoginPassword(e.target.value)}
+                    placeholder="••••••••"
+                    autoComplete="current-password"
+                    disabled={isLoggingIn}
+                  />
+                </div>
+                {loginError && <div className="login-error">{loginError}</div>}
+                <button type="submit" className="login-button" disabled={isLoggingIn}>
+                  {isLoggingIn ? 'Conectando...' : 'Entrar'}
+                </button>
+              </form>
+            )}
 
-              <div className="login-field">
-                <label htmlFor="password">Senha</label>
-                <input
-                  id="password"
-                  type="password"
-                  value={loginPassword}
-                  onChange={(e) => setLoginPassword(e.target.value)}
-                  placeholder="••••••••"
-                  autoComplete="current-password"
-                  disabled={isLoggingIn}
-                />
+            {/* ── Rodapé do login ── */}
+            <div style={{ marginTop: 28, borderTop: '1px solid #eef2ef', paddingTop: 20 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '6px 16px', marginBottom: 14 }}>
+                {[
+                  { label: '🛟 Ajuda & Suporte',   view: 'support' as const },
+                  { label: '🔒 Privacidade',        view: 'privacy' as const },
+                  { label: '📄 Termos de Uso',      view: 'terms' as const },
+                ].map(({ label, view }) => (
+                  <button key={view} type="button" onClick={() => setLoginView(view)}
+                    style={{ background: 'none', border: 'none', color: '#789088', cursor: 'pointer', fontSize: 12, fontWeight: 500, padding: '2px 0' }}>
+                    {label}
+                  </button>
+                ))}
+                <a href={`mailto:${CONTACT_EMAIL}?subject=Quero trabalhar com vocês`}
+                  style={{ color: '#789088', fontSize: 12, fontWeight: 500, textDecoration: 'none' }}>
+                  💼 Trabalhe conosco
+                </a>
               </div>
-
-              {loginError && (
-                <div className="login-error">{loginError}</div>
-              )}
-
-              <button type="submit" className="login-button" disabled={isLoggingIn}>
-                {isLoggingIn ? 'Conectando...' : 'Entrar'}
-              </button>
-            </form>
+              <p style={{ textAlign: 'center', fontSize: 11, color: '#b0bdb7', margin: 0 }}>
+                Integra360 v{APP_VERSION_DISPLAY} · © {new Date().getFullYear()} Floresta Já<br />
+                <a href={`tel:+${CONTACT_WHATSAPP}`} style={{ color: '#b0bdb7', textDecoration: 'none' }}>{CONTACT_PHONE}</a>
+                {' · '}
+                <a href={`mailto:${CONTACT_EMAIL}`} style={{ color: '#b0bdb7', textDecoration: 'none' }}>{CONTACT_EMAIL}</a>
+              </p>
+            </div>
           </div>
         </div>
       </main>
@@ -3195,13 +3377,14 @@ export function App() {
                 type="button"
                 onClick={() => setActiveModule(item.id)}
               >
-                <Icon size={18} /> {item.label}
+                <Icon size={18} />
+                <span>{item.label}</span>
               </button>
             );
           })}
         </nav>
 
-        <button className="logout-button" type="button" onClick={handleLogout}><LogOut size={18} /> Sair</button>
+        <button className="logout-button" type="button" onClick={handleLogout}><LogOut size={18} /><span>Sair</span></button>
       </aside>
 
       <section className="workspace">
@@ -3279,8 +3462,19 @@ export function App() {
                     key={table.id}
                     role="button"
                     tabIndex={0}
-                    onClick={() => setSelectedTableId(table.id)}
-                    onDoubleClick={() => openTableMenuModal(table)}
+                    onClick={() => {
+                      const now = Date.now();
+                      const last = lastTableTapRef.current;
+                      if (last && last.id === table.id && now - last.time < 350) {
+                        // Duplo toque/clique: abre cardápio
+                        lastTableTapRef.current = null;
+                        openTableMenuModal(table);
+                      } else {
+                        // Primeiro toque: seleciona
+                        lastTableTapRef.current = { id: table.id, time: now };
+                        setSelectedTableId(table.id);
+                      }
+                    }}
                     onKeyDown={(event) => {
                       if (event.key === 'Enter' || event.key === ' ') {
                         setSelectedTableId(table.id);
@@ -3323,7 +3517,7 @@ export function App() {
                   <span className="eyebrow">Mesa</span>
                   <h2>{selectedTable?.name ?? 'Selecione uma mesa'}</h2>
                 </div>
-                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                <div className="table-action-buttons">
                   <button type="button" className="secondary-button" onClick={() => {
                     if (!selectedTable) return showToast('Selecione uma mesa.', 'warning');
                     openTableMenuModal(selectedTable);
@@ -3417,108 +3611,143 @@ export function App() {
               </div>
             </div>
 
-            {menuModalTable && (
-              <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 80, display: 'grid', placeItems: 'center', padding: 20 }} onClick={() => { closeTableMenuModal(); setTableCart([]); }}>
-                <div style={{ width: 'min(960px, 100%)', maxHeight: '92vh', background: '#fff', borderRadius: 14, boxShadow: '0 24px 60px rgba(0,0,0,0.18)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }} onClick={(e) => e.stopPropagation()}>
+            {menuModalTable && (() => {
+              const cartTotal = tableCart.reduce((s, c) => s + c.quantity * c.product.price, 0);
+              const cartCount = tableCart.reduce((s, c) => s + c.quantity, 0);
+              const mobile = window.innerWidth <= 640;
 
-                  {/* Header */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 24px', borderBottom: '1px solid #eef2ef' }}>
-                    <div>
-                      <span className="eyebrow">Cardápio</span>
-                      <h2 style={{ margin: 0 }}>{menuModalTable.name}</h2>
-                    </div>
-                    <button type="button" className="secondary-button" onClick={() => { closeTableMenuModal(); setTableCart([]); }}>Fechar</button>
-                  </div>
-
-                  <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-                    {/* Lista de produtos */}
-                    <div style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
-                      {Object.entries(groupedMenuSections).map(([section, items]) => items.length > 0 ? (
-                        <div key={section} style={{ marginBottom: 24 }}>
-                          <h3 style={{ marginBottom: 12 }}>{section}</h3>
-                          <div style={{ display: 'grid', gap: 8 }}>
-                            {items.map((product) => {
-                              const inCart = tableCart.filter((c) => c.product.id === product.id).reduce((s, c) => s + c.quantity, 0);
-                              return (
-                                <div key={product.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', border: `1px solid ${inCart > 0 ? '#16a34a' : '#ececec'}`, borderRadius: 10, background: inCart > 0 ? '#f0fdf4' : '#fff', transition: 'all .15s' }}>
-                                  <div style={{ flex: 1 }}>
-                                    <strong>{product.name}</strong>
-                                    {inCart > 0 && <span style={{ marginLeft: 8, background: '#16a34a', color: '#fff', fontSize: 11, fontWeight: 700, borderRadius: 20, padding: '1px 8px' }}>{inCart}x</span>}
-                                    <div style={{ marginTop: 3, color: '#5d6c66', fontSize: 13 }}>{product.description}</div>
-                                  </div>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 12 }}>
-                                    <strong style={{ fontSize: 14 }}>{formatCurrency(product.price)}</strong>
-                                    <button type="button" className="secondary-button" style={{ padding: '6px 14px', minHeight: 'unset', fontSize: 13 }} onClick={() => {
-                                      setSelectedTableId(menuModalTable.id);
-                                      setTableCartNoteProduct(product);
-                                      setTableCartNote('');
-                                    }}>+ Adicionar</button>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      ) : null)}
-                    </div>
-
-                    {/* Painel do carrinho */}
-                    <div style={{ width: 300, borderLeft: '1px solid #eef2ef', display: 'flex', flexDirection: 'column', background: '#fafafa' }}>
-                      <div style={{ padding: '16px 18px', borderBottom: '1px solid #eef2ef' }}>
-                        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: '#7a8a7a' }}>Pedido atual</span>
-                      </div>
-                      <div style={{ flex: 1, overflowY: 'auto', padding: '12px 18px' }}>
-                        {tableCart.length === 0 ? (
-                          <p style={{ color: '#9a9a9a', fontSize: 13, textAlign: 'center', marginTop: 24 }}>Nenhum item adicionado.</p>
-                        ) : (
-                          <div style={{ display: 'grid', gap: 8 }}>
-                            {tableCart.map((entry, idx) => (
-                              <div key={idx} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, padding: '10px 12px' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                  <div style={{ flex: 1 }}>
-                                    <span style={{ fontWeight: 600, fontSize: 13 }}>{entry.quantity}× {entry.product.name}</span>
-                                    {entry.note && <div style={{ fontSize: 12, color: '#7a8a7a', marginTop: 3 }}>↳ {entry.note}</div>}
-                                  </div>
-                                  <button type="button" onClick={() => setTableCart((prev) => prev.filter((_, i) => i !== idx))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#b91c1c', padding: '0 0 0 8px', fontSize: 16, lineHeight: 1 }}>×</button>
-                                </div>
-                                <div style={{ fontSize: 12, color: '#9a9a9a', marginTop: 4, textAlign: 'right' }}>{formatCurrency(entry.quantity * entry.product.price)}</div>
+              /* Painel de produtos — compartilhado entre mobile/desktop */
+              const productList = (
+                <div style={{ flex: 1, overflowY: 'auto', padding: mobile ? '12px 12px 80px' : 24 }}>
+                  {Object.entries(groupedMenuSections).map(([section, items]) => items.length > 0 ? (
+                    <div key={section} style={{ marginBottom: 20 }}>
+                      <h3 style={{ marginBottom: 10, fontSize: mobile ? 13 : 15, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#789088' }}>{section}</h3>
+                      <div style={{ display: 'grid', gap: 8 }}>
+                        {items.map((product) => {
+                          const inCart = tableCart.filter((c) => c.product.id === product.id).reduce((s, c) => s + c.quantity, 0);
+                          return (
+                            <div key={product.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: mobile ? '10px 12px' : '12px 14px', border: `1px solid ${inCart > 0 ? '#16a34a' : '#ececec'}`, borderRadius: 10, background: inCart > 0 ? '#f0fdf4' : '#fff', transition: 'all .15s' }}>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <strong style={{ fontSize: mobile ? 13 : 14 }}>{product.name}</strong>
+                                {inCart > 0 && <span style={{ marginLeft: 8, background: '#16a34a', color: '#fff', fontSize: 10, fontWeight: 700, borderRadius: 20, padding: '1px 7px' }}>{inCart}x</span>}
+                                {product.description && <div style={{ marginTop: 2, color: '#5d6c66', fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{product.description}</div>}
                               </div>
-                            ))}
-                          </div>
-                        )}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 10, flexShrink: 0 }}>
+                                <strong style={{ fontSize: 13 }}>{formatCurrency(product.price)}</strong>
+                                <button type="button" className="secondary-button" style={{ padding: '6px 12px', minHeight: 'unset', fontSize: 12 }} onClick={() => {
+                                  setSelectedTableId(menuModalTable.id);
+                                  setTableCartNoteProduct(product);
+                                  setTableCartNote('');
+                                }}>+ Add</button>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
-                      {tableCart.length > 0 && (
-                        <div style={{ padding: '14px 18px', borderTop: '1px solid #eef2ef' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, fontWeight: 700, marginBottom: 12 }}>
-                            <span>Total</span>
-                            <span>{formatCurrency(tableCart.reduce((s, c) => s + c.quantity * c.product.price, 0))}</span>
-                          </div>
-                          <button
-                            type="button"
-                            className="primary-button"
-                            style={{ width: '100%' }}
-                            onClick={async () => {
-                              const cartItems = tableCart.map((c) => ({
-                                productId: c.product.id,
-                                productName: c.product.name,
-                                quantity: c.quantity,
-                                unitPrice: c.product.price,
-                                note: c.note || undefined,
-                              }));
-                              setTableCart([]);
-                              closeTableMenuModal();
-                              await createOrder(menuModalTable.id, cartItems, menuModalTable.name);
-                            }}
-                          >
-                            Confirmar e enviar para cozinha
-                          </button>
-                        </div>
-                      )}
                     </div>
+                  ) : null)}
+                </div>
+              );
+
+              /* Painel do carrinho — compartilhado */
+              const cartPanel = (
+                <div style={{ display: 'flex', flexDirection: 'column', flex: mobile ? 1 : undefined, width: mobile ? '100%' : 300, borderLeft: mobile ? 'none' : '1px solid #eef2ef', background: '#fafafa', overflowY: mobile ? 'auto' : undefined }}>
+                  {!mobile && <div style={{ padding: '16px 18px', borderBottom: '1px solid #eef2ef' }}><span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: '#7a8a7a' }}>Pedido atual</span></div>}
+                  <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px' }}>
+                    {tableCart.length === 0 ? (
+                      <p style={{ color: '#9a9a9a', fontSize: 13, textAlign: 'center', marginTop: 24 }}>Nenhum item adicionado.</p>
+                    ) : (
+                      <div style={{ display: 'grid', gap: 8 }}>
+                        {tableCart.map((entry, idx) => (
+                          <div key={idx} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, padding: '10px 12px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                              <div style={{ flex: 1 }}>
+                                <span style={{ fontWeight: 600, fontSize: 13 }}>{entry.quantity}× {entry.product.name}</span>
+                                {entry.note && <div style={{ fontSize: 12, color: '#7a8a7a', marginTop: 3 }}>↳ {entry.note}</div>}
+                              </div>
+                              <button type="button" onClick={() => setTableCart((prev) => prev.filter((_, i) => i !== idx))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#b91c1c', padding: '0 0 0 8px', fontSize: 18, lineHeight: 1 }}>×</button>
+                            </div>
+                            <div style={{ fontSize: 12, color: '#9a9a9a', marginTop: 4, textAlign: 'right' }}>{formatCurrency(entry.quantity * entry.product.price)}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {tableCart.length > 0 && (
+                    <div style={{ padding: '14px 16px', borderTop: '1px solid #eef2ef', background: '#fff' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, fontWeight: 700, marginBottom: 12 }}>
+                        <span>Total</span>
+                        <span>{formatCurrency(cartTotal)}</span>
+                      </div>
+                      <button type="button" className="primary-button" style={{ width: '100%' }}
+                        onClick={async () => {
+                          const cartItems = tableCart.map((c) => ({ productId: c.product.id, productName: c.product.name, quantity: c.quantity, unitPrice: c.product.price, note: c.note || undefined }));
+                          setTableCart([]);
+                          closeTableMenuModal();
+                          await createOrder(menuModalTable.id, cartItems, menuModalTable.name);
+                        }}>
+                        ✅ Confirmar e enviar para cozinha
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+
+              return (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 80, display: 'flex', alignItems: mobile ? 'flex-end' : 'center', justifyContent: 'center', padding: mobile ? 0 : 20 }}
+                  onClick={() => { closeTableMenuModal(); setTableCart([]); setMenuModalTab('menu'); }}>
+
+                  <div style={{ width: mobile ? '100%' : 'min(960px, 100%)', height: mobile ? '92dvh' : undefined, maxHeight: mobile ? undefined : '92vh', background: '#fff', borderRadius: mobile ? '16px 16px 0 0' : 14, boxShadow: '0 24px 60px rgba(0,0,0,0.22)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+                    onClick={(e) => e.stopPropagation()}>
+
+                    {/* Header */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: mobile ? '14px 16px' : '20px 24px', borderBottom: '1px solid #eef2ef', flexShrink: 0 }}>
+                      <div>
+                        <span className="eyebrow">Cardápio</span>
+                        <h2 style={{ margin: 0, fontSize: mobile ? 16 : 20 }}>{menuModalTable.name}</h2>
+                      </div>
+                      <button type="button" className="secondary-button" style={{ padding: '7px 14px', fontSize: 13 }}
+                        onClick={() => { closeTableMenuModal(); setTableCart([]); setMenuModalTab('menu'); }}>Fechar</button>
+                    </div>
+
+                    {/* Abas mobile */}
+                    {mobile && (
+                      <div style={{ display: 'flex', borderBottom: '2px solid #eef2ef', flexShrink: 0 }}>
+                        {(['menu', 'cart'] as const).map((t) => (
+                          <button key={t} type="button" onClick={() => setMenuModalTab(t)}
+                            style={{ flex: 1, background: 'none', border: 'none', borderBottom: menuModalTab === t ? '3px solid #18201d' : '3px solid transparent', marginBottom: -2, padding: '11px 0', fontWeight: menuModalTab === t ? 700 : 500, fontSize: 13, color: menuModalTab === t ? '#18201d' : '#789088', cursor: 'pointer' }}>
+                            {t === 'menu' ? '🍽️ Cardápio' : `🛒 Pedido${cartCount > 0 ? ` (${cartCount})` : ''}`}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Conteúdo */}
+                    {mobile ? (
+                      <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                        {menuModalTab === 'menu' ? productList : cartPanel}
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+                        {productList}
+                        {cartPanel}
+                      </div>
+                    )}
+
+                    {/* Botão flutuante "Ver pedido" no mobile */}
+                    {mobile && menuModalTab === 'menu' && cartCount > 0 && (
+                      <div style={{ position: 'absolute', bottom: 16, left: 16, right: 16, zIndex: 10 }}>
+                        <button type="button" onClick={() => setMenuModalTab('cart')}
+                          style={{ width: '100%', background: '#18201d', color: '#fff', border: 'none', borderRadius: 12, padding: '13px 20px', fontWeight: 700, fontSize: 15, display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 4px 20px rgba(0,0,0,0.3)', cursor: 'pointer' }}>
+                          <span>🛒 {cartCount} {cartCount === 1 ? 'item' : 'itens'}</span>
+                          <span>Ver pedido · {formatCurrency(cartTotal)}</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
           </section>
         )}
 
@@ -5998,121 +6227,214 @@ export function App() {
         )}
 
         {activeModule === 'ajustes' && (
-          <section className="module-grid two-columns">
-            <div className="panel settings-list">
-              <div className="panel-header">
-                <div>
-                  <span className="eyebrow">Sistema</span>
-                  <h2>Configurações da loja</h2>
-                </div>
-                <Settings size={22} />
-              </div>
-              <label>
-                Nome da loja
-                <input value={storeName} onChange={(e) => setStoreName(e.target.value)} />
-              </label>
-              <label>
-                CNPJ
-                <input value={storeCnpj} onChange={(e) => setStoreCnpj(e.target.value)} placeholder="00.000.000/0001-00" />
-              </label>
-              <label>
-                Endereço
-                <input value={storeAddress} onChange={(e) => setStoreAddress(e.target.value)} placeholder="Rua, número - Bairro" />
-              </label>
-              <label>
-                Cidade <span>(usada no QR PIX — obrigatório)</span>
-                <input value={storeCity} onChange={(e) => setStoreCity(e.target.value)} placeholder="Ex: Recife" />
-              </label>
-              <label>
-                Telefone
-                <input value={storePhone} onChange={(e) => setStorePhone(e.target.value)} placeholder="(00) 0000-0000" />
-              </label>
-              <label>
-                Chave PIX <span>(email, CPF, CNPJ, telefone com +55 ou chave aleatória)</span>
-                <input value={storePixKey} onChange={(e) => setStorePixKey(e.target.value)} placeholder="Ex: +5511999999999 ou email@exemplo.com" autoComplete="off" />
-              </label>
-              {(role === 'ADMIN' || role === 'GERENTE') && (
-                <div style={{ borderTop: '1px solid #eef2ef', paddingTop: 14, marginTop: 4 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#789088', marginBottom: 10 }}>
-                    Salão
+          <section style={{ display: 'flex', flexDirection: 'column', gap: 0, height: '100%' }}>
+
+            {/* Sub-abas de Ajustes */}
+            <div style={{ position: 'relative', background: '#fff', flexShrink: 0 }}>
+            <div className="ajustes-subtabs" style={{ display: 'flex', gap: 0, borderBottom: '2px solid #eef2ef', background: '#fff', padding: '0 8px', overflowX: 'auto', flexShrink: 0 }}>
+              {([
+                { key: 'loja',       label: '🏪 Dados da Loja' },
+                { key: 'tecnico',    label: '⚙️ Configurações Técnicas' },
+                { key: 'pagamentos', label: '💳 Pagamentos' },
+              ] as const).map((tab) => (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => setAjustesSubTab(tab.key)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    borderBottom: ajustesSubTab === tab.key ? '3px solid #18201d' : '3px solid transparent',
+                    marginBottom: -2,
+                    padding: '14px 20px 13px',
+                    fontWeight: ajustesSubTab === tab.key ? 700 : 500,
+                    fontSize: 14,
+                    color: ajustesSubTab === tab.key ? '#18201d' : '#789088',
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                    transition: 'color 0.15s, border-color 0.15s',
+                  }}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+            {/* Indicador de scroll → só aparece no mobile via CSS */}
+            <div className="ajustes-subtabs-hint" aria-hidden="true">
+              <span>›</span>
+            </div>
+            </div>{/* fim wrapper position:relative */}
+
+            {/* ── ABA: DADOS DA LOJA ── */}
+            {ajustesSubTab === 'loja' && (
+              <div className="module-grid two-columns" style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
+                <div className="panel settings-list">
+                  <div className="panel-header">
+                    <div>
+                      <span className="eyebrow">Recibo / Comprovante</span>
+                      <h2>Dados da loja</h2>
+                    </div>
+                    <Settings size={22} />
                   </div>
-                  <label>
-                    Quantidade de mesas
-                    <input
-                      type="number"
-                      min={0}
-                      value={storeTableCount}
-                      onChange={(e) => setStoreTableCount(e.target.value)}
-                    />
-                  </label>
-                  <p style={{ margin: '6px 0 0', fontSize: 12, color: '#9ca3af' }}>
-                    Atual: {storeTableCountOriginal}. Aumentar adiciona novas mesas numeradas em sequência; diminuir remove as de maior número que estiverem livres (mesas ocupadas não são removidas).
+                  <p style={{ fontSize: 12, color: '#9ca3af', margin: '-8px 0 8px' }}>
+                    Essas informações aparecem nos recibos e comprovantes emitidos pelo sistema.
                   </p>
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    style={{ marginTop: 8 }}
-                    disabled={savingTableCount || Math.max(0, Math.floor(Number(storeTableCount) || 0)) === storeTableCountOriginal}
-                    onClick={() => void saveTableCount()}
-                  >
-                    {savingTableCount ? 'Salvando...' : 'Aplicar quantidade de mesas'}
-                  </button>
+                  <label>
+                    Nome da loja
+                    <input value={storeName} onChange={(e) => setStoreName(e.target.value)} />
+                  </label>
+                  <label>
+                    CNPJ
+                    <input value={storeCnpj} onChange={(e) => setStoreCnpj(e.target.value)} placeholder="00.000.000/0001-00" />
+                  </label>
+                  <label>
+                    Endereço
+                    <input value={storeAddress} onChange={(e) => setStoreAddress(e.target.value)} placeholder="Rua, número - Bairro" />
+                  </label>
+                  <label>
+                    Cidade
+                    <input value={storeCity} onChange={(e) => setStoreCity(e.target.value)} placeholder="Ex: Recife" />
+                  </label>
+                  <label>
+                    Telefone
+                    <input value={storePhone} onChange={(e) => setStorePhone(e.target.value)} placeholder="(00) 0000-0000" />
+                  </label>
+                  <button className="primary-button" type="button" style={{ width: 'fit-content' }} onClick={saveStoreSettings}>Salvar dados da loja</button>
                 </div>
-              )}
-              {(role === 'ADMIN' || role === 'GERENTE') && (
-                <div style={{ borderTop: '1px solid #eef2ef', paddingTop: 14, marginTop: 4 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#789088', marginBottom: 10 }}>
-                    Mercado Pago
+
+                {/* Link público de Delivery */}
+                <div className="panel">
+                  <div className="panel-header">
+                    <div>
+                      <span className="eyebrow">Delivery</span>
+                      <h2>Link do cardápio online</h2>
+                    </div>
                   </div>
-                  {mpConnected ? (
-                    <div style={{ display: 'grid', gap: 8 }}>
-                      <p style={{ margin: 0, fontSize: 13, color: '#15803d', fontWeight: 600 }}>
-                        ✓ Conectado{mpConnectedAt ? ` em ${new Date(mpConnectedAt).toLocaleString()}` : ''}
-                      </p>
-                      <p style={{ margin: 0, fontSize: 12, color: '#9ca3af' }}>
-                        As cobranças Pix dinâmicas serão geradas pela conta do Mercado Pago desta empresa.
-                      </p>
-                      <button type="button" className="secondary-button" disabled={mpSaving} onClick={() => void disconnectMercadoPago()} style={{ width: 'fit-content' }}>
-                        {mpSaving ? 'Aguarde...' : 'Desconectar'}
+                  <div style={{ padding: '0 0 8px' }}>
+                    <p style={{ fontSize: 13, color: '#6b7280', marginBottom: 14 }}>
+                      Compartilhe este link com seus clientes. Ao acessar, eles verão o cardápio da sua loja e poderão fazer pedidos de delivery sem precisar de login.
+                    </p>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <input
+                        readOnly
+                        value={getPublicDeliveryLink()}
+                        style={{ flex: 1, fontSize: 12, padding: '8px 10px', border: '1px solid #e5e7eb', borderRadius: 8, background: '#f9fafb', color: '#374151' }}
+                      />
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={() => {
+                          void navigator.clipboard.writeText(getPublicDeliveryLink());
+                          showToast('Link copiado!', 'success');
+                        }}
+                      >
+                        Copiar
                       </button>
                     </div>
-                  ) : (
-                    <div style={{ display: 'grid', gap: 8 }}>
-                      <p style={{ margin: 0, fontSize: 12, color: '#9ca3af' }}>
-                        Cole o <strong>Access Token</strong> da sua conta do Mercado Pago (Painel do desenvolvedor → Suas integrações → Credenciais de produção) para habilitar cobranças Pix dinâmicas com confirmação automática.
-                      </p>
-                      <label>
-                        Access Token
-                        <input
-                          type="password"
-                          value={mpAccessTokenInput}
-                          onChange={(e) => setMpAccessTokenInput(e.target.value)}
-                          placeholder="APP_USR-..."
-                          autoComplete="off"
+                    {currentUser?.companyId && (
+                      <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8 }}>
+                        <div style={{ fontSize: 12, color: '#6b7280' }}>QR Code para impressão ou exibição:</div>
+                        <img
+                          src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(getPublicDeliveryLink())}`}
+                          alt="QR Code delivery"
+                          style={{ width: 160, height: 160, borderRadius: 8, border: '1px solid #e5e7eb' }}
                         />
+                      </div>
+                    )}
+                    <div style={{ borderTop: '1px solid #f3f4f6', marginTop: 20, paddingTop: 16 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Banner do cardápio</div>
+                      <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 12 }}>Imagem exibida no topo do cardápio online. Ideal: 1200×400px.</p>
+                      {currentCompany?.menuBannerUrl && (
+                        <div style={{ marginBottom: 10, position: 'relative', display: 'inline-block' }}>
+                          <img src={currentCompany.menuBannerUrl} alt="Banner" style={{ width: '100%', maxWidth: 400, height: 120, objectFit: 'cover', borderRadius: 8, border: '1px solid #e5e7eb', display: 'block' }} />
+                          <button type="button"
+                            onClick={async () => {
+                              await supabase.from('Company').update({ menuBannerUrl: null }).eq('id', currentUser?.companyId ?? '');
+                              void loadCurrentCompany();
+                              showToast('Banner removido.', 'success');
+                            }}
+                            style={{ position: 'absolute', top: 4, right: 4, background: 'rgba(0,0,0,0.5)', color: '#fff', border: 'none', borderRadius: 4, padding: '2px 8px', cursor: 'pointer', fontSize: 12 }}>
+                            Remover
+                          </button>
+                        </div>
+                      )}
+                      <label style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, background: '#f9fafb', border: '1px dashed #d1d5db', borderRadius: 8, padding: '8px 14px', fontSize: 13, color: '#374151' }}>
+                        {currentCompany?.menuBannerUrl ? 'Trocar banner' : '+ Adicionar banner'}
+                        <input type="file" accept="image/*" style={{ display: 'none' }}
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            try {
+                              await api.uploadMenuBanner(file);
+                              void loadCurrentCompany();
+                              showToast('Banner atualizado!', 'success');
+                            } catch (err) {
+                              showToast((err as Error).message, 'error');
+                            }
+                          }} />
                       </label>
-                      <label>
-                        Public Key <span style={{ fontSize: 11, fontWeight: 400 }}>(opcional)</span>
-                        <input
-                          value={mpPublicKeyInput}
-                          onChange={(e) => setMpPublicKeyInput(e.target.value)}
-                          placeholder="APP_USR-..."
-                          autoComplete="off"
-                        />
-                      </label>
-                      <button type="button" className="primary-button" disabled={mpSaving} onClick={() => void connectMercadoPago()} style={{ width: 'fit-content' }}>
-                        {mpSaving ? 'Conectando...' : 'Conectar Mercado Pago'}
-                      </button>
                     </div>
-                  )}
+                  </div>
                 </div>
-              )}
-              {/* Impressoras — só aparece no Electron */}
-              {(window as any).sistema?.listPrinters && (
-                <>
-                  <div style={{ borderTop: '1px solid #eef2ef', paddingTop: 14, marginTop: 4 }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#789088', marginBottom: 10 }}>
-                      Impressoras térmicas
+              </div>
+            )}
+
+            {/* ── ABA: CONFIGURAÇÕES TÉCNICAS ── */}
+            {ajustesSubTab === 'tecnico' && (
+              <div className="module-grid two-columns" style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
+
+                {/* Salão — Quantidade de mesas */}
+                {(role === 'ADMIN' || role === 'GERENTE') && (
+                  <div className="panel settings-list">
+                    <div className="panel-header">
+                      <div>
+                        <span className="eyebrow">Salão</span>
+                        <h2>Quantidade de mesas</h2>
+                      </div>
+                    </div>
+                    <label>
+                      Número de mesas ativas
+                      <input
+                        type="number"
+                        min={0}
+                        value={storeTableCount}
+                        onChange={(e) => setStoreTableCount(e.target.value)}
+                      />
+                    </label>
+                    <p style={{ margin: '2px 0 0', fontSize: 12, color: '#9ca3af' }}>
+                      Atual: <strong>{storeTableCountOriginal}</strong>. Aumentar adiciona novas mesas numeradas em sequência; diminuir remove as de maior número que estiverem livres (mesas ocupadas não são removidas).
+                    </p>
+                    <button
+                      type="button"
+                      style={{
+                        marginTop: 10,
+                        background: savingTableCount || Math.max(0, Math.floor(Number(storeTableCount) || 0)) === storeTableCountOriginal ? '#9ca3af' : '#18201d',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: 8,
+                        padding: '8px 18px',
+                        fontWeight: 600,
+                        fontSize: 13,
+                        cursor: savingTableCount || Math.max(0, Math.floor(Number(storeTableCount) || 0)) === storeTableCountOriginal ? 'not-allowed' : 'pointer',
+                        transition: 'background 0.2s',
+                        width: 'fit-content',
+                      }}
+                      disabled={savingTableCount || Math.max(0, Math.floor(Number(storeTableCount) || 0)) === storeTableCountOriginal}
+                      onClick={() => void saveTableCount()}
+                    >
+                      {savingTableCount ? 'Salvando...' : 'Aplicar quantidade de mesas'}
+                    </button>
+                  </div>
+                )}
+
+                {/* Impressoras — só aparece no Electron */}
+                {(window as any).sistema?.listPrinters && (
+                  <div className="panel settings-list">
+                    <div className="panel-header">
+                      <div>
+                        <span className="eyebrow">Hardware</span>
+                        <h2>Impressoras térmicas</h2>
+                      </div>
                     </div>
                     <label>
                       Impressora do Caixa
@@ -6139,105 +6461,141 @@ export function App() {
                       }}>
                       🔄 Atualizar lista de impressoras
                     </button>
-                  </div>
-                </>
-              )}
-              <button className="primary-button" type="button" onClick={saveStoreSettings}>Salvar configurações</button>
-            </div>
-
-            {/* Link público de Delivery */}
-            <div className="panel">
-              <div className="panel-header">
-                <div>
-                  <span className="eyebrow">Delivery</span>
-                  <h2>Link do cardápio online</h2>
-                </div>
-              </div>
-              <div style={{ padding: '0 0 8px' }}>
-                <p style={{ fontSize: 13, color: '#6b7280', marginBottom: 14 }}>
-                  Compartilhe este link com seus clientes. Ao acessar, eles verão o cardápio da sua loja e poderão fazer pedidos de delivery sem precisar de login.
-                </p>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <input
-                    readOnly
-                    value={getPublicDeliveryLink()}
-                    style={{ flex: 1, fontSize: 12, padding: '8px 10px', border: '1px solid #e5e7eb', borderRadius: 8, background: '#f9fafb', color: '#374151' }}
-                  />
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    onClick={() => {
-                      void navigator.clipboard.writeText(getPublicDeliveryLink());
-                      showToast('Link copiado!', 'success');
-                    }}
-                  >
-                    Copiar
-                  </button>
-                </div>
-                {currentUser?.companyId && (
-                  <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8 }}>
-                    <div style={{ fontSize: 12, color: '#6b7280' }}>QR Code para impressão ou exibição:</div>
-                    <img
-                      src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(getPublicDeliveryLink())}`}
-                      alt="QR Code delivery"
-                      style={{ width: 160, height: 160, borderRadius: 8, border: '1px solid #e5e7eb' }}
-                    />
+                    <button className="primary-button" type="button" style={{ marginTop: 4, width: 'fit-content' }} onClick={saveStoreSettings}>Salvar impressoras</button>
                   </div>
                 )}
 
-                <div style={{ borderTop: '1px solid #f3f4f6', marginTop: 20, paddingTop: 16 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Banner do cardápio</div>
-                  <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 12 }}>Imagem exibida no topo do cardápio online. Ideal: 1200×400px.</p>
-                  {currentCompany?.menuBannerUrl && (
-                    <div style={{ marginBottom: 10, position: 'relative', display: 'inline-block' }}>
-                      <img src={currentCompany.menuBannerUrl} alt="Banner" style={{ width: '100%', maxWidth: 400, height: 120, objectFit: 'cover', borderRadius: 8, border: '1px solid #e5e7eb', display: 'block' }} />
-                      <button type="button"
-                        onClick={async () => {
-                          await supabase.from('Company').update({ menuBannerUrl: null }).eq('id', currentUser?.companyId ?? '');
-                          void loadCurrentCompany();
-                          showToast('Banner removido.', 'success');
-                        }}
-                        style={{ position: 'absolute', top: 4, right: 4, background: 'rgba(0,0,0,0.5)', color: '#fff', border: 'none', borderRadius: 4, padding: '2px 8px', cursor: 'pointer', fontSize: 12 }}>
-                        Remover
-                      </button>
+                {/* Segurança — Alterar senha */}
+                <div className="panel settings-list">
+                  <div className="panel-header">
+                    <div>
+                      <span className="eyebrow">Segurança</span>
+                      <h2>Alterar senha de acesso</h2>
                     </div>
-                  )}
-                  <label style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, background: '#f9fafb', border: '1px dashed #d1d5db', borderRadius: 8, padding: '8px 14px', fontSize: 13, color: '#374151' }}>
-                    {currentCompany?.menuBannerUrl ? 'Trocar banner' : '+ Adicionar banner'}
-                    <input type="file" accept="image/*" style={{ display: 'none' }}
-                      onChange={async (e) => {
-                        const file = e.target.files?.[0];
-                        if (!file) return;
-                        try {
-                          await api.uploadMenuBanner(file);
-                          void loadCurrentCompany();
-                          showToast('Banner atualizado!', 'success');
-                        } catch (err) {
-                          showToast((err as Error).message, 'error');
-                        }
-                      }} />
+                  </div>
+                  <label>
+                    Nova senha
+                    <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
                   </label>
+                  <label>
+                    Confirmar nova senha
+                    <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
+                  </label>
+                  <button className="primary-button" type="button" style={{ width: 'fit-content' }} onClick={() => void submitPasswordChange()}>Alterar senha</button>
                 </div>
               </div>
-            </div>
+            )}
 
-            <div className="panel settings-list">
-              <div className="panel-header">
-                <div>
-                  <span className="eyebrow">Segurança</span>
-                  <h2>Alterar senha de acesso</h2>
+            {/* ── ABA: PAGAMENTOS ── */}
+            {ajustesSubTab === 'pagamentos' && (
+              <div className="module-grid two-columns" style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
+
+                {/* Chave Pix estática — QR ao encerrar mesa */}
+                <div className="panel settings-list">
+                  <div className="panel-header">
+                    <div>
+                      <span className="eyebrow">Pix estático</span>
+                      <h2>QR Code ao encerrar mesa</h2>
+                    </div>
+                  </div>
+                  <p style={{ fontSize: 12, color: '#9ca3af', margin: '-8px 0 8px' }}>
+                    Chave Pix exibida como QR Code quando uma mesa é encerrada sem pagamento digital. Usada para recebimentos manuais (dinheiro/Pix na mão).
+                  </p>
+                  <label>
+                    Chave Pix <span>(email, CPF, CNPJ, telefone com +55 ou chave aleatória)</span>
+                    <input
+                      value={storePixKey}
+                      onChange={(e) => setStorePixKey(e.target.value)}
+                      placeholder="Ex: +5511999999999 ou email@exemplo.com"
+                      autoComplete="off"
+                    />
+                  </label>
+                  <label>
+                    Cidade <span>(obrigatório para gerar o QR Pix)</span>
+                    <input value={storeCity} onChange={(e) => setStoreCity(e.target.value)} placeholder="Ex: Recife" />
+                  </label>
+                  <button className="primary-button" type="button" style={{ width: 'fit-content' }} onClick={saveStoreSettings}>Salvar chave Pix</button>
                 </div>
+
+                {/* Mercado Pago */}
+                {(role === 'ADMIN' || role === 'GERENTE') && (
+                  <div className="panel settings-list">
+                    <div className="panel-header">
+                      <div>
+                        <span className="eyebrow">Pix online / Cobrança automática</span>
+                        <h2>Mercado Pago</h2>
+                      </div>
+                    </div>
+                    {mpConnected ? (
+                      <div style={{ display: 'grid', gap: 10 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '10px 14px' }}>
+                          <span style={{ fontSize: 18 }}>✅</span>
+                          <div>
+                            <div style={{ fontWeight: 700, fontSize: 14, color: '#15803d' }}>Conectado</div>
+                            {mpConnectedAt && <div style={{ fontSize: 12, color: '#4ade80' }}>desde {new Date(mpConnectedAt).toLocaleString()}</div>}
+                          </div>
+                        </div>
+                        <p style={{ margin: 0, fontSize: 12, color: '#9ca3af' }}>
+                          Cobranças Pix dinâmicas com confirmação automática via webhook estão ativas. O token fica armazenado de forma segura no servidor — nunca exposto ao cliente.
+                        </p>
+                        <button
+                          type="button"
+                          style={{ background: '#fef2f2', color: '#b91c1c', border: '1px solid #fca5a5', borderRadius: 8, padding: '9px 18px', fontWeight: 600, fontSize: 14, cursor: 'pointer', width: 'fit-content' }}
+                          disabled={mpSaving}
+                          onClick={() => void disconnectMercadoPago()}
+                        >
+                          {mpSaving ? 'Aguarde...' : '🔌 Desconectar Mercado Pago'}
+                        </button>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'grid', gap: 10 }}>
+                        <p style={{ margin: 0, fontSize: 12, color: '#9ca3af' }}>
+                          Cole o <strong>Access Token</strong> da sua conta do Mercado Pago (Painel do desenvolvedor → Suas integrações → Credenciais de produção) para habilitar cobranças Pix dinâmicas com confirmação automática de pagamento.
+                        </p>
+                        <label>
+                          Access Token
+                          <input
+                            type="password"
+                            value={mpAccessTokenInput}
+                            onChange={(e) => setMpAccessTokenInput(e.target.value)}
+                            placeholder="APP_USR-..."
+                            autoComplete="off"
+                          />
+                        </label>
+                        <label>
+                          Public Key <span style={{ fontSize: 11, fontWeight: 400 }}>(opcional)</span>
+                          <input
+                            value={mpPublicKeyInput}
+                            onChange={(e) => setMpPublicKeyInput(e.target.value)}
+                            placeholder="APP_USR-..."
+                            autoComplete="off"
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          style={{
+                            background: mpSaving ? '#9ca3af' : '#18201d',
+                            color: '#fff',
+                            border: 'none',
+                            borderRadius: 8,
+                            padding: '10px 20px',
+                            fontWeight: 700,
+                            fontSize: 14,
+                            cursor: mpSaving ? 'not-allowed' : 'pointer',
+                            width: 'fit-content',
+                          }}
+                          disabled={mpSaving}
+                          onClick={() => void connectMercadoPago()}
+                        >
+                          {mpSaving ? 'Conectando...' : '🔗 Conectar Mercado Pago'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
-              <label>
-                Nova senha
-                <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
-              </label>
-              <label>
-                Confirmar nova senha
-                <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
-              </label>
-              <button className="primary-button" type="button" onClick={() => void submitPasswordChange()}>Alterar senha</button>
-            </div>
+            )}
+
           </section>
         )}
       </section>
