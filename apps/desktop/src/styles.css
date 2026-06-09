@@ -1473,42 +1473,72 @@ h2 {
   .close-modal-actions { padding: 12px 16px 16px; }
 
   /* ── Super Admin: responsivo em todos os smartphones ── */
+
+  /* Header empilha título + controles em coluna */
   .super-panel-header {
     flex-direction: column !important;
-    align-items: flex-start !important;
+    align-items: stretch !important;
     gap: 10px !important;
   }
 
+  /* Bloco de controles: sempre ocupa largura total e quebra linha */
   .super-panel-header > div:last-child {
-    width: 100%;
-    flex-wrap: wrap;
+    width: 100% !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+    box-sizing: border-box !important;
   }
 
+  /* Select: toma linha inteira */
   .super-panel-header select {
-    width: 100%;
+    width: 100% !important;
+    min-width: 0 !important;
+    flex: 0 0 100% !important;
     font-size: 13px;
-    flex: unset !important;
+    box-sizing: border-box !important;
   }
 
+  /* Period toggle: toma linha inteira, botões com flex:1 */
   .super-period-toggle {
     width: 100% !important;
-    justify-content: space-between;
+    min-width: 0 !important;
+    flex: 0 0 100% !important;
+    box-sizing: border-box !important;
+    flex-wrap: nowrap !important;
   }
 
   .super-period-toggle button {
-    flex: 1;
-    padding: 7px 4px !important;
-    font-size: 12px !important;
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+    padding: 7px 2px !important;
+    font-size: 11px !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
+  /* Botão Atualizar: largura total */
+  .super-panel-header .secondary-button {
+    width: 100% !important;
+    text-align: center;
+    justify-content: center;
+  }
+
+  /* Abas de relatório: scroll horizontal (ok em mobile) */
   .super-report-tabs {
     gap: 6px !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px !important;
+    flex-wrap: nowrap !important;
   }
 
   .super-report-tabs button {
-    font-size: 12px !important;
+    font-size: 11px !important;
     padding: 8px 10px !important;
     min-height: 36px !important;
+    white-space: nowrap;
+    flex-shrink: 0 !important;
   }
 
   /* KPI cards: 2 colunas iguais */
@@ -1519,20 +1549,34 @@ h2 {
 
   .super-kpi-grid > div {
     padding: 12px !important;
+    min-width: 0 !important;
+    overflow: hidden;
   }
 
   .super-kpi-grid .kpi-value {
-    font-size: 20px !important;
+    font-size: 18px !important;
+    word-break: break-all;
   }
 
   .super-kpi-grid .kpi-icon {
     display: none !important;
   }
 
+  .super-kpi-grid .kpi-label,
+  .super-kpi-grid > div > div:first-child {
+    font-size: 11px !important;
+    line-height: 1.2;
+  }
+
   /* Tabelas: scroll horizontal */
   .super-table-wrap {
-    overflow-x: auto;
+    overflow-x: auto !important;
     -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+  }
+
+  .super-table-wrap table {
+    /* tabela mantém min-width inline, mas wrapa dentro do scroll */
   }
 
   .super-table-wrap table th,
@@ -1540,6 +1584,19 @@ h2 {
     padding: 10px 8px !important;
     font-size: 12px !important;
     white-space: nowrap;
+  }
+
+  /* Barra de busca empilha em mobile */
+  .super-search-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+  }
+
+  .super-search-row label {
+    min-width: 0 !important;
+    width: 100% !important;
+    flex: 1 1 100% !important;
   }
 
   /* Cadastros / Usuários */

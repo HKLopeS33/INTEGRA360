@@ -4857,12 +4857,12 @@ export function App() {
 
               {userSectionTab === 'list' ? (
                 <>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
-                    <label style={{ display: 'flex', gap: 6, alignItems: 'center', flex: 1, minWidth: 240 }}>
+                  <div className="super-search-row" style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
+                    <label style={{ display: 'flex', gap: 6, alignItems: 'center', flex: 1, minWidth: 0 }}>
                       Buscar
-                      <input value={companySearch} onChange={(e) => setCompanySearch(e.target.value)} placeholder="Nome da empresa" style={{ flex: 1 }} />
+                      <input value={companySearch} onChange={(e) => setCompanySearch(e.target.value)} placeholder="Nome da empresa" style={{ flex: 1, minWidth: 0 }} />
                     </label>
-                    <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <label style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
                       Status
                       <select value={companyFilterStatus} onChange={(e) => setCompanyFilterStatus(e.target.value as any)}>
                         <option value="all">Todas</option>
@@ -4969,7 +4969,12 @@ export function App() {
                                     closeActionMenu();
                                   } else {
                                     const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
-                                    setActionMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+                                    const menuWidth = 180;
+                                    const rightSpace = window.innerWidth - rect.right;
+                                    setActionMenuPos({
+                                      top: rect.bottom + 4,
+                                      right: Math.max(8, Math.min(rightSpace, window.innerWidth - menuWidth - 8)),
+                                    });
                                     setOpenActionMenuId(c.id);
                                   }
                                 }}
@@ -4986,7 +4991,8 @@ export function App() {
                                   border: '1px solid #e5e7eb',
                                   borderRadius: 8,
                                   boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
-                                  minWidth: 160,
+                                  minWidth: 180,
+                                  maxWidth: 'calc(100vw - 16px)',
                                   zIndex: 9999,
                                 }}>
                                   <button 
