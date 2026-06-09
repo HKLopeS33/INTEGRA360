@@ -119,7 +119,7 @@ const anonFetch = async (path: string, options?: RequestInit) => {
 export const publicDeliveryApi = {
   getMenu: async (companyId: string) => {
     const [companyRes, categoriesRes, productsRes] = await Promise.all([
-      anonFetch(`/Company?id=eq.${encodeURIComponent(companyId)}&active=eq.true&select=id,name,menuBannerUrl&limit=1`),
+      anonFetch(`/Company?id=eq.${encodeURIComponent(companyId)}&active=eq.true&select=id,name,menuBannerUrl,phone&limit=1`),
       anonFetch(`/Category?companyId=eq.${encodeURIComponent(companyId)}&active=eq.true&select=id,name,sort,imageUrl&order=sort.asc`),
       anonFetch(`/Product?companyId=eq.${encodeURIComponent(companyId)}&active=eq.true&available=eq.true&select=id,categoryId,name,description,price,available&order=name.asc`),
     ]);
@@ -129,7 +129,7 @@ export const publicDeliveryApi = {
     const categories: any[] = await categoriesRes.json();
     const products: any[] = await productsRes.json();
     return {
-      company: companies[0] as { id: string; name: string; menuBannerUrl: string | null },
+      company: companies[0] as { id: string; name: string; menuBannerUrl: string | null; phone: string | null },
       categories: categories as Array<{ id: string; name: string; sort: number; imageUrl: string | null }>,
       products: products.map((p: any) => ({ ...p, price: Number(p.price) })) as Array<{ id: string; categoryId: string; name: string; description: string | null; price: number; available: boolean }>,
     };

@@ -275,7 +275,7 @@ export function App() {
   const [menuTableId, setMenuTableId] = useState<string | null>(null);
   // Delivery público (link para cliente)
   const [publicDeliveryCompanyId, setPublicDeliveryCompanyId] = useState<string | null>(null);
-  const [publicDeliveryCompany, setPublicDeliveryCompany] = useState<{ id: string; name: string; menuBannerUrl?: string | null } | null>(null);
+  const [publicDeliveryCompany, setPublicDeliveryCompany] = useState<{ id: string; name: string; menuBannerUrl?: string | null; phone?: string | null } | null>(null);
   const [publicDeliveryCategories, setPublicDeliveryCategories] = useState<Array<{ id: string; name: string; sort: number; imageUrl?: string | null }>>([]);
   const [publicDeliveryProducts, setPublicDeliveryProducts] = useState<Array<{ id: string; categoryId: string; name: string; description: string | null; price: number; available: boolean }>>([]);
   const [publicDeliveryCart, setPublicDeliveryCart] = useState<Array<{ product: { id: string; name: string; price: number }; quantity: number; note: string }>>([]);
@@ -292,6 +292,12 @@ export function App() {
   const [publicDeliveryOrderId, setPublicDeliveryOrderId] = useState<string | null>(null);
   const [publicDeliveryReceiptNumber, setPublicDeliveryReceiptNumber] = useState<number | null>(null);
   const [publicDeliveryError, setPublicDeliveryError] = useState<string | null>(null);
+  // Snapshot do carrinho/pagamento salvo no momento do envio (para mensagem WhatsApp após limpeza do carrinho)
+  const [publicDeliverySnapshot, setPublicDeliverySnapshot] = useState<{
+    items: Array<{ name: string; quantity: number; unitPrice: number; note: string }>;
+    paymentMethod: string;
+    grandTotal: number;
+  } | null>(null);
   const [publicDeliveryMpAvailable, setPublicDeliveryMpAvailable] = useState(false);
   const [publicPixCharge, setPublicPixCharge] = useState<{ qrCode: string | null; qrCodeBase64: string | null; ticketUrl: string | null } | null>(null);
   const [publicPixLoading, setPublicPixLoading] = useState(false);
@@ -1327,6 +1333,15 @@ export function App() {
     setPublicDeliveryError(null);
     setPublicDeliverySubmitting(true);
     try {
+      const cartSnapshot = publicDeliveryCart.map((i) => ({
+        name: i.product.name,
+        quantity: i.quantity,
+        unitPrice: i.product.price,
+        note: i.note || '',
+      }));
+      const cartTotalSnap = cartSnapshot.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
+      const grandTotalSnap = cartTotalSnap + publicDeliveryFee;
+
       const result = await publicDeliveryApi.createOrder(publicDeliveryCompanyId, {
         customerName: publicDeliveryName,
         customerPhone: publicDeliveryPhone || undefined,
@@ -1344,6 +1359,9 @@ export function App() {
       });
       setPublicDeliveryOrderId(result.id);
       setPublicDeliveryReceiptNumber(result.receiptNumber ?? null);
+      // Salva snapshot para a mensagem WhatsApp (antes de limpar o carrinho)
+      setPublicDeliverySnapshot({ items: cartSnapshot, paymentMethod: publicDeliveryPayment, grandTotal: grandTotalSnap });
+
       if (publicDeliveryPayment === 'PIX_ONLINE') {
         // Não envia o pedido para o estabelecimento ainda — primeiro o cliente
         // precisa pagar e o MP confirmar via webhook.
@@ -2559,31 +2577,76 @@ export function App() {
               </div>
             </div>
           )}
-          {publicDeliveryStep === 'success' && (
-            <div style={{ textAlign: 'center', padding: '60px 20px' }}>
-              <div style={{ fontSize: 64 }}>✅</div>
-              <h2 style={{ margin: '16px 0 8px', fontSize: 22 }}>Pedido confirmado!</h2>
-              <p style={{ color: '#6b7280', marginBottom: 24 }}>Seu pedido foi enviado para <strong>{publicDeliveryCompany?.name}</strong>. Aguarde a confirmação da loja.</p>
-              <div style={{ background: '#fff', borderRadius: 12, padding: 20, border: '1px solid #e5e7eb', marginBottom: 24 }}>
-                <div style={{ fontSize: 12, color: '#9ca3af', marginBottom: 4 }}>Número do pedido</div>
-                {publicDeliveryReceiptNumber != null
-                  ? <div style={{ fontWeight: 800, fontSize: 36, color: '#18201d', letterSpacing: 2 }}>#{publicDeliveryReceiptNumber}</div>
-                  : <div style={{ fontWeight: 700, fontSize: 14, color: '#374151', wordBreak: 'break-all' }}>{publicDeliveryOrderId}</div>
-                }
+          {publicDeliveryStep === 'success' && (() => {
+            const paymentLabelMap: Record<string, string> = { DINHEIRO: 'Dinheiro', PIX: 'PIX (na entrega)', CREDITO: 'Cartão de crédito', DEBITO: 'Cartão de débito', PIX_ONLINE: 'PIX online (Mercado Pago)' };
+            const snap = publicDeliverySnapshot;
+            const storePhone = publicDeliveryCompany?.phone?.replace(/\D/g, '') ?? '';
+            const buildWhatsAppUrl = () => {
+              const num = publicDeliveryReceiptNumber != null ? `#${publicDeliveryReceiptNumber}` : publicDeliveryOrderId ?? '';
+              const itensTexto = snap ? snap.items.map((i) => `• ${i.quantity}x ${i.name}${i.note ? ` (${i.note})` : ''} — ${formatCurrency(i.quantity * i.unitPrice)}`).join('\n') : '';
+              const pagamento = snap ? (paymentLabelMap[snap.paymentMethod] ?? snap.paymentMethod) : '';
+              const total = snap ? formatCurrency(snap.grandTotal) : '';
+              const msg = `Olá, ${publicDeliveryCompany?.name ?? 'restaurante'}! 🍽️\n\nAcabei de fazer um pedido pelo cardápio digital.\n\n📋 *Pedido ${num}*\n\n🛒 *Itens:*\n${itensTexto}\n\n💳 *Forma de pagamento:* ${pagamento}\n💰 *Total:* ${total}\n\nPor favor, confirme o recebimento! 😊`;
+              return `https://wa.me/55${storePhone}?text=${encodeURIComponent(msg)}`;
+            };
+            return (
+              <div style={{ textAlign: 'center', padding: '48px 16px 60px' }}>
+                <div style={{ fontSize: 64 }}>✅</div>
+                <h2 style={{ margin: '16px 0 8px', fontSize: 22 }}>Pedido confirmado!</h2>
+                <p style={{ color: '#6b7280', marginBottom: 24, fontSize: 15 }}>
+                  Seu pedido foi enviado para <strong>{publicDeliveryCompany?.name}</strong>.<br />Aguarde a confirmação da loja.
+                </p>
+
+                {/* Card do número do pedido */}
+                <div style={{ background: '#fff', borderRadius: 14, padding: '20px 24px', border: '1px solid #e5e7eb', marginBottom: 24, display: 'inline-block', minWidth: 200 }}>
+                  <div style={{ fontSize: 12, color: '#9ca3af', marginBottom: 4, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Número do pedido</div>
+                  {publicDeliveryReceiptNumber != null
+                    ? <div style={{ fontWeight: 800, fontSize: 40, color: '#18201d', letterSpacing: 3 }}>#{publicDeliveryReceiptNumber}</div>
+                    : <div style={{ fontWeight: 700, fontSize: 13, color: '#374151', wordBreak: 'break-all' }}>{publicDeliveryOrderId}</div>
+                  }
+                </div>
+
+                {/* Resumo do pedido */}
+                {snap && (
+                  <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #e5e7eb', padding: '14px 16px', marginBottom: 24, textAlign: 'left' }}>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: '#374151', marginBottom: 10 }}>Resumo</div>
+                    {snap.items.map((item, idx) => (
+                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '4px 0', borderBottom: '1px solid #f9fafb' }}>
+                        <span style={{ color: '#374151' }}>{item.quantity}x {item.name}{item.note ? <span style={{ color: '#9ca3af' }}> ({item.note})</span> : null}</span>
+                        <span style={{ fontWeight: 600, color: '#18201d' }}>{formatCurrency(item.quantity * item.unitPrice)}</span>
+                      </div>
+                    ))}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 14, marginTop: 10, paddingTop: 6, borderTop: '2px solid #f3f4f6' }}>
+                      <span>Total</span>
+                      <span>{formatCurrency(snap.grandTotal)}</span>
+                    </div>
+                    <div style={{ marginTop: 8, fontSize: 12, color: '#6b7280' }}>
+                      💳 {paymentLabelMap[snap.paymentMethod] ?? snap.paymentMethod}
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center' }}>
+                  <button type="button"
+                    onClick={() => { setPublicDeliveryTrackingStatus('RECEBIDO'); setPublicDeliveryStep('tracking'); }}
+                    style={{ background: '#18201d', color: '#fff', border: 'none', borderRadius: 10, padding: '13px 28px', cursor: 'pointer', fontWeight: 700, fontSize: 15, width: '100%', maxWidth: 360 }}>
+                    🔍 Acompanhar pedido
+                  </button>
+                  {storePhone && (
+                    <a href={buildWhatsAppUrl()} target="_blank" rel="noopener noreferrer"
+                      style={{ background: '#25d366', color: '#fff', border: 'none', borderRadius: 10, padding: '13px 28px', cursor: 'pointer', fontWeight: 700, fontSize: 15, width: '100%', maxWidth: 360, textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxSizing: 'border-box' }}>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                      Enviar mensagem ao estabelecimento
+                    </a>
+                  )}
+                  <button type="button" onClick={() => { setPublicDeliveryStep('menu'); setPublicDeliveryCart([]); setPublicDeliveryName(''); setPublicDeliveryPhone(''); setPublicDeliveryAddress(''); setPublicDeliveryNotes(''); setPublicDeliverySnapshot(null); }}
+                    style={{ background: 'transparent', color: '#6b7280', border: '1px solid #e5e7eb', borderRadius: 10, padding: '11px 24px', cursor: 'pointer', fontWeight: 500, fontSize: 14, width: '100%', maxWidth: 360 }}>
+                    Fazer novo pedido
+                  </button>
+                </div>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center' }}>
-                <button type="button"
-                  onClick={() => { setPublicDeliveryTrackingStatus('RECEBIDO'); setPublicDeliveryStep('tracking'); }}
-                  style={{ background: '#18201d', color: '#fff', border: 'none', borderRadius: 10, padding: '13px 28px', cursor: 'pointer', fontWeight: 700, fontSize: 15, width: '100%', maxWidth: 320 }}>
-                  🔍 Acompanhar pedido
-                </button>
-                <button type="button" onClick={() => { setPublicDeliveryStep('menu'); setPublicDeliveryCart([]); setPublicDeliveryName(''); setPublicDeliveryPhone(''); setPublicDeliveryAddress(''); setPublicDeliveryNotes(''); }}
-                  style={{ background: 'transparent', color: '#6b7280', border: '1px solid #e5e7eb', borderRadius: 10, padding: '11px 24px', cursor: 'pointer', fontWeight: 500, fontSize: 14, width: '100%', maxWidth: 320 }}>
-                  Fazer novo pedido
-                </button>
-              </div>
-            </div>
-          )}
+            );
+          })()}
           {publicDeliveryStep === 'tracking' && (() => {
             const STAGES: Array<{ key: string; label: string; icon: string; desc: string }> = [
               { key: 'RECEBIDO',           label: 'Aguardando aprovação', icon: '⏳', desc: 'O restaurante ainda não confirmou seu pedido.' },
@@ -2595,6 +2658,18 @@ export function App() {
             const currentIdx = isCancelled ? -1 : STAGES.findIndex((s) => s.key === publicDeliveryTrackingStatus);
             const currentStage = isCancelled ? null : STAGES[currentIdx];
             const isFinished = publicDeliveryTrackingStatus === 'ENTREGUE';
+
+            const paymentLabelMap: Record<string, string> = { DINHEIRO: 'Dinheiro', PIX: 'PIX (na entrega)', CREDITO: 'Cartão de crédito', DEBITO: 'Cartão de débito', PIX_ONLINE: 'PIX online (Mercado Pago)' };
+            const snap = publicDeliverySnapshot;
+            const storePhone = publicDeliveryCompany?.phone?.replace(/\D/g, '') ?? '';
+            const buildWhatsAppUrl = () => {
+              const num = publicDeliveryReceiptNumber != null ? `#${publicDeliveryReceiptNumber}` : publicDeliveryOrderId ?? '';
+              const itensTexto = snap ? snap.items.map((i) => `• ${i.quantity}x ${i.name}${i.note ? ` (${i.note})` : ''} — ${formatCurrency(i.quantity * i.unitPrice)}`).join('\n') : '';
+              const pagamento = snap ? (paymentLabelMap[snap.paymentMethod] ?? snap.paymentMethod) : '';
+              const total = snap ? formatCurrency(snap.grandTotal) : '';
+              const msg = `Olá, ${publicDeliveryCompany?.name ?? 'restaurante'}! 🍽️\n\nGostaria de acompanhar meu pedido.\n\n📋 *Pedido ${num}*\n\n🛒 *Itens:*\n${itensTexto}\n\n💳 *Forma de pagamento:* ${pagamento}\n💰 *Total pago:* ${total}\n\nObrigado! 😊`;
+              return `https://wa.me/55${storePhone}?text=${encodeURIComponent(msg)}`;
+            };
 
             return (
               <div style={{ padding: '32px 0 40px' }}>
@@ -2616,7 +2691,7 @@ export function App() {
 
                 {/* Etapas */}
                 {!isCancelled && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 0, margin: '0 0 32px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 0, margin: '0 0 24px' }}>
                     {STAGES.map((stage, idx) => {
                       const done = idx < currentIdx;
                       const active = idx === currentIdx;
@@ -2624,7 +2699,6 @@ export function App() {
                       return (
                         <div key={stage.key}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 0' }}>
-                            {/* Círculo de status */}
                             <div style={{
                               width: 40, height: 40, borderRadius: '50%', flexShrink: 0,
                               background: done ? '#16a34a' : active ? '#18201d' : '#f3f4f6',
@@ -2634,30 +2708,18 @@ export function App() {
                             }}>
                               {done ? <span style={{ color: '#fff', fontSize: 16 }}>✓</span> : <span style={{ filter: pending ? 'grayscale(1) opacity(0.4)' : 'none' }}>{stage.icon}</span>}
                             </div>
-                            {/* Texto */}
                             <div style={{ flex: 1 }}>
-                              <div style={{ fontWeight: active ? 700 : done ? 600 : 400, fontSize: 15, color: pending ? '#9ca3af' : '#18201d' }}>
-                                {stage.label}
-                              </div>
+                              <div style={{ fontWeight: active ? 700 : done ? 600 : 400, fontSize: 15, color: pending ? '#9ca3af' : '#18201d' }}>{stage.label}</div>
                               {active && <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>{stage.desc}</div>}
                             </div>
                           </div>
-
-                          {/* Barra de progresso animada (somente na etapa ativa e não final) */}
                           {active && !isFinished && (
                             <div style={{ marginLeft: 54, marginBottom: 4 }}>
                               <div style={{ height: 4, borderRadius: 4, background: '#e5e7eb', overflow: 'hidden' }}>
-                                <div style={{
-                                  height: '100%', borderRadius: 4,
-                                  background: 'linear-gradient(90deg, #18201d, #4ade80)',
-                                  width: `${publicDeliveryTrackingBar}%`,
-                                  transition: 'width 0.06s linear',
-                                }} />
+                                <div style={{ height: '100%', borderRadius: 4, background: 'linear-gradient(90deg, #18201d, #4ade80)', width: `${publicDeliveryTrackingBar}%`, transition: 'width 0.06s linear' }} />
                               </div>
                             </div>
                           )}
-
-                          {/* Linha conectora entre etapas */}
                           {idx < STAGES.length - 1 && (
                             <div style={{ marginLeft: 19, width: 2, height: 16, background: done ? '#16a34a' : '#e5e7eb' }} />
                           )}
@@ -2667,11 +2729,20 @@ export function App() {
                   </div>
                 )}
 
-                {/* Botão de voltar */}
+                {/* Botão WhatsApp — sempre visível na tela de acompanhamento */}
+                {storePhone && (
+                  <a href={buildWhatsAppUrl()} target="_blank" rel="noopener noreferrer"
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, background: '#25d366', color: '#fff', borderRadius: 12, padding: '13px 20px', fontWeight: 700, fontSize: 15, textDecoration: 'none', marginBottom: 12 }}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                    Falar com o estabelecimento
+                  </a>
+                )}
+
+                {/* Botões finais */}
                 <div style={{ textAlign: 'center' }}>
                   {isFinished || isCancelled ? (
                     <button type="button"
-                      onClick={() => { setPublicDeliveryStep('menu'); setPublicDeliveryCart([]); setPublicDeliveryName(''); setPublicDeliveryPhone(''); setPublicDeliveryAddress(''); setPublicDeliveryNotes(''); }}
+                      onClick={() => { setPublicDeliveryStep('menu'); setPublicDeliveryCart([]); setPublicDeliveryName(''); setPublicDeliveryPhone(''); setPublicDeliveryAddress(''); setPublicDeliveryNotes(''); setPublicDeliverySnapshot(null); }}
                       style={{ background: '#18201d', color: '#fff', border: 'none', borderRadius: 10, padding: '12px 28px', cursor: 'pointer', fontWeight: 600, fontSize: 15 }}>
                       Fazer novo pedido
                     </button>
