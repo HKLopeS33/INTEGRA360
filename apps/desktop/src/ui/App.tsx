@@ -4676,15 +4676,15 @@ export function App() {
         {activeModule === 'usuarios' && (
           <section className="module-grid">
             <div className="panel">
-              <div className="panel-header">
+              <div className="panel-header super-panel-header">
                 <div>
                   <span className="eyebrow">Painel</span>
-                  <h2>Super Usuário — Gestão de clientes</h2>
+                  <h2>Gestão de clientes</h2>
                 </div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button className="secondary-button" type="button" onClick={() => void loadCompanies()}>Atualizar</button>
-                  <button className="secondary-button" type="button" onClick={() => exportCompaniesCSV()}>Exportar CSV</button>
-                  <button className="secondary-button" type="button" onClick={() => exportCompaniesPdf()}>Exportar PDF</button>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button className="secondary-button" type="button" onClick={() => void loadCompanies()}>↻ Atualizar</button>
+                  <button className="secondary-button" type="button" onClick={() => exportCompaniesCSV()}>CSV</button>
+                  <button className="secondary-button" type="button" onClick={() => exportCompaniesPdf()}>PDF</button>
                 </div>
               </div>
 
@@ -4721,7 +4721,7 @@ export function App() {
 
                 return (
                   <>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16 }}>
+                    <div className="super-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 16 }}>
                       {[
                         { title: 'Empresas', value: totalCompanies },
                         { title: 'Assinaturas ativas', value: activeSubs },
@@ -4763,8 +4763,8 @@ export function App() {
                     </label>
                   </div>
 
-                  <div style={{ overflowX: 'auto', borderRadius: 8, border: '1px solid #e5e7eb' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 900 }}>
+                  <div className="super-table-wrap" style={{ overflowX: 'auto', borderRadius: 8, border: '1px solid #e5e7eb' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 700 }}>
                     <thead>
                       <tr style={{ backgroundColor: '#f9fafb' }}>
                         <th style={{ textAlign: 'left', padding: 12, fontWeight: 600, borderBottom: '2px solid #e5e7eb' }}>Empresa</th>
@@ -5073,65 +5073,48 @@ export function App() {
         {activeModule === 'financeiro' && currentUser?.role === 'SUPER' && (
           <section className="module-grid">
             <div className="panel">
-              <div className="panel-header">
+              <div className="panel-header super-panel-header">
                 <div>
                   <span className="eyebrow">Análise</span>
                   <h2>Relatórios Financeiros</h2>
                 </div>
-                <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <select value={selectedReportCompany} onChange={(e) => setSelectedReportCompany(e.target.value)} style={{ padding: '10px 14px', borderRadius: 8, border: '2px solid #e5e7eb', fontSize: 14, fontWeight: 500 }}>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', width: '100%' }}>
+                  <select value={selectedReportCompany} onChange={(e) => setSelectedReportCompany(e.target.value)} style={{ padding: '9px 12px', borderRadius: 8, border: '2px solid #e5e7eb', fontSize: 14, fontWeight: 500, flex: '1 1 160px', minWidth: 0 }}>
                     <option value="all">Todos os restaurantes</option>
                     {companies.map((c) => (
                       <option key={c.id} value={c.id}>{c.name}</option>
                     ))}
                   </select>
-                  
-                  <div style={{ display: 'flex', gap: 6, padding: '6px', backgroundColor: '#f3f4f6', borderRadius: 8 }}>
+
+                  <div className="super-period-toggle" style={{ display: 'flex', gap: 4, padding: '4px', backgroundColor: '#f3f4f6', borderRadius: 8, flex: '1 1 auto' }}>
                     {reportPeriods.map((period) => (
-                      <button
-                        key={period.value}
-                        type="button"
-                        onClick={() => setReportPeriod(period.value)}
-                        style={{
-                          padding: '8px 16px',
-                          borderRadius: 6,
-                          border: 'none',
-                          backgroundColor: reportPeriod === period.value ? '#ffffff' : 'transparent',
-                          color: reportPeriod === period.value ? '#1f2937' : '#6b7280',
-                          fontWeight: reportPeriod === period.value ? 600 : 500,
-                          cursor: 'pointer',
-                          boxShadow: reportPeriod === period.value ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                          transition: 'all 0.2s'
-                        }}
-                      >
+                      <button key={period.value} type="button" onClick={() => setReportPeriod(period.value)}
+                        style={{ padding: '7px 12px', borderRadius: 6, border: 'none', backgroundColor: reportPeriod === period.value ? '#ffffff' : 'transparent', color: reportPeriod === period.value ? '#1f2937' : '#6b7280', fontWeight: reportPeriod === period.value ? 600 : 500, cursor: 'pointer', boxShadow: reportPeriod === period.value ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.2s', whiteSpace: 'nowrap', fontSize: 13 }}>
                         {period.label}
                       </button>
                     ))}
                   </div>
-                  
-                  <button className="secondary-button" type="button" onClick={() => void loadSuperReports()} disabled={loadingReport} style={{ whiteSpace: 'nowrap' }}>
-                    {loadingReport ? 'Carregando...' : 'Atualizar'}
+
+                  <button className="secondary-button" type="button" onClick={() => void loadSuperReports()} disabled={loadingReport} style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
+                    {loadingReport ? '⏳' : '↻ Atualizar'}
                   </button>
                 </div>
               </div>
 
-              {/* Report tabs */}
-              <div style={{ display: 'flex', gap: 8, marginBottom: 18, overflowX: 'auto', paddingBottom: 8 }}>
+              {/* Abas de relatório com scroll horizontal */}
+              <div className="super-report-tabs" style={{ display: 'flex', gap: 8, marginBottom: 18, overflowX: 'auto', paddingBottom: 6, scrollbarWidth: 'none' }}>
                 {[
-                  { id: 'revenue', label: 'Faturamento' },
-                  { id: 'products', label: 'Produtos' },
-                  { id: 'payments', label: 'Pagamentos' },
-                  { id: 'users', label: 'Usuários' },
-                  { id: 'audit', label: 'Auditoria' },
-                  { id: 'health', label: 'Saúde do Sistema' }
+                  { id: 'revenue', label: '💰 Faturamento' },
+                  { id: 'products', label: '📦 Produtos' },
+                  { id: 'payments', label: '💳 Pagamentos' },
+                  { id: 'users', label: '👥 Usuários' },
+                  { id: 'audit', label: '📋 Auditoria' },
+                  { id: 'health', label: '❤️ Sistema' },
                 ].map((tab) => (
-                  <button
-                    key={tab.id}
-                    type="button"
+                  <button key={tab.id} type="button"
                     className={`secondary-button ${reportsTab === tab.id ? 'active' : ''}`}
                     onClick={() => setReportsTab(tab.id as any)}
-                    style={{ whiteSpace: 'nowrap' }}
-                  >
+                    style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
                     {tab.label}
                   </button>
                 ))}
@@ -5140,50 +5123,28 @@ export function App() {
               {/* Revenue Report */}
               {reportsTab === 'revenue' && revenueReport && (
                 <div>
-                  <h3 style={{ marginBottom: 18, fontSize: 18, fontWeight: 700 }}>Faturamento por Período</h3>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16, marginBottom: 28 }}>
-                    <div className="panel" style={{ padding: 20, background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: '#ffffff', borderRadius: 12 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                        <div>
-                          <div style={{ fontSize: 12, fontWeight: 600, opacity: 0.9, marginBottom: 8 }}>Total de Faturamento</div>
-                          <div style={{ fontSize: 28, fontWeight: 800 }}>{formatCurrency(revenueReport.totalValue)}</div>
-                        </div>
-                        <DollarSign size={32} style={{ opacity: 0.7 }} />
-                      </div>
-                    </div>
-                    <div className="panel" style={{ padding: 20, background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', color: '#ffffff', borderRadius: 12 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                        <div>
-                          <div style={{ fontSize: 12, fontWeight: 600, opacity: 0.9, marginBottom: 8 }}>Total de Pedidos</div>
-                          <div style={{ fontSize: 28, fontWeight: 800 }}>{revenueReport.totalOrders}</div>
-                        </div>
-                        <ShoppingCart size={32} style={{ opacity: 0.7 }} />
-                      </div>
-                    </div>
-                    <div className="panel" style={{ padding: 20, background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)', color: '#ffffff', borderRadius: 12 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                        <div>
-                          <div style={{ fontSize: 12, fontWeight: 600, opacity: 0.9, marginBottom: 8 }}>Total de Itens</div>
-                          <div style={{ fontSize: 28, fontWeight: 800 }}>{revenueReport.totalItems}</div>
-                        </div>
-                        <ShoppingBag size={32} style={{ opacity: 0.7 }} />
-                      </div>
-                    </div>
-                    <div className="panel" style={{ padding: 20, background: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)', color: '#ffffff', borderRadius: 12 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                        <div>
-                          <div style={{ fontSize: 12, fontWeight: 600, opacity: 0.9, marginBottom: 8 }}>Ticket Médio</div>
-                          <div style={{ fontSize: 28, fontWeight: 800 }}>
-                            {formatCurrency(revenueReport.totalOrders > 0 ? revenueReport.totalValue / revenueReport.totalOrders : 0)}
+                  <h3 style={{ marginBottom: 14, fontSize: 17, fontWeight: 700 }}>Faturamento por Período</h3>
+                  <div className="super-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14, marginBottom: 24 }}>
+                    {[
+                      { label: 'Total de Faturamento', value: formatCurrency(revenueReport.totalValue), bg: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', icon: <DollarSign size={28} style={{ opacity: 0.7 }} /> },
+                      { label: 'Total de Pedidos', value: revenueReport.totalOrders, bg: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', icon: <ShoppingCart size={28} style={{ opacity: 0.7 }} /> },
+                      { label: 'Total de Itens', value: revenueReport.totalItems, bg: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)', icon: <ShoppingBag size={28} style={{ opacity: 0.7 }} /> },
+                      { label: 'Ticket Médio', value: formatCurrency(revenueReport.totalOrders > 0 ? revenueReport.totalValue / revenueReport.totalOrders : 0), bg: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)', icon: <TrendingUp size={28} style={{ opacity: 0.7 }} /> },
+                    ].map((kpi) => (
+                      <div key={kpi.label} className="panel" style={{ padding: 18, background: kpi.bg, color: '#fff', borderRadius: 12 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                          <div>
+                            <div style={{ fontSize: 11, fontWeight: 600, opacity: 0.9, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{kpi.label}</div>
+                            <div className="kpi-value" style={{ fontSize: 26, fontWeight: 800, lineHeight: 1.1 }}>{kpi.value}</div>
                           </div>
+                          <span className="kpi-icon">{kpi.icon}</span>
                         </div>
-                        <TrendingUp size={32} style={{ opacity: 0.7 }} />
                       </div>
-                    </div>
+                    ))}
                   </div>
 
                   <h4 style={{ marginBottom: 16, fontSize: 16, fontWeight: 700 }}>Por Restaurante</h4>
-                  <div style={{ overflowX: 'auto', borderRadius: 10, border: '1px solid #e5e7eb' }}>
+                  <div className="super-table-wrap" style={{ overflowX: 'auto', borderRadius: 10, border: '1px solid #e5e7eb' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                       <thead>
                         <tr style={{ borderBottom: '2px solid #e5e7eb', backgroundColor: '#f9fafb' }}>
