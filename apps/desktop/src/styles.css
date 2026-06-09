@@ -719,6 +719,10 @@ h2 {
   }
 }
 
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 @keyframes hint-pulse {
   0%, 100% { opacity: 1;   transform: translateX(0); }
   50%       { opacity: 0.4; transform: translateX(3px); }

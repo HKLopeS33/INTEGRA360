@@ -150,7 +150,7 @@ export const publicDeliveryApi = {
 
     // Pedidos pagos online (Mercado Pago) só são liberados para o estabelecimento
     // após confirmação do pagamento via webhook — ficam "aguardando pagamento" até lá.
-    const isOnlinePayment = payload.paymentMethod === 'PIX_ONLINE';
+    const isOnlinePayment = payload.paymentMethod === 'ONLINE' || payload.paymentMethod === 'PIX_ONLINE';
 
     const orderRes = await anonFetch('/DeliveryOrder', {
       method: 'POST',
@@ -225,6 +225,21 @@ export const publicDeliveryApi = {
     } catch {
       return false;
     }
+  },
+
+  // Creates a Mercado Pago Checkout Pro preference (card + PIX + all methods).
+  // Returns the init_point URL to redirect the customer.
+  createCheckoutPreference: async (companyId: string, deliveryOrderId: string, backUrl: string) => {
+    const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL ?? '';
+    const anonKey = (import.meta as any).env.VITE_SUPABASE_ANON_KEY ?? '';
+    const res = await fetch(`${supabaseUrl}/functions/v1/mercado-pago-checkout`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${anonKey}`, 'apikey': anonKey },
+      body: JSON.stringify({ companyId, deliveryOrderId, backUrl }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data?.error) throw new Error(data?.error || 'Falha ao criar sessão de pagamento.');
+    return data as { initPoint: string; preferenceId: string };
   },
 
   // Creates a Mercado Pago Pix charge for an order that is awaiting payment.

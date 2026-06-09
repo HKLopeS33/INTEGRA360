@@ -279,7 +279,7 @@ export function App() {
   const [publicDeliveryCategories, setPublicDeliveryCategories] = useState<Array<{ id: string; name: string; sort: number; imageUrl?: string | null }>>([]);
   const [publicDeliveryProducts, setPublicDeliveryProducts] = useState<Array<{ id: string; categoryId: string; name: string; description: string | null; price: number; available: boolean }>>([]);
   const [publicDeliveryCart, setPublicDeliveryCart] = useState<Array<{ product: { id: string; name: string; price: number }; quantity: number; note: string }>>([]);
-  const [publicDeliveryStep, setPublicDeliveryStep] = useState<'menu' | 'checkout' | 'payment' | 'success' | 'tracking'>('menu');
+  const [publicDeliveryStep, setPublicDeliveryStep] = useState<'menu' | 'checkout' | 'payment' | 'payment_return' | 'success' | 'tracking'>('menu');
   const [publicDeliveryTrackingStatus, setPublicDeliveryTrackingStatus] = useState<string>('RECEBIDO');
   const [publicDeliveryTrackingBar, setPublicDeliveryTrackingBar] = useState(0); // 0-100
   const [publicDeliveryName, setPublicDeliveryName] = useState('');
@@ -444,9 +444,32 @@ export function App() {
       });
       publicDeliveryApi.isMercadoPagoAvailable(deliveryId).then((available) => {
         setPublicDeliveryMpAvailable(available);
-        // Se MP estiver disponível, pré-seleciona pagamento online como padrão
-        if (available) setPublicDeliveryPayment('PIX_ONLINE');
+        if (available) setPublicDeliveryPayment('ONLINE');
       }).catch(() => setPublicDeliveryMpAvailable(false));
+
+      // Retorno do Checkout Pro do Mercado Pago
+      const mpOrder = params.get('mp_order');
+      const mpStatus = params.get('mp_status');
+      if (mpOrder && mpStatus) {
+        // Limpa os parâmetros da URL sem recarregar a página
+        const cleanUrl = `${window.location.pathname}?delivery=${encodeURIComponent(deliveryId)}`;
+        window.history.replaceState({}, '', cleanUrl);
+        setPublicDeliveryOrderId(mpOrder);
+        if (mpStatus === 'success') {
+          // Polling para confirmar que o webhook já processou o pagamento
+          setPublicDeliveryStep('payment_return');
+          // Busca o receiptNumber
+          publicDeliveryApi.getOrderStatus(mpOrder).then((r) => {
+            if (r?.receiptNumber != null) setPublicDeliveryReceiptNumber(r.receiptNumber);
+          }).catch(() => {});
+        } else if (mpStatus === 'pending') {
+          setPublicDeliveryStep('payment_return');
+        } else {
+          // failure — mostra erro
+          setPublicDeliveryError('O pagamento foi recusado ou cancelado. Tente novamente.');
+          setPublicDeliveryStep('checkout');
+        }
+      }
     }
   }, []);
 
@@ -1366,12 +1389,18 @@ export function App() {
       // Salva snapshot para a mensagem WhatsApp (antes de limpar o carrinho)
       setPublicDeliverySnapshot({ items: cartSnapshot, paymentMethod: publicDeliveryPayment, grandTotal: grandTotalSnap });
 
-      if (publicDeliveryPayment === 'PIX_ONLINE') {
-        // Não envia o pedido para o estabelecimento ainda — primeiro o cliente
-        // precisa pagar e o MP confirmar via webhook.
-        setPublicPixPaymentStatus('PENDENTE');
-        setPublicDeliveryStep('payment');
-        void generatePublicPixCharge(result.id);
+      if (publicDeliveryPayment === 'ONLINE') {
+        // Criar preference do Checkout Pro e redirecionar o cliente para a página de pagamento MP
+        try {
+          const backUrl = `${window.location.origin}${window.location.pathname}`;
+          const pref = await publicDeliveryApi.createCheckoutPreference(publicDeliveryCompanyId!, result.id, backUrl);
+          // Redireciona para o checkout do Mercado Pago (abre na mesma aba)
+          window.location.href = pref.initPoint;
+        } catch (prefErr: any) {
+          setPublicDeliveryError(prefErr?.message ?? 'Falha ao abrir o pagamento. Tente novamente.');
+          setPublicDeliverySubmitting(false);
+        }
+        return; // não continua — página vai ser redirecionada
       } else {
         setPublicDeliveryStep('success');
       }
@@ -1396,22 +1425,23 @@ export function App() {
     }
   };
 
-  // Polling do status de pagamento (tela de pagamento Pix)
+  // Polling do status de pagamento (PIX direto ou retorno do Checkout Pro)
   useEffect(() => {
-    if (publicDeliveryStep !== 'payment' || !publicDeliveryOrderId) return;
+    if ((publicDeliveryStep !== 'payment' && publicDeliveryStep !== 'payment_return') || !publicDeliveryOrderId) return;
     let stopped = false;
     const poll = async () => {
       try {
         const result = await publicDeliveryApi.getOrderStatus(publicDeliveryOrderId);
         if (stopped || !result) return;
         setPublicPixPaymentStatus(result.paymentStatus);
+        if (result.receiptNumber != null) setPublicDeliveryReceiptNumber(result.receiptNumber);
         if (result.paymentStatus === 'PAGO') {
           setPublicDeliveryStep('success');
         }
       } catch { /* ignore */ }
     };
     void poll();
-    const interval = setInterval(poll, 4000);
+    const interval = setInterval(poll, 3000);
     return () => { stopped = true; clearInterval(interval); };
   }, [publicDeliveryStep, publicDeliveryOrderId]);
 
@@ -2506,10 +2536,10 @@ export function App() {
     const cartTotal = publicDeliveryCart.reduce((s, i) => s + i.quantity * i.product.price, 0);
     const grandTotal = cartTotal + publicDeliveryFee;
     const cartCount = publicDeliveryCart.reduce((s, i) => s + i.quantity, 0);
-    // Quando MP disponível: PIX_ONLINE aparece primeiro e destacado
+    // Sempre apenas 2 opções: pagamento online (MP) ou dinheiro na entrega
     const paymentLabels: Record<string, string> = publicDeliveryMpAvailable
-      ? { PIX_ONLINE: '⚡ PIX online — pagar agora (Mercado Pago)', DINHEIRO: 'Dinheiro (na entrega)', PIX: 'PIX (na entrega)', CREDITO: 'Cartão de crédito (na entrega)', DEBITO: 'Cartão de débito (na entrega)' }
-      : { DINHEIRO: 'Dinheiro', PIX: 'PIX (na entrega)', CREDITO: 'Cartão de crédito', DEBITO: 'Cartão de débito' };
+      ? { ONLINE: 'Pagamento online', DINHEIRO: 'Dinheiro (na entrega)' }
+      : { DINHEIRO: 'Dinheiro (na entrega)' };
     return (
       <main style={{ minHeight: '100vh', background: '#f3f4f6', fontFamily: 'system-ui, sans-serif' }}>
         <div style={{ background: '#18201d', color: '#fff', padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 12, position: 'sticky', top: 0, zIndex: 100 }}>
@@ -2539,6 +2569,21 @@ export function App() {
               {publicDeliveryError}
             </div>
           )}
+          {/* Tela de aguardo após retorno do Checkout Pro */}
+          {publicDeliveryStep === 'payment_return' && (
+            <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+              <div style={{ fontSize: 56, marginBottom: 16 }}>⏳</div>
+              <h2 style={{ margin: '0 0 10px', fontSize: 22 }}>Confirmando pagamento…</h2>
+              <p style={{ color: '#6b7280', marginBottom: 28, fontSize: 15, lineHeight: 1.5 }}>
+                Estamos aguardando a confirmação do <strong>Mercado Pago</strong>.<br />
+                Isso pode levar alguns segundos. Não feche esta página.
+              </p>
+              {/* Spinner animado */}
+              <div style={{ width: 48, height: 48, border: '5px solid #e5e7eb', borderTop: '5px solid #009ee3', borderRadius: '50%', margin: '0 auto 24px', animation: 'spin 1s linear infinite' }} />
+              <p style={{ color: '#9ca3af', fontSize: 13 }}>A página atualiza automaticamente.</p>
+            </div>
+          )}
+
           {publicDeliveryStep === 'payment' && (
             <div style={{ textAlign: 'center', padding: '40px 20px' }}>
               <div style={{ fontSize: 48 }}>💳</div>
@@ -2582,7 +2627,7 @@ export function App() {
             </div>
           )}
           {publicDeliveryStep === 'success' && (() => {
-            const paymentLabelMap: Record<string, string> = { DINHEIRO: 'Dinheiro', PIX: 'PIX (na entrega)', CREDITO: 'Cartão de crédito', DEBITO: 'Cartão de débito', PIX_ONLINE: 'PIX online (Mercado Pago)' };
+            const paymentLabelMap: Record<string, string> = { ONLINE: 'Pagamento online (Mercado Pago)', DINHEIRO: 'Dinheiro', PIX: 'PIX (na entrega)', CREDITO: 'Cartão de crédito', DEBITO: 'Cartão de débito', PIX_ONLINE: 'PIX online (Mercado Pago)' };
             const snap = publicDeliverySnapshot;
             const storePhone = publicDeliveryCompany?.phone?.replace(/\D/g, '') ?? '';
             const buildWhatsAppUrl = () => {
@@ -2663,7 +2708,7 @@ export function App() {
             const currentStage = isCancelled ? null : STAGES[currentIdx];
             const isFinished = publicDeliveryTrackingStatus === 'ENTREGUE';
 
-            const paymentLabelMap: Record<string, string> = { DINHEIRO: 'Dinheiro', PIX: 'PIX (na entrega)', CREDITO: 'Cartão de crédito', DEBITO: 'Cartão de débito', PIX_ONLINE: 'PIX online (Mercado Pago)' };
+            const paymentLabelMap: Record<string, string> = { ONLINE: 'Pagamento online (Mercado Pago)', DINHEIRO: 'Dinheiro', PIX: 'PIX (na entrega)', CREDITO: 'Cartão de crédito', DEBITO: 'Cartão de débito', PIX_ONLINE: 'PIX online (Mercado Pago)' };
             const snap = publicDeliverySnapshot;
             const storePhone = publicDeliveryCompany?.phone?.replace(/\D/g, '') ?? '';
             const buildWhatsAppUrl = () => {
@@ -2787,45 +2832,46 @@ export function App() {
                 <label style={{ display: 'grid', gap: 4, fontSize: 14 }}>Nome *<input value={publicDeliveryName} onChange={(e) => setPublicDeliveryName(e.target.value)} placeholder="Seu nome completo" style={{ padding: '10px 12px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 14 }} /></label>
                 <label style={{ display: 'grid', gap: 4, fontSize: 14 }}>Telefone<input value={publicDeliveryPhone} onChange={(e) => setPublicDeliveryPhone(e.target.value)} placeholder="(00) 00000-0000" type="tel" style={{ padding: '10px 12px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 14 }} /></label>
                 <label style={{ display: 'grid', gap: 4, fontSize: 14 }}>Endereco de entrega *<input value={publicDeliveryAddress} onChange={(e) => setPublicDeliveryAddress(e.target.value)} placeholder="Rua, numero, bairro" style={{ padding: '10px 12px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 14 }} /></label>
-                <div style={{ display: 'grid', gap: 6 }}>
-                  <label style={{ fontSize: 14, fontWeight: 500 }}>Forma de pagamento</label>
-                  {/* Botões de seleção de pagamento — PIX_ONLINE destacado quando disponível */}
+                <div style={{ display: 'grid', gap: 8 }}>
+                  <label style={{ fontSize: 14, fontWeight: 600, color: '#374151' }}>Forma de pagamento</label>
+                  {/* Apenas 2 opções: online (MP) ou dinheiro na entrega */}
                   <div style={{ display: 'grid', gap: 8 }}>
-                    {Object.entries(paymentLabels).map(([k, v]) => {
-                      const isOnline = k === 'PIX_ONLINE';
-                      const selected = publicDeliveryPayment === k;
-                      return (
-                        <button key={k} type="button" onClick={() => setPublicDeliveryPayment(k)}
-                          style={{
-                            display: 'flex', alignItems: 'center', gap: 10,
-                            padding: '12px 14px', borderRadius: 10, cursor: 'pointer', textAlign: 'left',
-                            border: selected ? `2px solid ${isOnline ? '#16a34a' : '#18201d'}` : '2px solid #e5e7eb',
-                            background: selected ? (isOnline ? '#f0fdf4' : '#f9fafb') : '#fff',
-                            fontWeight: selected ? 700 : 400, fontSize: 14, color: '#18201d',
-                            transition: 'all .15s',
-                          }}>
-                          <span style={{ fontSize: 20, flexShrink: 0 }}>
-                            {k === 'PIX_ONLINE' ? '⚡' : k === 'PIX' ? '🔑' : k === 'DINHEIRO' ? '💵' : k === 'CREDITO' ? '💳' : '💳'}
-                          </span>
-                          <span style={{ flex: 1 }}>{isOnline ? 'PIX online — pagar agora' : v}</span>
-                          {isOnline && <span style={{ background: '#16a34a', color: '#fff', fontSize: 10, fontWeight: 700, borderRadius: 20, padding: '2px 8px', flexShrink: 0 }}>Mercado Pago</span>}
-                          {selected && <span style={{ color: isOnline ? '#16a34a' : '#18201d', fontSize: 18, flexShrink: 0 }}>✓</span>}
-                        </button>
-                      );
-                    })}
+                    {/* Pagamento online — só exibe se MP estiver configurado */}
+                    {publicDeliveryMpAvailable && (
+                      <button type="button" onClick={() => setPublicDeliveryPayment('ONLINE')}
+                        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', borderRadius: 12, cursor: 'pointer', textAlign: 'left', border: publicDeliveryPayment === 'ONLINE' ? '2px solid #009ee3' : '2px solid #e5e7eb', background: publicDeliveryPayment === 'ONLINE' ? '#e8f6fd' : '#fff', transition: 'all .15s' }}>
+                        <span style={{ fontSize: 26, flexShrink: 0 }}>💳</span>
+                        <span style={{ flex: 1 }}>
+                          <span style={{ display: 'block', fontWeight: 700, fontSize: 15, color: '#18201d' }}>Pagamento online</span>
+                          <span style={{ display: 'block', fontSize: 12, color: '#6b7280', marginTop: 2 }}>Cartão de crédito, débito ou PIX — via Mercado Pago</span>
+                        </span>
+                        {publicDeliveryPayment === 'ONLINE'
+                          ? <span style={{ color: '#009ee3', fontSize: 20, flexShrink: 0 }}>✓</span>
+                          : <span style={{ display: 'inline-block', background: '#009ee3', color: '#fff', fontSize: 10, fontWeight: 700, borderRadius: 20, padding: '3px 8px', flexShrink: 0 }}>MP</span>}
+                      </button>
+                    )}
+                    {/* Dinheiro na entrega */}
+                    <button type="button" onClick={() => setPublicDeliveryPayment('DINHEIRO')}
+                      style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', borderRadius: 12, cursor: 'pointer', textAlign: 'left', border: publicDeliveryPayment === 'DINHEIRO' ? '2px solid #18201d' : '2px solid #e5e7eb', background: publicDeliveryPayment === 'DINHEIRO' ? '#f3f4f6' : '#fff', transition: 'all .15s' }}>
+                      <span style={{ fontSize: 26, flexShrink: 0 }}>💵</span>
+                      <span style={{ flex: 1 }}>
+                        <span style={{ display: 'block', fontWeight: 700, fontSize: 15, color: '#18201d' }}>Dinheiro</span>
+                        <span style={{ display: 'block', fontSize: 12, color: '#6b7280', marginTop: 2 }}>Pagamento na entrega</span>
+                      </span>
+                      {publicDeliveryPayment === 'DINHEIRO' && <span style={{ color: '#18201d', fontSize: 20, flexShrink: 0 }}>✓</span>}
+                    </button>
                   </div>
-                  {/* Aviso quando PIX_ONLINE está selecionado */}
-                  {publicDeliveryPayment === 'PIX_ONLINE' && (
-                    <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '10px 12px', fontSize: 13, color: '#1d4ed8', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                      <span style={{ flexShrink: 0 }}>🔒</span>
-                      <span>Seu pedido só será enviado ao restaurante <strong>após a confirmação do pagamento</strong>. Você verá o QR Code Pix na próxima etapa.</span>
+                  {/* Aviso contextual */}
+                  {publicDeliveryPayment === 'ONLINE' && (
+                    <div style={{ background: '#e8f6fd', border: '1px solid #93c5fd', borderRadius: 8, padding: '10px 12px', fontSize: 13, color: '#1d4ed8', display: 'flex', gap: 8 }}>
+                      <span>🔒</span>
+                      <span>O pedido só é enviado ao restaurante <strong>após a confirmação do pagamento</strong>. Você será redirecionado ao Mercado Pago.</span>
                     </div>
                   )}
-                  {/* Aviso quando outra forma está selecionada */}
-                  {publicDeliveryPayment !== 'PIX_ONLINE' && (
-                    <div style={{ background: '#fefce8', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 12px', fontSize: 13, color: '#92400e', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                      <span style={{ flexShrink: 0 }}>⚠️</span>
-                      <span>O pagamento será realizado no momento da entrega. O pedido é enviado imediatamente ao restaurante.</span>
+                  {publicDeliveryPayment === 'DINHEIRO' && (
+                    <div style={{ background: '#fefce8', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 12px', fontSize: 13, color: '#92400e', display: 'flex', gap: 8 }}>
+                      <span>⚠️</span>
+                      <span>Tenha o valor exato em mãos. O pedido é enviado imediatamente ao restaurante.</span>
                     </div>
                   )}
                 </div>
@@ -2834,9 +2880,9 @@ export function App() {
               <button type="button" onClick={() => void submitPublicDeliveryOrder()} disabled={publicDeliverySubmitting}
                 style={{ background: publicDeliverySubmitting ? '#9ca3af' : '#18201d', color: '#fff', border: 'none', borderRadius: 12, padding: '14px 20px', cursor: publicDeliverySubmitting ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                 {publicDeliverySubmitting
-                  ? 'Aguarde...'
-                  : publicDeliveryPayment === 'PIX_ONLINE'
-                    ? `⚡ Ir para pagamento · ${formatCurrency(grandTotal)}`
+                  ? '⏳ Aguarde...'
+                  : publicDeliveryPayment === 'ONLINE'
+                    ? `💳 Pagar com Mercado Pago · ${formatCurrency(grandTotal)}`
                     : `✅ Confirmar pedido · ${formatCurrency(grandTotal)}`}
               </button>
             </div>
