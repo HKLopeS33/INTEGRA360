@@ -1,6 +1,6 @@
 {
   "name": "@integra360/mobile",
-  "version": "1.3.11",
+  "version": "1.3.12",
   "private": true,
   "type": "module",
   "description": "Android (Capacitor) app for Integra360 restaurant management",
