@@ -338,7 +338,7 @@ export function App() {
   const [invoiceCompany, setInvoiceCompany] = useState<any | null>(null);
   const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
   const [actionMenuPos, setActionMenuPos] = useState<{ top: number; right: number } | null>(null);
-  const closeActionMenu = () => { closeActionMenu(); setActionMenuPos(null); };
+  const closeActionMenu = () => { setOpenActionMenuId(null); setActionMenuPos(null); };
   const [confirmationRequest, setConfirmationRequest] = useState<{
     message: string;
     onConfirm: () => Promise<void> | void;
@@ -4063,8 +4063,8 @@ export function App() {
 
         {/* Users modal */}
         {showUsersModal && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', display: 'grid', placeItems: 'center', zIndex: 120 }} onClick={() => setShowUsersModal(false)}>
-            <div style={{ background: '#fff', padding: 20, borderRadius: 10, minWidth: 480, maxHeight: '80vh', overflow: 'auto' }} onClick={(e) => e.stopPropagation()}>
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', display: 'grid', placeItems: isMobile ? 'stretch' : 'center', zIndex: 120, padding: isMobile ? 0 : 20 }} onClick={() => setShowUsersModal(false)}>
+            <div style={{ background: '#fff', padding: isMobile ? 14 : 20, borderRadius: isMobile ? 0 : 10, width: isMobile ? '100%' : 'min(560px, 100%)', minWidth: isMobile ? undefined : 480, maxWidth: isMobile ? '100%' : 560, height: isMobile ? '100%' : undefined, maxHeight: isMobile ? '100%' : '80vh', overflow: 'auto', boxSizing: 'border-box' }} onClick={(e) => e.stopPropagation()}>
               <h3>{selectedUsersCompany ? `Usuários — ${selectedUsersCompany.name}` : 'Usuários'}</h3>
               {selectedUsersCompany ? (
                 <p style={{ marginTop: 4, color: '#5d6c66' }}>Empresa: {selectedUsersCompany.name} ({selectedUsersCompany.cnpj})</p>
@@ -4095,7 +4095,7 @@ export function App() {
                     onChange={(e) => setNewUserPassword(e.target.value)}
                     style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #d1d5db' }}
                   />
-                  <div style={{ display: 'grid', gap: 8, gridTemplateColumns: '1fr 1fr' }}>
+                  <div style={{ display: 'grid', gap: 8, gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr' }}>
                     <select
                       value={newUserRole}
                       onChange={(e) => setNewUserRole(e.target.value)}
@@ -4127,7 +4127,26 @@ export function App() {
                 <p>Carregando...</p>
               ) : usersList.length === 0 ? (
                 <p>Nenhum usuário encontrado.</p>
+              ) : isMobile ? (
+                <div style={{ display: 'grid', gap: 8 }}>
+                  {usersList.map((u) => (
+                    <div key={u.id} style={{ border: '1px solid #ececec', borderRadius: 8, padding: 10 }}>
+                      <strong style={{ fontSize: 14 }}>{u.name}</strong>
+                      <div style={{ fontSize: 12, color: '#5d6c66', marginTop: 2, wordBreak: 'break-all' }}>{u.email}</div>
+                      <div style={{ fontSize: 12, color: '#5d6c66', marginTop: 2 }}>Role: {u.role} · {u.active ? 'Ativo' : 'Inativo'}</div>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+                        {u.active ? (
+                          <button className="secondary-button" onClick={() => void handleSuspendUser(u.id)}>Suspender</button>
+                        ) : (
+                          <button className="primary-button" onClick={() => void handleReactivateUser(u.id)}>Reativar</button>
+                        )}
+                        <button className="secondary-button" onClick={() => void handleDeleteUser(u.id)}>Excluir</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               ) : (
+                <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr>
@@ -4157,6 +4176,7 @@ export function App() {
                     ))}
                   </tbody>
                 </table>
+                </div>
               )}
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
                 <button className="secondary-button" onClick={() => setShowUsersModal(false)}>Fechar</button>
