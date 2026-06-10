@@ -2978,7 +2978,7 @@ export function App() {
                 );
               })}
               {cartCount > 0 && (
-                <div style={{ position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 200, width: 'calc(100% - 32px)', maxWidth: 608 }}>
+                <div style={{ position: 'fixed', bottom: 'calc(20px + env(safe-area-inset-bottom))', left: '50%', transform: 'translateX(-50%)', zIndex: 200, width: 'calc(100% - 32px)', maxWidth: 608 }}>
                   <button type="button" onClick={() => setPublicDeliveryStep('checkout')}
                     style={{ width: '100%', background: '#18201d', color: '#fff', border: 'none', borderRadius: 12, padding: '14px 20px', cursor: 'pointer', fontWeight: 700, fontSize: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 4px 20px rgba(0,0,0,0.3)' }}>
                     <span>{cartCount} {cartCount === 1 ? 'item' : 'itens'}</span>
@@ -3884,7 +3884,7 @@ export function App() {
 
               /* Painel de produtos — compartilhado entre mobile/desktop */
               const productList = (
-                <div style={{ flex: 1, overflowY: 'auto', padding: mobile ? '12px 12px 80px' : 24 }}>
+                <div style={{ flex: 1, overflowY: 'auto', padding: mobile ? '12px 12px calc(80px + env(safe-area-inset-bottom))' : 24 }}>
                   {Object.entries(groupedMenuSections).map(([section, items]) => items.length > 0 ? (
                     <div key={section} style={{ marginBottom: 20 }}>
                       <h3 style={{ marginBottom: 10, fontSize: mobile ? 13 : 15, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#789088' }}>{section}</h3>
@@ -3940,7 +3940,7 @@ export function App() {
                     )}
                   </div>
                   {tableCart.length > 0 && (
-                    <div style={{ padding: '14px 16px', borderTop: '1px solid #eef2ef', background: '#fff' }}>
+                    <div style={{ padding: mobile ? '14px 16px calc(14px + env(safe-area-inset-bottom))' : '14px 16px', borderTop: '1px solid #eef2ef', background: '#fff' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, fontWeight: 700, marginBottom: 12 }}>
                         <span>Total</span>
                         <span>{formatCurrency(cartTotal)}</span>
@@ -3963,7 +3963,7 @@ export function App() {
                 <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 80, display: 'flex', alignItems: mobile ? 'flex-end' : 'center', justifyContent: 'center', padding: mobile ? 0 : 20 }}
                   onClick={() => { closeTableMenuModal(); setTableCart([]); setMenuModalTab('menu'); }}>
 
-                  <div style={{ width: mobile ? '100%' : 'min(960px, 100%)', height: mobile ? '92dvh' : undefined, maxHeight: mobile ? undefined : '92vh', background: '#fff', borderRadius: mobile ? '16px 16px 0 0' : 14, boxShadow: '0 24px 60px rgba(0,0,0,0.22)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+                  <div style={{ position: 'relative', width: mobile ? '100%' : 'min(960px, 100%)', height: mobile ? '92dvh' : undefined, maxHeight: mobile ? undefined : '92vh', background: '#fff', borderRadius: mobile ? '16px 16px 0 0' : 14, boxShadow: '0 24px 60px rgba(0,0,0,0.22)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
                     onClick={(e) => e.stopPropagation()}>
 
                     {/* Header */}
@@ -4002,7 +4002,7 @@ export function App() {
 
                     {/* Botão flutuante "Ver pedido" no mobile */}
                     {mobile && menuModalTab === 'menu' && cartCount > 0 && (
-                      <div style={{ position: 'absolute', bottom: 16, left: 16, right: 16, zIndex: 10 }}>
+                      <div style={{ position: 'absolute', bottom: 'calc(16px + env(safe-area-inset-bottom))', left: 16, right: 16, zIndex: 10 }}>
                         <button type="button" onClick={() => setMenuModalTab('cart')}
                           style={{ width: '100%', background: '#18201d', color: '#fff', border: 'none', borderRadius: 12, padding: '13px 20px', fontWeight: 700, fontSize: 15, display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 4px 20px rgba(0,0,0,0.3)', cursor: 'pointer' }}>
                           <span>🛒 {cartCount} {cartCount === 1 ? 'item' : 'itens'}</span>
