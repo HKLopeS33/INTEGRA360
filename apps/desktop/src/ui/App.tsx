@@ -183,7 +183,7 @@ function SplashScreen({ onDone }: { onDone: () => void }) {
   return (
     <div className={`splash${exiting ? ' exiting' : ''}`}>
       <div className="splash-brand">
-        <div className="splash-mark">I</div>
+        <div className="splash-mark"><img src="/logo.png" alt="Integra360" /></div>
         <span className="splash-name">Integra360</span>
       </div>
       <div className="splash-progress-area">
@@ -3051,7 +3051,7 @@ export function App() {
           <div className="login-card" style={{ maxWidth: 480 }}>
             <button type="button" onClick={() => setLoginView('login')} style={{ background: 'none', border: 'none', color: '#789088', cursor: 'pointer', fontSize: 13, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 4 }}>← Voltar ao login</button>
             <div className="login-brand">
-              <div className="login-brand-mark">🛟</div>
+              <div className="login-brand-mark login-brand-mark-emoji">🛟</div>
               <h1 className="login-title" style={{ fontSize: 20 }}>Central de Ajuda</h1>
               <p className="login-subtitle">Estamos aqui para te ajudar</p>
             </div>
@@ -3116,7 +3116,7 @@ export function App() {
         <div className="login-wrapper">
           <div className="login-card">
             <div className="login-brand">
-              <div className="login-brand-mark">S</div>
+              <div className="login-brand-mark"><img src="/logo.png" alt="Integra360" /></div>
               <h1 className="login-title">Integra360</h1>
               <p className="login-subtitle">{loginView === 'recover' ? 'Redefinição de senha' : 'Faça login para continuar'}</p>
             </div>
