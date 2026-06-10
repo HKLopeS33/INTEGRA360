@@ -337,7 +337,7 @@ export function App() {
   const [showInvoicesModal, setShowInvoicesModal] = useState(false);
   const [invoiceCompany, setInvoiceCompany] = useState<any | null>(null);
   const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
-  const [actionMenuPos, setActionMenuPos] = useState<{ top: number; right: number } | null>(null);
+  const [actionMenuPos, setActionMenuPos] = useState<{ top?: number; bottom?: number; right: number; maxHeight: number } | null>(null);
   const closeActionMenu = () => { setOpenActionMenuId(null); setActionMenuPos(null); };
   const [confirmationRequest, setConfirmationRequest] = useState<{
     message: string;
@@ -4991,9 +4991,16 @@ export function App() {
                                     const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
                                     const menuWidth = 180;
                                     const rightSpace = window.innerWidth - rect.right;
+                                    const estimatedHeight = c.active ? 270 : 230;
+                                    const spaceBelow = window.innerHeight - rect.bottom - 8;
+                                    const spaceAbove = rect.top - 8;
+                                    const openUpwards = spaceBelow < estimatedHeight && spaceAbove > spaceBelow;
                                     setActionMenuPos({
-                                      top: rect.bottom + 4,
+                                      ...(openUpwards
+                                        ? { bottom: window.innerHeight - rect.top + 4 }
+                                        : { top: rect.bottom + 4 }),
                                       right: Math.max(8, Math.min(rightSpace, window.innerWidth - menuWidth - 8)),
+                                      maxHeight: Math.max(120, Math.min(estimatedHeight, openUpwards ? spaceAbove : spaceBelow)),
                                     });
                                     setOpenActionMenuId(c.id);
                                   }
@@ -5006,6 +5013,7 @@ export function App() {
                                 <div style={{
                                   position: 'fixed',
                                   top: actionMenuPos.top,
+                                  bottom: actionMenuPos.bottom,
                                   right: actionMenuPos.right,
                                   background: '#fff',
                                   border: '1px solid #e5e7eb',
@@ -5013,6 +5021,8 @@ export function App() {
                                   boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
                                   minWidth: 180,
                                   maxWidth: 'calc(100vw - 16px)',
+                                  maxHeight: actionMenuPos.maxHeight,
+                                  overflowY: 'auto',
                                   zIndex: 9999,
                                 }}>
                                   <button 
