@@ -3551,7 +3551,7 @@ export function App() {
       })()}
 
       {qrModalTable && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'grid', placeItems: 'center', zIndex: 65 }} onClick={closeQrModal}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'grid', placeItems: 'center', zIndex: 300 }} onClick={closeQrModal}>
           <div style={{ width: 'min(360px, 92%)', background: '#fff', borderRadius: 8, padding: 20, textAlign: 'center' }} onClick={(event) => event.stopPropagation()}>
             <h3>QR Code - {qrModalTable.name}</h3>
             <p style={{ fontSize: 12, marginTop: 8, marginBottom: 12 }}>
@@ -3960,7 +3960,7 @@ export function App() {
               );
 
               return (
-                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 80, display: 'flex', alignItems: mobile ? 'flex-end' : 'center', justifyContent: 'center', padding: mobile ? 0 : 20 }}
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 300, display: 'flex', alignItems: mobile ? 'flex-end' : 'center', justifyContent: 'center', padding: mobile ? 0 : 20 }}
                   onClick={() => { closeTableMenuModal(); setTableCart([]); setMenuModalTab('menu'); }}>
 
                   <div style={{ position: 'relative', width: mobile ? '100%' : 'min(960px, 100%)', height: mobile ? '92dvh' : undefined, maxHeight: mobile ? undefined : '92vh', background: '#fff', borderRadius: mobile ? '16px 16px 0 0' : 14, boxShadow: '0 24px 60px rgba(0,0,0,0.22)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
@@ -4019,7 +4019,7 @@ export function App() {
 
         {/* Mini-modal observação do item do carrinho */}
         {tableCartNoteProduct && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'grid', placeItems: 'center', zIndex: 200 }} onClick={() => setTableCartNoteProduct(null)}>
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'grid', placeItems: 'center', zIndex: 300 }} onClick={() => setTableCartNoteProduct(null)}>
             <div style={{ background: '#fff', borderRadius: 16, padding: 28, width: 340, display: 'grid', gap: 16 }} onClick={(e) => e.stopPropagation()}>
               <div>
                 <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: '#7a8a7a' }}>Adicionar ao pedido</span>
@@ -4063,7 +4063,7 @@ export function App() {
 
         {/* Users modal */}
         {showUsersModal && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', display: 'grid', placeItems: isMobile ? 'stretch' : 'center', zIndex: 120, padding: isMobile ? 0 : 20 }} onClick={() => setShowUsersModal(false)}>
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', display: 'grid', placeItems: isMobile ? 'stretch' : 'center', zIndex: 300, padding: isMobile ? 0 : 20 }} onClick={() => setShowUsersModal(false)}>
             <div style={{ background: '#fff', padding: isMobile ? 14 : 20, borderRadius: isMobile ? 0 : 10, width: isMobile ? '100%' : 'min(560px, 100%)', minWidth: isMobile ? undefined : 480, maxWidth: isMobile ? '100%' : 560, height: isMobile ? '100%' : undefined, maxHeight: isMobile ? '100%' : '80vh', overflow: 'auto', boxSizing: 'border-box' }} onClick={(e) => e.stopPropagation()}>
               <h3>{selectedUsersCompany ? `Usuários — ${selectedUsersCompany.name}` : 'Usuários'}</h3>
               {selectedUsersCompany ? (
@@ -5834,7 +5834,7 @@ export function App() {
 
         {/* Renew modal */}
         {showRenewModal && selectedCompany && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', display: 'grid', placeItems: 'center', zIndex: 120 }} onClick={() => setShowRenewModal(false)}>
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', display: 'grid', placeItems: 'center', zIndex: 300 }} onClick={() => setShowRenewModal(false)}>
             <div style={{ background: '#fff', padding: 20, borderRadius: 10, minWidth: 320 }} onClick={(e) => e.stopPropagation()}>
               <h3>Renovar — {selectedCompany.name}</h3>
               <label>Meses<input value={renewMonths} onChange={(e) => setRenewMonths(e.target.value)} /></label>
@@ -5851,7 +5851,7 @@ export function App() {
 
         {/* Edit modal */}
         {showEditModal && selectedCompany && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', display: 'grid', placeItems: 'center', zIndex: 120 }} onClick={() => setShowEditModal(false)}>
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', display: 'grid', placeItems: 'center', zIndex: 300 }} onClick={() => setShowEditModal(false)}>
             <div style={{ background: '#fff', padding: 20, borderRadius: 10, minWidth: 360 }} onClick={(e) => e.stopPropagation()}>
               <h3>Editar — {selectedCompany.name}</h3>
               <div style={{ display: 'grid', gap: 8 }}>
@@ -5876,7 +5876,7 @@ export function App() {
 
         {/* Invoices modal */}
         {showInvoicesModal && invoiceCompany && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', display: 'grid', placeItems: 'center', zIndex: 120 }} onClick={() => setShowInvoicesModal(false)}>
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', display: 'grid', placeItems: 'center', zIndex: 300 }} onClick={() => setShowInvoicesModal(false)}>
             <div style={{ background: '#fff', padding: 20, borderRadius: 10, minWidth: 520 }} onClick={(e) => e.stopPropagation()}>
               <h3>Faturas — {invoiceCompany.name}</h3>
               <div style={{ maxHeight: 360, overflow: 'auto' }}>
