@@ -453,6 +453,8 @@ h2 {
 .panel-header {
   align-items: center;
   display: flex;
+  flex-wrap: wrap;
+  row-gap: 10px;
   justify-content: space-between;
   margin-bottom: 16px;
 }
@@ -461,6 +463,17 @@ h2 {
   display: grid;
   gap: 12px;
   grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+}
+
+/* SuperAdmin panel headers: never overflow horizontally, regardless of width */
+.super-panel-header {
+  flex-wrap: wrap;
+  row-gap: 10px;
+}
+
+.super-panel-header > div:last-child {
+  flex-wrap: wrap;
+  min-width: 0;
 }
 
 .table-tile {

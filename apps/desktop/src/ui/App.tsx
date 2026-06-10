@@ -4851,16 +4851,16 @@ export function App() {
 
                 return (
                   <>
-                    <div className="super-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 16 }}>
+                    <div className="super-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 12, marginBottom: 16 }}>
                       {[
                         { title: 'Empresas', value: totalCompanies },
                         { title: 'Assinaturas ativas', value: activeSubs },
                         { title: 'Receita mensal total', value: formatCurrency(totalMonthly) },
                         { title: 'Média mensal por empresa', value: formatCurrency(avgMonthly) }
                       ].map((m) => (
-                        <div key={m.title} className="panel" style={{ padding: 12 }}>
+                        <div key={m.title} className="panel" style={{ padding: 12, minWidth: 0, overflow: 'hidden' }}>
                           <div style={{ color: '#6b7280', fontSize: 12, fontWeight: 800 }}>{m.title}</div>
-                          <div style={{ fontSize: 20, fontWeight: 800, marginTop: 6 }}>{m.value}</div>
+                          <div style={{ fontSize: 20, fontWeight: 800, marginTop: 6, wordBreak: 'break-word' }}>{m.value}</div>
                         </div>
                       ))}
                     </div>
