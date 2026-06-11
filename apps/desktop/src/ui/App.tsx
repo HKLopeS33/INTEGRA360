@@ -1,7 +1,7 @@
 import { type FormEvent, type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Banknote, ChefHat, LayoutDashboard, LogOut, ReceiptText, Settings, ShoppingBag, Utensils, Users, AlertTriangle, CheckCircle, Clock, TrendingUp, DollarSign, ShoppingCart, Target, MoreVertical, X, Info, AlertCircle, Bike, Phone, MapPin, User, Plus, Trash2, Package, Building, Activity } from 'lucide-react';
 import type { DeliveryOrder } from './types.js';
-import { generateKitchenTicketHTML } from './receipt';
+import { generateKitchenTicketHTML, generateThermalHTML } from './receipt';
 
 type ToastType = 'success' | 'error' | 'warning' | 'info';
 interface ToastItem { id: number; message: string; type: ToastType; removing?: boolean; }
@@ -590,6 +590,8 @@ export function App() {
       const phone   = currentCompany.phone   ?? '';
       const pixKey  = currentCompany.pixKey  ?? localStorage.getItem('storePixKey') ?? '';
       const city    = localStorage.getItem('storeCity') ?? '';
+      const kitchenPrinter = currentCompany.kitchenPrinter ?? localStorage.getItem('printerKitchen') ?? '';
+      const cashierPrinter = currentCompany.cashierPrinter ?? localStorage.getItem('printerCashier') ?? '';
 
       setStoreName(name);
       setStoreCnpj(cnpj);
@@ -597,6 +599,8 @@ export function App() {
       setStorePhone(phone);
       setStorePixKey(pixKey);
       setStoreCity(city);
+      setPrinterKitchen(kitchenPrinter);
+      setPrinterCashier(cashierPrinter);
 
       // Persiste no localStorage para uso imediato no PIX
       localStorage.setItem('storeName', name);
@@ -604,6 +608,8 @@ export function App() {
       localStorage.setItem('storeAddress', address);
       localStorage.setItem('storePhone', phone);
       if (pixKey) localStorage.setItem('storePixKey', pixKey);
+      if (kitchenPrinter) localStorage.setItem('printerKitchen', kitchenPrinter);
+      if (cashierPrinter) localStorage.setItem('printerCashier', cashierPrinter);
     }
   }, [currentCompany]);
 
@@ -1098,7 +1104,9 @@ export function App() {
           pixKey: storePixKey,
           cnpj: storeCnpj,
           phone: storePhone,
-          address: storeAddress
+          address: storeAddress,
+          kitchenPrinter: printerKitchen,
+          cashierPrinter: printerCashier
         });
         // Atualiza o state diretamente para garantir que PIX usa a nova chave imediatamente
         setCurrentCompany({ ...response.company, pixKey: storePixKey });
@@ -1686,7 +1694,7 @@ export function App() {
       const items = Array.from(map.entries()).map(([name, v]) => ({ name, quantity: v.quantity, unitPrice: v.unitPrice, total: v.quantity * v.unitPrice }));
       const subtotal = items.reduce((s, i) => s + i.total, 0);
       const totalValue = subtotal;
-      printReceipt({
+      void printCashierReceipt({
         companyName: storeName,
         cnpj: storeCnpj ? `CNPJ: ${storeCnpj}` : undefined,
         address: storeAddress,
@@ -1766,7 +1774,7 @@ export function App() {
 
       const closeResult = await api.closeTab(tabId, closePaymentMethod, paid);
 
-      printReceipt({
+      void printCashierReceipt({
         companyName: storeName,
         cnpj: storeCnpj ? `CNPJ: ${storeCnpj}` : undefined,
         address: storeAddress,
@@ -2366,6 +2374,17 @@ export function App() {
     }
   };
 
+  const printCashierReceipt = async (data: Parameters<typeof generateThermalHTML>[0]) => {
+    const sistema = (window as any).sistema;
+    if (sistema?.printSilent && printerCashier) {
+      const html = generateThermalHTML(data);
+      const result = await sistema.printSilent(html, printerCashier);
+      if (!result?.success) showToast(`Erro ao imprimir recibo: ${result?.reason ?? ''}`, 'error');
+    } else {
+      printReceipt(data);
+    }
+  };
+
   const loadDeliveryOrders = async () => {
     setLoadingDelivery(true);
     try {
@@ -2444,7 +2463,7 @@ export function App() {
         order.customerPhone ? `Tel: ${order.customerPhone}` : null,
         `End: ${order.customerAddress}`
       ].filter(Boolean).join(' | ');
-      printReceipt({
+      void printCashierReceipt({
         companyName: storeName,
         cnpj: storeCnpj ? `CNPJ: ${storeCnpj}` : undefined,
         address: storeAddress,
@@ -3858,7 +3877,7 @@ export function App() {
                   const paidStr = window.prompt('Valor pago (ex: 50.00)') ?? '';
                   const paid = Number(paidStr.replace(',', '.')) || undefined;
                   const change = paid != null && !Number.isNaN(paid) ? paid - total : undefined;
-                  printReceipt({
+                  void printCashierReceipt({
                     companyName: storeName,
                     cnpj: storeCnpj ? `CNPJ: ${storeCnpj}` : undefined,
                     address: storeAddress,
@@ -6740,43 +6759,69 @@ export function App() {
                   </div>
                 )}
 
-                {/* Impressoras — só aparece no Electron */}
-                {(window as any).sistema?.listPrinters && (
-                  <div className="panel settings-list">
-                    <div className="panel-header">
-                      <div>
-                        <span className="eyebrow">Hardware</span>
-                        <h2>Impressoras térmicas</h2>
-                      </div>
+                {/* Impressoras térmicas — Electron mostra lista de impressoras instaladas; mobile/web usa nome/IP digitado */}
+                <div className="panel settings-list">
+                  <div className="panel-header">
+                    <div>
+                      <span className="eyebrow">Hardware</span>
+                      <h2>Impressoras térmicas</h2>
                     </div>
-                    <label>
-                      Impressora do Caixa
-                      <select value={printerCashier} onChange={(e) => setPrinterCashier(e.target.value)}>
-                        <option value="">— Selecione —</option>
-                        {availablePrinters.map((p) => (
-                          <option key={p.name} value={p.name}>{p.name}{p.isDefault ? ' (padrão)' : ''}</option>
-                        ))}
-                      </select>
-                    </label>
-                    <label style={{ marginTop: 10 }}>
-                      Impressora da Cozinha <span style={{ fontSize: 11, color: '#789088', fontWeight: 400 }}>(imprime automaticamente ao criar delivery)</span>
-                      <select value={printerKitchen} onChange={(e) => setPrinterKitchen(e.target.value)}>
-                        <option value="">— Selecione —</option>
-                        {availablePrinters.map((p) => (
-                          <option key={p.name} value={p.name}>{p.name}{p.isDefault ? ' (padrão)' : ''}</option>
-                        ))}
-                      </select>
-                    </label>
-                    <button type="button" className="secondary-button" style={{ marginTop: 8, fontSize: 12 }}
-                      onClick={() => {
-                        const sistema = (window as any).sistema;
-                        if (sistema?.listPrinters) sistema.listPrinters().then((list: any[]) => setAvailablePrinters(list));
-                      }}>
-                      🔄 Atualizar lista de impressoras
-                    </button>
-                    <button className="primary-button" type="button" style={{ marginTop: 4, width: 'fit-content' }} onClick={saveStoreSettings}>Salvar impressoras</button>
                   </div>
-                )}
+                  {(window as any).sistema?.listPrinters ? (
+                    <>
+                      <label>
+                        Impressora do Caixa
+                        <select value={printerCashier} onChange={(e) => setPrinterCashier(e.target.value)}>
+                          <option value="">— Selecione —</option>
+                          {availablePrinters.map((p) => (
+                            <option key={p.name} value={p.name}>{p.name}{p.isDefault ? ' (padrão)' : ''}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label style={{ marginTop: 10 }}>
+                        Impressora da Cozinha <span style={{ fontSize: 11, color: '#789088', fontWeight: 400 }}>(imprime automaticamente ao criar pedido)</span>
+                        <select value={printerKitchen} onChange={(e) => setPrinterKitchen(e.target.value)}>
+                          <option value="">— Selecione —</option>
+                          {availablePrinters.map((p) => (
+                            <option key={p.name} value={p.name}>{p.name}{p.isDefault ? ' (padrão)' : ''}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <button type="button" className="secondary-button" style={{ marginTop: 8, fontSize: 12 }}
+                        onClick={() => {
+                          const sistema = (window as any).sistema;
+                          if (sistema?.listPrinters) sistema.listPrinters().then((list: any[]) => setAvailablePrinters(list));
+                        }}>
+                        🔄 Atualizar lista de impressoras
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <label>
+                        Impressora do Caixa <span style={{ fontSize: 11, color: '#789088', fontWeight: 400 }}>(nome ou IP da impressora térmica)</span>
+                        <input
+                          type="text"
+                          placeholder="Ex.: 192.168.0.50 ou Caixa-58mm"
+                          value={printerCashier}
+                          onChange={(e) => setPrinterCashier(e.target.value)}
+                        />
+                      </label>
+                      <label style={{ marginTop: 10 }}>
+                        Impressora da Cozinha <span style={{ fontSize: 11, color: '#789088', fontWeight: 400 }}>(nome ou IP da impressora térmica)</span>
+                        <input
+                          type="text"
+                          placeholder="Ex.: 192.168.0.51 ou Cozinha-58mm"
+                          value={printerKitchen}
+                          onChange={(e) => setPrinterKitchen(e.target.value)}
+                        />
+                      </label>
+                      <p style={{ margin: '2px 0 0', fontSize: 12, color: '#9ca3af' }}>
+                        Ao confirmar pedidos ou fechar a conta, escolha essa impressora na tela de impressão do dispositivo.
+                      </p>
+                    </>
+                  )}
+                  <button className="primary-button" type="button" style={{ marginTop: 8, width: 'fit-content' }} onClick={saveStoreSettings}>Salvar impressoras</button>
+                </div>
 
                 {/* Segurança — Alterar senha */}
                 <div className="panel settings-list">
