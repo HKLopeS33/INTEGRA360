@@ -59,24 +59,20 @@ Deno.serve(async (req) => {
 
     const companyIdToUse = urlCompanyId;
     if (!companyIdToUse) {
-      // Sem companyId não conseguimos buscar o token — ignorar com segurança
+      // Sem companyId não conseguimos contextualizar — ignorar com segurança
       console.warn('Webhook sem companyId na URL e sem registro prévio para paymentId', paymentId);
       return new Response('no company context', { status: 200, headers: corsHeaders });
     }
 
-    const { data: company } = await adminClient
-      .from('Company')
-      .select('mercadoPagoAccessToken')
-      .eq('id', companyIdToUse)
-      .single();
-
-    if (!company?.mercadoPagoAccessToken) {
-      return new Response('company token missing', { status: 200, headers: corsHeaders });
+    const masterAccessToken = Deno.env.get('MP_MASTER_ACCESS_TOKEN');
+    if (!masterAccessToken) {
+      console.error('MP_MASTER_ACCESS_TOKEN não configurado.');
+      return new Response('master token missing', { status: 200, headers: corsHeaders });
     }
 
     // Buscar dados do pagamento no MP
     const mpResponse = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
-      headers: { Authorization: `Bearer ${company.mercadoPagoAccessToken}` },
+      headers: { Authorization: `Bearer ${masterAccessToken}` },
     });
     const mpData = await mpResponse.json();
     if (!mpResponse.ok) {
@@ -93,7 +89,7 @@ Deno.serve(async (req) => {
     if (externalRef) {
       const { data: dlvOrder } = await adminClient
         .from('DeliveryOrder')
-        .select('id, companyId, status, paymentStatus')
+        .select('id, companyId, status, paymentStatus, total')
         .eq('id', externalRef)
         .eq('companyId', companyIdToUse)
         .maybeSingle();
@@ -113,11 +109,19 @@ Deno.serve(async (req) => {
         }], { onConflict: 'mpPaymentId', ignoreDuplicates: false });
 
         if (status === 'approved' && dlvOrder.status === 'AGUARDANDO_PAGAMENTO') {
-          await adminClient
+          const { data: updatedRows } = await adminClient
             .from('DeliveryOrder')
             .update({ paymentStatus: 'PAGO', status: 'RECEBIDO', updatedAt: now })
             .eq('id', deliveryOrderId)
-            .eq('status', 'AGUARDANDO_PAGAMENTO');
+            .eq('status', 'AGUARDANDO_PAGAMENTO')
+            .select('id');
+
+          // Só credita a carteira se este request realmente fez a transição
+          // (evita crédito duplicado em entregas repetidas do webhook).
+          if (updatedRows && updatedRows.length > 0) {
+            const amount = Number(mpData.transaction_amount ?? dlvOrder.total);
+            await creditDeliveryWallet(adminClient, companyIdToUse, amount, deliveryOrderId);
+          }
         }
       }
     }
@@ -146,18 +150,14 @@ Deno.serve(async (req) => {
 
 // ── Helper: processar pagamento já rastreado (PIX direto) ──────────────────
 async function processPayment(adminClient: any, paymentId: string, existing: any, _extra: any) {
-  const { data: company } = await adminClient
-    .from('Company')
-    .select('mercadoPagoAccessToken')
-    .eq('id', existing.companyId)
-    .single();
-
-  if (!company?.mercadoPagoAccessToken) {
-    return new Response('company token missing', { status: 200, headers: corsHeaders });
+  const masterAccessToken = Deno.env.get('MP_MASTER_ACCESS_TOKEN');
+  if (!masterAccessToken) {
+    console.error('MP_MASTER_ACCESS_TOKEN não configurado.');
+    return new Response('master token missing', { status: 200, headers: corsHeaders });
   }
 
   const mpResponse = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
-    headers: { Authorization: `Bearer ${company.mercadoPagoAccessToken}` },
+    headers: { Authorization: `Bearer ${masterAccessToken}` },
   });
   const mpData = await mpResponse.json();
   if (!mpResponse.ok) {
@@ -174,6 +174,8 @@ async function processPayment(adminClient: any, paymentId: string, existing: any
     .eq('id', existing.id);
 
   if (status === 'approved') {
+    const amount = Number(mpData.transaction_amount ?? 0);
+
     if (existing.tabId) {
       const { data: cashRegister } = await adminClient
         .from('CashRegister')
@@ -186,19 +188,60 @@ async function processPayment(adminClient: any, paymentId: string, existing: any
         tabId: existing.tabId,
         cashRegisterId: cashRegister?.id ?? null,
         method: 'PIX',
-        amount: String(mpData.transaction_amount ?? 0),
+        amount: String(amount),
         status: 'PAGO',
         paidAt: now,
       }]);
+
+      await creditTabWallet(adminClient, existing.companyId, amount, existing.tabId);
     }
     if (existing.deliveryOrderId) {
-      await adminClient
+      const { data: updatedRows } = await adminClient
         .from('DeliveryOrder')
         .update({ paymentStatus: 'PAGO', status: 'RECEBIDO', updatedAt: now })
         .eq('id', existing.deliveryOrderId)
-        .eq('status', 'AGUARDANDO_PAGAMENTO');
+        .eq('status', 'AGUARDANDO_PAGAMENTO')
+        .select('id');
+
+      if (updatedRows && updatedRows.length > 0) {
+        await creditDeliveryWallet(adminClient, existing.companyId, amount, existing.deliveryOrderId);
+      }
     }
   }
 
   return new Response('ok', { status: 200, headers: corsHeaders });
+}
+
+// ── Helpers: creditam a carteira da empresa via RPC (atômico) ─────────────
+
+async function creditDeliveryWallet(adminClient: any, companyId: string, amount: number, deliveryOrderId: string) {
+  const { data: wallet } = await adminClient
+    .from('Wallet')
+    .select('deliveryFeePercent')
+    .eq('companyId', companyId)
+    .maybeSingle();
+  const feePercent = Number(wallet?.deliveryFeePercent ?? 0);
+  const netAmount = amount * (1 - feePercent / 100);
+
+  const { error } = await adminClient.rpc('credit_wallet', {
+    p_company_id: companyId,
+    p_amount: netAmount,
+    p_type: 'CREDITO_DELIVERY',
+    p_description: `Pedido delivery ${deliveryOrderId} (comissão ${feePercent}%)`,
+    p_delivery_order_id: deliveryOrderId,
+    p_tab_id: null,
+  });
+  if (error) console.error('Failed to credit wallet (delivery)', error);
+}
+
+async function creditTabWallet(adminClient: any, companyId: string, amount: number, tabId: string) {
+  const { error } = await adminClient.rpc('credit_wallet', {
+    p_company_id: companyId,
+    p_amount: amount,
+    p_type: 'CREDITO_MESA',
+    p_description: `Pix mesa/comanda ${tabId}`,
+    p_delivery_order_id: null,
+    p_tab_id: tabId,
+  });
+  if (error) console.error('Failed to credit wallet (mesa)', error);
 }

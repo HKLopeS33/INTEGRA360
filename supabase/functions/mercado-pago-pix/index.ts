@@ -49,14 +49,17 @@ Deno.serve(async (req) => {
 
     const { data: company, error: companyError } = await adminClient
       .from('Company')
-      .select('id, name, mercadoPagoAccessToken')
+      .select('id, name')
       .eq('id', userRow.companyId)
       .single();
     if (companyError || !company) {
       return json({ error: 'Empresa não encontrada.' }, 404);
     }
-    if (!company.mercadoPagoAccessToken) {
-      return json({ error: 'Esta empresa ainda não conectou uma conta do Mercado Pago.' }, 400);
+
+    const masterAccessToken = Deno.env.get('MP_MASTER_ACCESS_TOKEN');
+    if (!masterAccessToken) {
+      console.error('MP_MASTER_ACCESS_TOKEN não configurado.');
+      return json({ error: 'Pagamento online indisponível no momento.' }, 503);
     }
 
     const body = await req.json().catch(() => ({}));
@@ -76,7 +79,7 @@ Deno.serve(async (req) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${company.mercadoPagoAccessToken}`,
+        'Authorization': `Bearer ${masterAccessToken}`,
         'X-Idempotency-Key': idempotencyKey,
       },
       body: JSON.stringify({

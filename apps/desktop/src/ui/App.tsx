@@ -1,5 +1,5 @@
 import { type FormEvent, type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Banknote, ChefHat, LayoutDashboard, LogOut, ReceiptText, Settings, ShoppingBag, Utensils, Users, AlertTriangle, CheckCircle, Clock, TrendingUp, DollarSign, ShoppingCart, Target, MoreVertical, X, Info, AlertCircle, Bike, Phone, MapPin, User, Plus, Trash2, Package, Building, Activity } from 'lucide-react';
+import { Banknote, ChefHat, LayoutDashboard, LogOut, ReceiptText, Settings, ShoppingBag, Utensils, Users, AlertTriangle, CheckCircle, Clock, TrendingUp, DollarSign, ShoppingCart, Target, MoreVertical, X, Info, AlertCircle, Bike, Phone, MapPin, User, Plus, Trash2, Package, Building, Activity, Wallet } from 'lucide-react';
 import type { DeliveryOrder } from './types.js';
 import { generateKitchenTicketHTML, generateThermalHTML } from './receipt';
 
@@ -10,7 +10,7 @@ import { supabase } from './supabase.ts';
 import type { Order, Product, RestaurantTable } from './types.js';
 import { printReceipt } from './receipt';
 
-type ActiveModule = 'mesas' | 'comandas' | 'cozinha' | 'cardapio' | 'caixa' | 'ajustes' | 'menu' | 'financeiro' | 'cadastros' | 'usuarios' | 'delivery';
+type ActiveModule = 'mesas' | 'comandas' | 'cozinha' | 'cardapio' | 'caixa' | 'ajustes' | 'menu' | 'financeiro' | 'cadastros' | 'usuarios' | 'delivery' | 'carteiras';
 type ReportPeriod = 'daily' | 'weekly' | 'monthly' | 'yearly';
 
 const reportPeriods: Array<{ value: ReportPeriod; label: string }> = [
@@ -66,7 +66,7 @@ const moduleConfig: Record<ActiveModule, { eyebrow: string; title: string }> = {
   menu: { eyebrow: 'Menu', title: 'Peça para sua mesa' }
 };
 const roleAllowedModules: Record<string, ActiveModule[]> = {
-  SUPER: ['financeiro', 'cadastros', 'usuarios'],
+  SUPER: ['financeiro', 'cadastros', 'usuarios', 'carteiras'],
   ADMIN: ['mesas', 'comandas', 'cozinha', 'cardapio', 'delivery', 'caixa', 'ajustes', 'menu'],
   GERENTE: ['mesas', 'comandas', 'cozinha', 'cardapio', 'delivery', 'caixa', 'ajustes', 'menu'],
   CAIXA: ['mesas', 'comandas', 'cozinha', 'delivery'],
@@ -96,7 +96,8 @@ const getNavItems = (role?: string) => {
     menu: { id: 'menu', label: 'Menu', icon: Utensils },
     financeiro: { id: 'financeiro', label: 'Financeiro', icon: Banknote },
     cadastros: { id: 'cadastros', label: 'Cadastros', icon: Settings },
-    usuarios: { id: 'usuarios', label: 'Usuários', icon: Users }
+    usuarios: { id: 'usuarios', label: 'Usuários', icon: Users },
+    carteiras: { id: 'carteiras', label: 'Carteiras', icon: Wallet }
   };
 
   return allowedModuleIds.map((moduleId) => moduleOptions[moduleId]).filter((item) => item !== undefined && item.id !== 'menu');
@@ -256,8 +257,17 @@ export function App() {
   const [newCategoryName, setNewCategoryName] = useState('');
   const [printerKitchen, setPrinterKitchen] = useState('');
   const [printerCashier, setPrinterCashier] = useState('');
+  const [printingDisabled, setPrintingDisabled] = useState(false);
   const [availablePrinters, setAvailablePrinters] = useState<Array<{ name: string; isDefault: boolean }>>([]);
   const [showCategoryForm, setShowCategoryForm] = useState(false);
+
+  // Carteira (wallet)
+  const [walletInfo, setWalletInfo] = useState<{ balance: number; deliveryFeePercent: number; payoutPixKey: string | null } | null>(null);
+  const [walletTransactions, setWalletTransactions] = useState<Array<{ id: string; type: string; amount: number; balanceAfter: number; description: string | null; createdAt: string }>>([]);
+  const [walletWithdrawals, setWalletWithdrawals] = useState<Array<{ id: string; amount: number; status: string; isAutomatic: boolean; requestedAt: string; paidAt: string | null }>>([]);
+  const [walletPixKeyInput, setWalletPixKeyInput] = useState('');
+  const [walletSavingPixKey, setWalletSavingPixKey] = useState(false);
+  const [walletRequestingWithdrawal, setWalletRequestingWithdrawal] = useState(false);
 
   // Delivery states
   const [deliveryOrders, setDeliveryOrders] = useState<DeliveryOrder[]>([]);
@@ -333,6 +343,7 @@ export function App() {
   const [editPhone, setEditPhone] = useState('');
   const [editAddress, setEditAddress] = useState('');
   const [editMonthlyFee, setEditMonthlyFee] = useState('0.00');
+  const [editDeliveryFeePercent, setEditDeliveryFeePercent] = useState('0');
   const [showUsersModal, setShowUsersModal] = useState(false);
   const [showInvoicesModal, setShowInvoicesModal] = useState(false);
   const [invoiceCompany, setInvoiceCompany] = useState<any | null>(null);
@@ -362,11 +373,6 @@ export function App() {
   const [storeTableCount, setStoreTableCount] = useState('10');
   const [storeTableCountOriginal, setStoreTableCountOriginal] = useState(10);
   const [savingTableCount, setSavingTableCount] = useState(false);
-  const [mpConnected, setMpConnected] = useState(false);
-  const [mpConnectedAt, setMpConnectedAt] = useState<string | null>(null);
-  const [mpAccessTokenInput, setMpAccessTokenInput] = useState('');
-  const [mpPublicKeyInput, setMpPublicKeyInput] = useState('');
-  const [mpSaving, setMpSaving] = useState(false);
   const [storeCnpj, setStoreCnpj] = useState('');
   const [storeAddress, setStoreAddress] = useState('');
   const [storePhone, setStorePhone] = useState('');
@@ -391,6 +397,7 @@ export function App() {
   const [newAdminPassword, setNewAdminPassword] = useState('');
   const [newCompanyMonths, setNewCompanyMonths] = useState('1');
   const [newCompanyMonthlyFee, setNewCompanyMonthlyFee] = useState('0.00');
+  const [newCompanyDeliveryFeePercent, setNewCompanyDeliveryFeePercent] = useState('0');
   const [newCompanyTableCount, setNewCompanyTableCount] = useState('10');
   const [createFieldErrors, setCreateFieldErrors] = useState<Record<string, string>>({});
 
@@ -414,6 +421,12 @@ export function App() {
   const [hourlyPeaksReport, setHourlyPeaksReport] = useState<any>(null);
   const [loadingReport, setLoadingReport] = useState(false);
   const [selectedReportCompany, setSelectedReportCompany] = useState<string>('all');
+
+  // SuperAdmin — visão geral das carteiras de todas as empresas
+  const [companyWallets, setCompanyWallets] = useState<Array<{ companyId: string; companyName: string; balance: number; deliveryFeePercent: number; payoutPixKey: string | null; updatedAt: string }>>([]);
+  const [pendingWithdrawals, setPendingWithdrawals] = useState<Array<{ id: string; companyId: string; companyName: string; amount: number; isAutomatic: boolean; requestedAt: string; pixKeyUsed: string | null }>>([]);
+  const [loadingWallets, setLoadingWallets] = useState(false);
+  const [resolvingWithdrawalId, setResolvingWithdrawalId] = useState<string | null>(null);
 
   // Company individual reports state
   const [companyReportDateType, setCompanyReportDateType] = useState<'day' | 'week'>('day');
@@ -575,6 +588,7 @@ export function App() {
     setStorePixKey(localStorage.getItem('storePixKey') ?? '');
     setPrinterKitchen(localStorage.getItem('printerKitchen') ?? '');
     setPrinterCashier(localStorage.getItem('printerCashier') ?? '');
+    setPrintingDisabled(localStorage.getItem('printingDisabled') === 'true');
     // Carrega lista de impressoras disponíveis (só no Electron)
     const sistema = (window as any).sistema;
     if (sistema?.listPrinters) {
@@ -592,6 +606,7 @@ export function App() {
       const city    = localStorage.getItem('storeCity') ?? '';
       const kitchenPrinter = currentCompany.kitchenPrinter ?? localStorage.getItem('printerKitchen') ?? '';
       const cashierPrinter = currentCompany.cashierPrinter ?? localStorage.getItem('printerCashier') ?? '';
+      const printDisabled = currentCompany.printingDisabled ?? (localStorage.getItem('printingDisabled') === 'true');
 
       setStoreName(name);
       setStoreCnpj(cnpj);
@@ -601,6 +616,7 @@ export function App() {
       setStoreCity(city);
       setPrinterKitchen(kitchenPrinter);
       setPrinterCashier(cashierPrinter);
+      setPrintingDisabled(printDisabled);
 
       // Persiste no localStorage para uso imediato no PIX
       localStorage.setItem('storeName', name);
@@ -608,6 +624,7 @@ export function App() {
       localStorage.setItem('storeAddress', address);
       localStorage.setItem('storePhone', phone);
       if (pixKey) localStorage.setItem('storePixKey', pixKey);
+      localStorage.setItem('printingDisabled', String(printDisabled));
       if (kitchenPrinter) localStorage.setItem('printerKitchen', kitchenPrinter);
       if (cashierPrinter) localStorage.setItem('printerCashier', cashierPrinter);
     }
@@ -628,45 +645,88 @@ export function App() {
       api.getMyCompanyTableCount()
         .then((count) => { setStoreTableCount(String(count)); setStoreTableCountOriginal(count); })
         .catch((e) => console.error('Erro ao carregar quantidade de mesas', e));
-      api.getMercadoPagoStatus()
-        .then((status) => { setMpConnected(status.connected); setMpConnectedAt(status.connectedAt); })
-        .catch((e) => console.error('Erro ao carregar status do Mercado Pago', e));
+    }
+    if (activeModule === 'caixa') {
+      void loadWallet();
+    }
+    if (activeModule === 'carteiras') {
+      void loadCarteirasData();
     }
   }, [activeModule]);
 
-  const connectMercadoPago = async () => {
-    if (!mpAccessTokenInput.trim()) {
-      return showToast('Informe o access token do Mercado Pago.', 'warning');
-    }
-    setMpSaving(true);
+  const loadCarteirasData = async () => {
+    setLoadingWallets(true);
     try {
-      await api.connectMercadoPago(mpAccessTokenInput.trim(), mpPublicKeyInput.trim() || undefined);
-      setMpAccessTokenInput('');
-      setMpPublicKeyInput('');
-      const status = await api.getMercadoPagoStatus();
-      setMpConnected(status.connected);
-      setMpConnectedAt(status.connectedAt);
-      showToast('Mercado Pago conectado com sucesso.', 'success');
-    } catch (e: any) {
-      console.error(e);
-      showToast(e?.message || 'Falha ao conectar Mercado Pago.', 'error');
+      const [wallets, withdrawals] = await Promise.all([
+        api.listCompanyWallets(),
+        api.listPendingWithdrawals()
+      ]);
+      setCompanyWallets((wallets ?? []).map((w: any) => ({ ...w, balance: Number(w.balance), deliveryFeePercent: Number(w.deliveryFeePercent) })));
+      setPendingWithdrawals((withdrawals ?? []).map((w: any) => ({ ...w, amount: Number(w.amount) })));
+    } catch (e) {
+      console.error('Erro ao carregar carteiras', e);
+      showToast('Falha ao carregar carteiras.', 'error');
     } finally {
-      setMpSaving(false);
+      setLoadingWallets(false);
     }
   };
 
-  const disconnectMercadoPago = async () => {
-    setMpSaving(true);
+  const handleResolveWithdrawal = async (withdrawalId: string, approve: boolean) => {
+    setResolvingWithdrawalId(withdrawalId);
     try {
-      await api.disconnectMercadoPago();
-      setMpConnected(false);
-      setMpConnectedAt(null);
-      showToast('Mercado Pago desconectado.', 'success');
+      await api.resolveWithdrawal(withdrawalId, approve);
+      await loadCarteirasData();
+      showToast(approve ? 'Saque marcado como pago.' : 'Saque rejeitado e saldo devolvido.', 'success');
+    } catch (e: any) {
+      console.error('Erro ao resolver saque', e);
+      showToast(e?.message || 'Falha ao resolver solicitação de saque.', 'error');
+    } finally {
+      setResolvingWithdrawalId(null);
+    }
+  };
+
+  const loadWallet = async () => {
+    try {
+      const [info, transactions, withdrawals] = await Promise.all([
+        api.wallet.get(),
+        api.wallet.listTransactions(),
+        api.wallet.listWithdrawals()
+      ]);
+      setWalletInfo(info ? { balance: Number(info.balance), deliveryFeePercent: Number(info.deliveryFeePercent), payoutPixKey: info.payoutPixKey } : null);
+      setWalletPixKeyInput(info?.payoutPixKey ?? '');
+      setWalletTransactions(transactions as any);
+      setWalletWithdrawals(withdrawals as any);
+    } catch (e) {
+      console.error('Erro ao carregar carteira', e);
+    }
+  };
+
+  const saveWalletPixKey = async () => {
+    setWalletSavingPixKey(true);
+    try {
+      await api.wallet.setPayoutPixKey(walletPixKeyInput.trim());
+      await loadWallet();
+      showToast('Chave Pix de repasse salva.', 'success');
     } catch (e: any) {
       console.error(e);
-      showToast(e?.message || 'Falha ao desconectar Mercado Pago.', 'error');
+      showToast(e?.message || 'Falha ao salvar chave Pix.', 'error');
     } finally {
-      setMpSaving(false);
+      setWalletSavingPixKey(false);
+    }
+  };
+
+  const requestWalletWithdrawal = async () => {
+    if (!walletInfo || walletInfo.balance <= 0) return;
+    setWalletRequestingWithdrawal(true);
+    try {
+      await api.wallet.requestWithdrawal(walletInfo.balance);
+      await loadWallet();
+      showToast('Saque solicitado. O AdminSuper irá processar a transferência.', 'success');
+    } catch (e: any) {
+      console.error(e);
+      showToast(e?.message || 'Falha ao solicitar saque.', 'error');
+    } finally {
+      setWalletRequestingWithdrawal(false);
     }
   };
 
@@ -834,6 +894,7 @@ export function App() {
         adminPassword: newAdminPassword,
         months: Number(newCompanyMonths) || 1,
         monthlyFee: Number(newCompanyMonthlyFee.replace(',', '.')) || 0,
+        deliveryFeePercent: Number(newCompanyDeliveryFeePercent.replace(',', '.')) || 0,
         tableCount: Number(newCompanyTableCount) || 10
       });
 
@@ -847,6 +908,7 @@ export function App() {
       setNewAdminPassword('');
       setNewCompanyMonths('1');
       setNewCompanyMonthlyFee('0.00');
+      setNewCompanyDeliveryFeePercent('0');
       setNewCompanyTableCount('10');
       setCreateFieldErrors({});
 
@@ -932,6 +994,7 @@ export function App() {
     setEditPhone(company.phone ?? '');
     setEditAddress(company.address ?? '');
     setEditMonthlyFee(String(company.monthlyFee ?? '0.00'));
+    setEditDeliveryFeePercent(String(company.deliveryFeePercent ?? '0'));
     setShowEditModal(true);
   };
 
@@ -943,6 +1006,7 @@ export function App() {
     setEditPhone(company.phone ?? '');
     setEditAddress(company.address ?? '');
     setEditMonthlyFee(String(company.monthlyFee ?? '0.00'));
+    setEditDeliveryFeePercent(String(company.deliveryFeePercent ?? '0'));
     // load users and find ADMIN for this company
     try {
       setLoadingUsers(true);
@@ -1096,6 +1160,7 @@ export function App() {
     localStorage.setItem('storePixKey', storePixKey);
     localStorage.setItem('printerKitchen', printerKitchen);
     localStorage.setItem('printerCashier', printerCashier);
+    localStorage.setItem('printingDisabled', String(printingDisabled));
 
     if (currentCompany?.id) {
       try {
@@ -1106,7 +1171,8 @@ export function App() {
           phone: storePhone,
           address: storeAddress,
           kitchenPrinter: printerKitchen,
-          cashierPrinter: printerCashier
+          cashierPrinter: printerCashier,
+          printingDisabled
         });
         // Atualiza o state diretamente para garantir que PIX usa a nova chave imediatamente
         setCurrentCompany({ ...response.company, pixKey: storePixKey });
@@ -1220,7 +1286,8 @@ export function App() {
         email: editEmail,
         phone: editPhone,
         address: editAddress,
-        monthlyFee: Number(editMonthlyFee.replace(',', '.')) || 0
+        monthlyFee: Number(editMonthlyFee.replace(',', '.')) || 0,
+        deliveryFeePercent: Number(editDeliveryFeePercent.replace(',', '.')) || 0
       });
 
       // update admin user if present
@@ -2164,7 +2231,7 @@ export function App() {
     const hasOrdersAccess = role ? ['GARCOM', 'CAIXA', 'GERENTE', 'FINANCEIRO', 'ESTOQUE', 'SUPER', 'ADMIN'].includes(role) : false;
 
     try {
-      const [tablesResult, productsResult, ordersResult, kitchenResult, cashResult, cashOpenResult, reportResult, deliveryKitchenResult, mpStatusResult] = await Promise.allSettled([
+      const [tablesResult, productsResult, ordersResult, kitchenResult, cashResult, cashOpenResult, reportResult, deliveryKitchenResult] = await Promise.allSettled([
         api.tables(),
         api.products(),
         hasOrdersAccess ? api.orders() : Promise.resolve([] as Order[]),
@@ -2172,8 +2239,7 @@ export function App() {
         hasCashAccess ? api.cashRegisterCurrent() : Promise.resolve(null),
         api.isCashRegisterOpen(),
         hasReportAccess ? api.reportSummary(reportPeriod, reportRefDate) : Promise.resolve(null),
-        hasKitchenAccess ? api.listDeliveryOrders('EM_PREPARO') : Promise.resolve([]),
-        hasCashAccess ? api.getMercadoPagoStatus() : Promise.resolve(null)
+        hasKitchenAccess ? api.listDeliveryOrders('EM_PREPARO') : Promise.resolve([])
       ]);
 
       setApiStatus('online');
@@ -2183,7 +2249,6 @@ export function App() {
       if (kitchenResult.status === 'fulfilled') setKitchenOrders(kitchenResult.value);
       if (cashResult.status === 'fulfilled') setCashRegister(cashResult.value ?? null);
       if (cashOpenResult.status === 'fulfilled') setIsCashOpen(cashOpenResult.value);
-      if (mpStatusResult.status === 'fulfilled' && mpStatusResult.value) setMpConnected(mpStatusResult.value.connected);
       if (reportResult.status === 'fulfilled') setReportSummary(reportResult.value ?? null);
       if (deliveryKitchenResult.status === 'fulfilled') setKitchenDeliveryOrders(deliveryKitchenResult.value as DeliveryOrder[]);
       initialLoadDone.current = true;
@@ -2360,6 +2425,7 @@ export function App() {
   };
 
   const printKitchenTicket = async (ticketData: Parameters<typeof generateKitchenTicketHTML>[0]) => {
+    if (printingDisabled) return;
     const html = generateKitchenTicketHTML(ticketData);
     const sistema = (window as any).sistema;
     if (sistema?.printSilent && printerKitchen) {
@@ -2375,6 +2441,7 @@ export function App() {
   };
 
   const printCashierReceipt = async (data: Parameters<typeof generateThermalHTML>[0]) => {
+    if (printingDisabled) return;
     const sistema = (window as any).sistema;
     if (sistema?.printSilent && printerCashier) {
       const html = generateThermalHTML(data);
@@ -2457,8 +2524,6 @@ export function App() {
     try {
       const subtotal = order.items.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
       const receiptNumber = await api.assignDeliveryReceiptNumber(order.id);
-      const w = window.open('', '_blank', 'width=240,height=700,toolbar=no,menubar=no');
-      if (!w) { showToast('Bloqueador de janelas impediu a impressão.', 'warning'); return; }
       const deliveryInfo = [
         order.customerPhone ? `Tel: ${order.customerPhone}` : null,
         `End: ${order.customerAddress}`
@@ -3515,7 +3580,7 @@ export function App() {
                   </div>
                 </div>
               )}
-              {closePaymentMethod === 'PIX' && mpConnected && (
+              {closePaymentMethod === 'PIX' && (
                 <div className="close-modal-pix" style={{ marginTop: 8 }}>
                   <div className="close-modal-pix-label">🔄 Pix dinâmico via Mercado Pago (confirmação automática)</div>
                   {!mpCharge ? (
@@ -4769,6 +4834,10 @@ export function App() {
                     <input value={newCompanyMonthlyFee} onChange={(e) => setNewCompanyMonthlyFee(e.target.value)} placeholder="0.00" />
                   </label>
                   <label>
+                    Comissão de delivery (%) <span style={{ fontSize: 11, color: '#9ca3af', fontWeight: 400 }}>(taxa por pedido pago na plataforma)</span>
+                    <input value={newCompanyDeliveryFeePercent} onChange={(e) => setNewCompanyDeliveryFeePercent(e.target.value)} placeholder="0" />
+                  </label>
+                  <label>
                     Email empresa
                     <input value={newCompanyEmail} onChange={(e) => setNewCompanyEmail(e.target.value)} placeholder="contato@exemplo.com"
                       style={createFieldErrors.companyEmail ? { borderColor: '#dc2626' } : {}} />
@@ -5684,6 +5753,103 @@ export function App() {
           </section>
         )}
 
+        {/* SuperAdmin — Carteiras: saldo de cada empresa e fila de saques */}
+        {activeModule === 'carteiras' && currentUser?.role === 'SUPER' && (
+          <section className="module-grid">
+            <div className="panel">
+              <div className="panel-header super-panel-header">
+                <div>
+                  <span className="eyebrow">Plataforma</span>
+                  <h2>Carteiras das empresas</h2>
+                </div>
+                <button className="secondary-button" type="button" onClick={() => void loadCarteirasData()} disabled={loadingWallets}>
+                  {loadingWallets ? '⏳' : '↻ Atualizar'}
+                </button>
+              </div>
+
+              <div className="super-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 14, marginBottom: 24 }}>
+                {[
+                  { label: 'Saldo total em carteiras', value: formatCurrency(companyWallets.reduce((s, w) => s + w.balance, 0)), bg: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' },
+                  { label: 'Saques pendentes', value: String(pendingWithdrawals.length), bg: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)' },
+                  { label: 'Valor pendente de saque', value: formatCurrency(pendingWithdrawals.reduce((s, w) => s + w.amount, 0)), bg: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)' },
+                ].map((kpi) => (
+                  <div key={kpi.label} className="panel" style={{ padding: 18, background: kpi.bg, color: '#fff', borderRadius: 12 }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, opacity: 0.9, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{kpi.label}</div>
+                    <div style={{ fontSize: 24, fontWeight: 800, lineHeight: 1.1 }}>{kpi.value}</div>
+                  </div>
+                ))}
+              </div>
+
+              <h4 style={{ marginBottom: 12, fontSize: 16, fontWeight: 700 }}>Solicitações de saque pendentes</h4>
+              {pendingWithdrawals.length === 0 ? (
+                <p style={{ color: '#9ca3af', fontSize: 13, marginBottom: 24 }}>Nenhuma solicitação pendente.</p>
+              ) : (
+                <div className="super-table-wrap" style={{ overflowX: 'auto', borderRadius: 10, border: '1px solid #e5e7eb', marginBottom: 24 }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '2px solid #e5e7eb', backgroundColor: '#f9fafb' }}>
+                        <th style={{ padding: 12, textAlign: 'left', fontWeight: 700, fontSize: 13 }}>Empresa</th>
+                        <th style={{ padding: 12, textAlign: 'right', fontWeight: 700, fontSize: 13 }}>Valor</th>
+                        <th style={{ padding: 12, textAlign: 'left', fontWeight: 700, fontSize: 13 }}>Chave Pix</th>
+                        <th style={{ padding: 12, textAlign: 'left', fontWeight: 700, fontSize: 13 }}>Origem</th>
+                        <th style={{ padding: 12, textAlign: 'left', fontWeight: 700, fontSize: 13 }}>Solicitado em</th>
+                        <th style={{ padding: 12, textAlign: 'right', fontWeight: 700, fontSize: 13 }}>Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pendingWithdrawals.map((w) => (
+                        <tr key={w.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                          <td style={{ padding: 12 }}>{w.companyName}</td>
+                          <td style={{ padding: 12, textAlign: 'right', fontWeight: 700 }}>{formatCurrency(w.amount)}</td>
+                          <td style={{ padding: 12 }}>{w.pixKeyUsed ?? '—'}</td>
+                          <td style={{ padding: 12 }}>{w.isAutomatic ? 'Automático (domingo)' : 'Manual'}</td>
+                          <td style={{ padding: 12 }}>{new Date(w.requestedAt).toLocaleString('pt-BR')}</td>
+                          <td style={{ padding: 12, textAlign: 'right', display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                            <button className="primary-button" type="button" disabled={resolvingWithdrawalId === w.id}
+                              onClick={() => confirmAction(`Confirmar que o repasse de ${formatCurrency(w.amount)} para ${w.companyName} foi pago via Pix?`, () => handleResolveWithdrawal(w.id, true))}>
+                              ✅ Marcar pago
+                            </button>
+                            <button className="secondary-button" type="button" disabled={resolvingWithdrawalId === w.id}
+                              onClick={() => confirmAction(`Rejeitar esse saque e devolver ${formatCurrency(w.amount)} ao saldo de ${w.companyName}?`, () => handleResolveWithdrawal(w.id, false))}>
+                              ✕ Rejeitar
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              <h4 style={{ marginBottom: 12, fontSize: 16, fontWeight: 700 }}>Saldo por empresa</h4>
+              <div className="super-table-wrap" style={{ overflowX: 'auto', borderRadius: 10, border: '1px solid #e5e7eb' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '2px solid #e5e7eb', backgroundColor: '#f9fafb' }}>
+                      <th style={{ padding: 12, textAlign: 'left', fontWeight: 700, fontSize: 13 }}>Empresa</th>
+                      <th style={{ padding: 12, textAlign: 'right', fontWeight: 700, fontSize: 13 }}>Saldo</th>
+                      <th style={{ padding: 12, textAlign: 'right', fontWeight: 700, fontSize: 13 }}>Comissão</th>
+                      <th style={{ padding: 12, textAlign: 'left', fontWeight: 700, fontSize: 13 }}>Chave Pix de repasse</th>
+                      <th style={{ padding: 12, textAlign: 'left', fontWeight: 700, fontSize: 13 }}>Atualizado em</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {companyWallets.map((w) => (
+                      <tr key={w.companyId} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                        <td style={{ padding: 12 }}>{w.companyName}</td>
+                        <td style={{ padding: 12, textAlign: 'right', fontWeight: 700, color: '#15803d' }}>{formatCurrency(w.balance)}</td>
+                        <td style={{ padding: 12, textAlign: 'right' }}>{w.deliveryFeePercent}%</td>
+                        <td style={{ padding: 12 }}>{w.payoutPixKey ?? '—'}</td>
+                        <td style={{ padding: 12 }}>{new Date(w.updatedAt).toLocaleString('pt-BR')}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+        )}
+
         {/* Company Individual Reports */}
         {activeModule === 'financeiro' && currentUser?.companyId && currentUser?.role !== 'SUPER' && (
           <section className="module-grid">
@@ -5879,6 +6045,7 @@ export function App() {
                 <label>Telefone<input value={editPhone} onChange={(e) => setEditPhone(e.target.value)} /></label>
                 <label>Endereco<input value={editAddress} onChange={(e) => setEditAddress(e.target.value)} /></label>
                 <label>Mensalidade<input value={editMonthlyFee} onChange={(e) => setEditMonthlyFee(e.target.value)} /></label>
+                <label>Comissão de delivery (%)<input value={editDeliveryFeePercent} onChange={(e) => setEditDeliveryFeePercent(e.target.value)} /></label>
                 <hr />
                 <h4>Administrador</h4>
                 <label>Nome admin<input value={editAdminName} onChange={(e) => setEditAdminName(e.target.value)} /></label>
@@ -6280,6 +6447,80 @@ export function App() {
                 )}
               </div>
             </div>
+
+            {(role === 'ADMIN' || role === 'GERENTE' || role === 'CAIXA' || role === 'FINANCEIRO') && (
+              <div className="panel">
+                <div className="panel-header">
+                  <div>
+                    <span className="eyebrow">Saldo</span>
+                    <h2>Carteira</h2>
+                  </div>
+                </div>
+                <div style={{ display: 'grid', gap: 14 }}>
+                  <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '14px 16px' }}>
+                    <div style={{ fontSize: 12, color: '#15803d', fontWeight: 700, textTransform: 'uppercase' }}>Saldo disponível</div>
+                    <div style={{ fontSize: 28, fontWeight: 800, color: '#15803d' }}>{formatCurrency(walletInfo?.balance ?? 0)}</div>
+                    {walletInfo && walletInfo.deliveryFeePercent > 0 && (
+                      <div style={{ fontSize: 12, color: '#4ade80', marginTop: 2 }}>Comissão de delivery: {walletInfo.deliveryFeePercent}%</div>
+                    )}
+                  </div>
+
+                  <label>
+                    Chave Pix de repasse <span style={{ fontSize: 11, fontWeight: 400 }}>(usada pelo AdminSuper para transferir seus saques)</span>
+                    <input
+                      value={walletPixKeyInput}
+                      onChange={(e) => setWalletPixKeyInput(e.target.value)}
+                      placeholder="Ex: +5511999999999 ou email@exemplo.com"
+                      autoComplete="off"
+                    />
+                  </label>
+                  <button className="secondary-button" type="button" style={{ width: 'fit-content' }} disabled={walletSavingPixKey} onClick={() => void saveWalletPixKey()}>
+                    {walletSavingPixKey ? 'Salvando...' : 'Salvar chave Pix'}
+                  </button>
+
+                  {walletWithdrawals.some((w) => w.status === 'SOLICITADO') ? (
+                    <p style={{ margin: 0, fontSize: 13, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 14px' }}>
+                      ⏳ Saque de {formatCurrency(walletWithdrawals.find((w) => w.status === 'SOLICITADO')?.amount ?? 0)} solicitado — aguardando transferência do AdminSuper.
+                    </p>
+                  ) : (
+                    <button
+                      className="primary-button"
+                      type="button"
+                      style={{ width: 'fit-content' }}
+                      disabled={walletRequestingWithdrawal || !walletInfo || walletInfo.balance <= 0 || !walletInfo.payoutPixKey}
+                      onClick={() => void requestWalletWithdrawal()}
+                    >
+                      {walletRequestingWithdrawal ? 'Solicitando...' : '💸 Solicitar saque'}
+                    </button>
+                  )}
+                  {walletInfo && walletInfo.balance > 0 && !walletInfo.payoutPixKey && (
+                    <p style={{ margin: 0, fontSize: 12, color: '#9ca3af' }}>Cadastre a chave Pix de repasse acima para poder solicitar saque.</p>
+                  )}
+
+                  <div>
+                    <h3 style={{ margin: '4px 0 8px', fontSize: 13 }}>Últimos lançamentos</h3>
+                    {walletTransactions.length === 0 ? (
+                      <p style={{ margin: 0, fontSize: 13, color: '#9ca3af' }}>Nenhum lançamento ainda.</p>
+                    ) : (
+                      <div style={{ display: 'grid', gap: 6, maxHeight: 240, overflowY: 'auto' }}>
+                        {walletTransactions.map((t) => (
+                          <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 13, borderBottom: '1px solid #eef2ef', paddingBottom: 6 }}>
+                            <div>
+                              <div>{t.description ?? t.type}</div>
+                              <div style={{ fontSize: 11, color: '#9ca3af' }}>{new Date(t.createdAt).toLocaleString()}</div>
+                            </div>
+                            <strong style={{ color: t.amount >= 0 ? '#15803d' : '#b91c1c', whiteSpace: 'nowrap' }}>
+                              {t.amount >= 0 ? '+' : ''}{formatCurrency(t.amount)}
+                            </strong>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="panel">
               <div className="panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
                 <div>
@@ -6767,7 +7008,14 @@ export function App() {
                       <h2>Impressoras térmicas</h2>
                     </div>
                   </div>
-                  {(window as any).sistema?.listPrinters ? (
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, flexDirection: 'row', marginBottom: 4 }}>
+                    <input type="checkbox" checked={printingDisabled} onChange={(e) => setPrintingDisabled(e.target.checked)} style={{ width: 'auto' }} />
+                    <span>Desativar impressão (não imprimir nada automaticamente)</span>
+                  </label>
+                  <p style={{ margin: '0 0 10px', fontSize: 12, color: '#9ca3af' }}>
+                    Use se não tiver impressora térmica ou não quiser imprimir os pedidos/recibos. Nenhuma tela de impressão será aberta no celular ou computador.
+                  </p>
+                  {!printingDisabled && ((window as any).sistema?.listPrinters ? (
                     <>
                       <label>
                         Impressora do Caixa
@@ -6819,7 +7067,7 @@ export function App() {
                         Ao confirmar pedidos ou fechar a conta, escolha essa impressora na tela de impressão do dispositivo.
                       </p>
                     </>
-                  )}
+                  ))}
                   <button className="primary-button" type="button" style={{ marginTop: 8, width: 'fit-content' }} onClick={saveStoreSettings}>Salvar impressoras</button>
                 </div>
 
@@ -6884,71 +7132,16 @@ export function App() {
                         <h2>Mercado Pago</h2>
                       </div>
                     </div>
-                    {mpConnected ? (
-                      <div style={{ display: 'grid', gap: 10 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '10px 14px' }}>
-                          <span style={{ fontSize: 18 }}>✅</span>
-                          <div>
-                            <div style={{ fontWeight: 700, fontSize: 14, color: '#15803d' }}>Conectado</div>
-                            {mpConnectedAt && <div style={{ fontSize: 12, color: '#4ade80' }}>desde {new Date(mpConnectedAt).toLocaleString()}</div>}
-                          </div>
-                        </div>
-                        <p style={{ margin: 0, fontSize: 12, color: '#9ca3af' }}>
-                          Cobranças Pix dinâmicas com confirmação automática via webhook estão ativas. O token fica armazenado de forma segura no servidor — nunca exposto ao cliente.
-                        </p>
-                        <button
-                          type="button"
-                          style={{ background: '#fef2f2', color: '#b91c1c', border: '1px solid #fca5a5', borderRadius: 8, padding: '9px 18px', fontWeight: 600, fontSize: 14, cursor: 'pointer', width: 'fit-content' }}
-                          disabled={mpSaving}
-                          onClick={() => void disconnectMercadoPago()}
-                        >
-                          {mpSaving ? 'Aguarde...' : '🔌 Desconectar Mercado Pago'}
-                        </button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '10px 14px' }}>
+                      <span style={{ fontSize: 18 }}>✅</span>
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: 14, color: '#15803d' }}>Ativo</div>
+                        <div style={{ fontSize: 12, color: '#4ade80' }}>Pagamentos online processados automaticamente pela plataforma Integra360.</div>
                       </div>
-                    ) : (
-                      <div style={{ display: 'grid', gap: 10 }}>
-                        <p style={{ margin: 0, fontSize: 12, color: '#9ca3af' }}>
-                          Cole o <strong>Access Token</strong> da sua conta do Mercado Pago (Painel do desenvolvedor → Suas integrações → Credenciais de produção) para habilitar cobranças Pix dinâmicas com confirmação automática de pagamento.
-                        </p>
-                        <label>
-                          Access Token
-                          <input
-                            type="password"
-                            value={mpAccessTokenInput}
-                            onChange={(e) => setMpAccessTokenInput(e.target.value)}
-                            placeholder="APP_USR-..."
-                            autoComplete="off"
-                          />
-                        </label>
-                        <label>
-                          Public Key <span style={{ fontSize: 11, fontWeight: 400 }}>(opcional)</span>
-                          <input
-                            value={mpPublicKeyInput}
-                            onChange={(e) => setMpPublicKeyInput(e.target.value)}
-                            placeholder="APP_USR-..."
-                            autoComplete="off"
-                          />
-                        </label>
-                        <button
-                          type="button"
-                          style={{
-                            background: mpSaving ? '#9ca3af' : '#18201d',
-                            color: '#fff',
-                            border: 'none',
-                            borderRadius: 8,
-                            padding: '10px 20px',
-                            fontWeight: 700,
-                            fontSize: 14,
-                            cursor: mpSaving ? 'not-allowed' : 'pointer',
-                            width: 'fit-content',
-                          }}
-                          disabled={mpSaving}
-                          onClick={() => void connectMercadoPago()}
-                        >
-                          {mpSaving ? 'Conectando...' : '🔗 Conectar Mercado Pago'}
-                        </button>
-                      </div>
-                    )}
+                    </div>
+                    <p style={{ margin: '10px 0 0', fontSize: 12, color: '#9ca3af' }}>
+                      Cobranças Pix dinâmicas (mesa/comanda e delivery) com confirmação automática via webhook. O valor líquido é creditado na sua <strong>Carteira</strong>, na aba Caixa.
+                    </p>
                   </div>
                 )}
               </div>

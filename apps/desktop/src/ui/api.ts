@@ -50,6 +50,7 @@ const normalizeCompany = (company: any) => ({
   pixKey: company.pixKey ?? null,
   kitchenPrinter: company.kitchenPrinter ?? null,
   cashierPrinter: company.cashierPrinter ?? null,
+  printingDisabled: company.printingDisabled ?? false,
   menuBannerUrl: company.menuBannerUrl ?? null,
   active: company.active
 });
@@ -214,18 +215,9 @@ export const publicDeliveryApi = {
     return { status: rows[0].status, receiptNumber: rows[0].receiptNumber ?? null, paymentStatus: rows[0].paymentStatus ?? 'PAGO' };
   },
 
-  // Checks whether a company has Mercado Pago connected — used to decide
-  // whether to offer the online-Pix option on the public order form.
-  isMercadoPagoAvailable: async (companyId: string): Promise<boolean> => {
-    try {
-      const res = await anonFetch(`/Company?id=eq.${encodeURIComponent(companyId)}&select=mercadoPagoConnectedAt&limit=1`);
-      if (!res.ok) return false;
-      const rows: any[] = await res.json();
-      return !!rows[0]?.mercadoPagoConnectedAt;
-    } catch {
-      return false;
-    }
-  },
+  // Pagamento online agora é processado pela conta master da plataforma
+  // (não depende mais de cada empresa conectar sua própria conta MP).
+  isMercadoPagoAvailable: async (_companyId: string): Promise<boolean> => true,
 
   // Creates a Mercado Pago Checkout Pro preference (card + PIX + all methods).
   // Returns the init_point URL to redirect the customer.
@@ -304,7 +296,7 @@ export const api = {
     return { company: normalizeCompany(company) };
   },
 
-  updateCompanyProfile: async (payload: { name?: string; cnpj?: string; email?: string; phone?: string; address?: string; city?: string; state?: string; country?: string; pixKey?: string; kitchenPrinter?: string; cashierPrinter?: string }) => {
+  updateCompanyProfile: async (payload: { name?: string; cnpj?: string; email?: string; phone?: string; address?: string; city?: string; state?: string; country?: string; pixKey?: string; kitchenPrinter?: string; cashierPrinter?: string; printingDisabled?: boolean }) => {
     const user = await requireCompanyUser();
     const { data, error } = await supabase
       .from('Company')
@@ -320,9 +312,10 @@ export const api = {
         pixKey: payload.pixKey,
         kitchenPrinter: payload.kitchenPrinter ?? null,
         cashierPrinter: payload.cashierPrinter ?? null,
+        printingDisabled: payload.printingDisabled ?? false,
       })
       .eq('id', user.companyId)
-      .select('id,name,email,cnpj,phone,address,city,state,country,pixKey,kitchenPrinter,cashierPrinter,menuBannerUrl,active')
+      .select('id,name,email,cnpj,phone,address,city,state,country,pixKey,kitchenPrinter,cashierPrinter,printingDisabled,menuBannerUrl,active')
       .single();
 
     if (error) {
@@ -1768,6 +1761,14 @@ export const api = {
       throwSupabaseError(userRowError, 'Falha ao criar registro interno de usuário.');
     }
 
+    if (payload.deliveryFeePercent != null) {
+      const { error: feeError } = await supabase.rpc('set_company_delivery_fee', {
+        p_company_id: company.id,
+        p_percent: Number(payload.deliveryFeePercent) || 0
+      });
+      if (feeError) console.error('Falha ao definir comissão de delivery na criação da empresa', feeError);
+    }
+
     return { success: true, company, admin: { id: adminUser.id, email: adminUser.email } };
   },
 
@@ -1783,18 +1784,20 @@ export const api = {
 
     const companyIds = (companies || []).map((company) => company.id);
 
-    const [subscriptionsResult, paymentsResult] = companyIds.length > 0
+    const [subscriptionsResult, paymentsResult, walletsResult] = companyIds.length > 0
       ? await Promise.all([
           supabase.from('Subscription').select('companyId,status,monthlyFee,expiresAt,lastRenewed').in('companyId', companyIds),
-          supabase.from('PaymentRecord').select('companyId,id,amount,status,dueDate,paidAt,renewalDate').in('companyId', companyIds)
+          supabase.from('PaymentRecord').select('companyId,id,amount,status,dueDate,paidAt,renewalDate').in('companyId', companyIds),
+          supabase.from('Wallet').select('companyId,balance,deliveryFeePercent').in('companyId', companyIds)
         ])
-      : [{ data: [], error: null }, { data: [], error: null }];
+      : [{ data: [], error: null }, { data: [], error: null }, { data: [], error: null }];
 
     if (subscriptionsResult.error) throwSupabaseError(subscriptionsResult.error, 'Falha ao carregar assinaturas.');
     if (paymentsResult.error) throwSupabaseError(paymentsResult.error, 'Falha ao carregar pagamentos.');
 
     const subscriptions = subscriptionsResult.data || [];
     const payments = paymentsResult.data || [];
+    const wallets = walletsResult.data || [];
 
     const paymentsByCompany = (payments || []).reduce((acc, payment) => {
       acc[payment.companyId] = acc[payment.companyId] || [];
@@ -1807,8 +1810,14 @@ export const api = {
       return acc;
     }, {} as Record<string, any>);
 
+    const walletByCompany = (wallets || []).reduce((acc, wallet: any) => {
+      acc[wallet.companyId] = wallet;
+      return acc;
+    }, {} as Record<string, any>);
+
     return (companies || []).map((company) => {
       const subscription = subscriptionByCompany[company.id];
+      const wallet = walletByCompany[company.id];
       return {
         id: company.id,
         name: company.name,
@@ -1819,12 +1828,14 @@ export const api = {
         subscriptionStatus: subscription?.status ?? null,
         expiresAt: subscription?.expiresAt ?? null,
         lastRenewed: subscription?.lastRenewed ?? null,
-        payments: paymentsByCompany[company.id] ?? []
+        payments: paymentsByCompany[company.id] ?? [],
+        walletBalance: wallet ? Number(wallet.balance) : 0,
+        deliveryFeePercent: wallet ? Number(wallet.deliveryFeePercent) : 0
       };
     });
   },
 
-  updateCompanyAsSuperAdmin: async (companyId: string, payload: { name?: string; email?: string; phone?: string; address?: string; monthlyFee?: number }) => {
+  updateCompanyAsSuperAdmin: async (companyId: string, payload: { name?: string; email?: string; phone?: string; address?: string; monthlyFee?: number; deliveryFeePercent?: number }) => {
     await requireSuperUser();
     const updates: any = {};
     if (payload.name != null) updates.name = payload.name;
@@ -1845,46 +1856,22 @@ export const api = {
       if (error) throwSupabaseError(error, 'Falha ao atualizar mensalidade.');
     }
 
+    if (payload.deliveryFeePercent != null) {
+      const { error } = await supabase.rpc('set_company_delivery_fee', {
+        p_company_id: companyId,
+        p_percent: payload.deliveryFeePercent
+      });
+      if (error) throwSupabaseError(error, 'Falha ao atualizar comissão de delivery.');
+    }
+
     return { success: true };
   },
 
   // --- Mercado Pago integration ---
-  // The access token is write-only from the client's perspective: it's saved
-  // via a SECURITY DEFINER RPC and never selectable afterwards. Charges are
-  // created/queried through an Edge Function that holds the only readable copy
-  // (via the service-role key), so the secret never reaches the browser bundle.
-
-  connectMercadoPago: async (accessToken: string, publicKey?: string) => {
-    await requireCompanyUserWithRoles(['ADMIN', 'GERENTE']);
-    const { error } = await supabase.rpc('set_company_mercado_pago_token', {
-      p_access_token: accessToken,
-      p_public_key: publicKey ?? null
-    });
-    if (error) throwSupabaseError(error, 'Falha ao conectar Mercado Pago.');
-    return { success: true };
-  },
-
-  disconnectMercadoPago: async () => {
-    await requireCompanyUserWithRoles(['ADMIN', 'GERENTE']);
-    const { error } = await supabase.rpc('set_company_mercado_pago_token', {
-      p_access_token: '',
-      p_public_key: null
-    });
-    if (error) throwSupabaseError(error, 'Falha ao desconectar Mercado Pago.');
-    return { success: true };
-  },
-
-  getMercadoPagoStatus: async (): Promise<{ connected: boolean; publicKey: string | null; connectedAt: string | null }> => {
-    await requireCompanyUser();
-    const { data, error } = await supabase.rpc('get_company_mercado_pago_status');
-    if (error) throwSupabaseError(error, 'Falha ao consultar status do Mercado Pago.');
-    const row = Array.isArray(data) ? data[0] : data;
-    return {
-      connected: !!row?.connected,
-      publicKey: row?.public_key ?? null,
-      connectedAt: row?.connected_at ?? null
-    };
-  },
+  // Todos os pagamentos online (Pix de mesa/comanda e delivery) são
+  // processados pela conta master da plataforma (configurada via secret
+  // MP_MASTER_ACCESS_TOKEN nas Edge Functions) — não há mais conexão
+  // individual por empresa. Ver bloco `wallet` para o saldo/comissão.
 
   createMercadoPagoPixCharge: async (payload: { tabId?: string; deliveryOrderId?: string; amount: number; description?: string; payerEmail?: string }) => {
     await requireCompanyUser();
@@ -2873,5 +2860,95 @@ export const api = {
       totalValue: mesaValue + deliveryValue,
       tables: Object.values(tableGroups),
     };
+  },
+
+  // --- Carteira (wallet) — saldo da própria empresa ---
+  wallet: {
+    get: async () => {
+      const user = await requireCompanyUser();
+      const { data, error } = await supabase
+        .from('Wallet')
+        .select('companyId,balance,deliveryFeePercent,payoutPixKey,updatedAt')
+        .eq('companyId', user.companyId)
+        .maybeSingle();
+      if (error) throwSupabaseError(error, 'Falha ao carregar carteira.');
+      return data;
+    },
+
+    listTransactions: async (limit = 30) => {
+      const user = await requireCompanyUser();
+      const { data, error } = await supabase
+        .from('WalletTransaction')
+        .select('id,type,amount,balanceAfter,description,deliveryOrderId,tabId,createdAt')
+        .eq('companyId', user.companyId)
+        .order('createdAt', { ascending: false })
+        .limit(limit);
+      if (error) throwSupabaseError(error, 'Falha ao carregar extrato da carteira.');
+      return data ?? [];
+    },
+
+    listWithdrawals: async () => {
+      const user = await requireCompanyUser();
+      const { data, error } = await supabase
+        .from('WalletWithdrawal')
+        .select('id,amount,status,pixKeyUsed,isAutomatic,requestedAt,paidAt,note')
+        .eq('companyId', user.companyId)
+        .order('requestedAt', { ascending: false });
+      if (error) throwSupabaseError(error, 'Falha ao carregar saques.');
+      return data ?? [];
+    },
+
+    setPayoutPixKey: async (pixKey: string) => {
+      await requireCompanyUserWithRoles(['ADMIN', 'GERENTE']);
+      const { error } = await supabase.rpc('set_payout_pix_key', { p_pix_key: pixKey });
+      if (error) throwSupabaseError(error, 'Falha ao salvar chave Pix de repasse.');
+      return { success: true };
+    },
+
+    requestWithdrawal: async (amount: number) => {
+      await requireCompanyUserWithRoles(['ADMIN', 'GERENTE']);
+      const { data, error } = await supabase.rpc('request_wallet_withdrawal', { p_amount: amount });
+      if (error) throwSupabaseError(error, 'Falha ao solicitar saque.');
+      return { success: true, withdrawalId: data as string };
+    }
+  },
+
+  // --- Carteiras — visão do AdminSuper sobre todas as empresas ---
+  listCompanyWallets: async () => {
+    await requireSuperUser();
+    const [{ data: wallets, error: walletsError }, { data: companies, error: companiesError }] = await Promise.all([
+      supabase.from('Wallet').select('companyId,balance,deliveryFeePercent,payoutPixKey,updatedAt'),
+      supabase.from('Company').select('id,name')
+    ]);
+    if (walletsError) throwSupabaseError(walletsError, 'Falha ao carregar carteiras.');
+    if (companiesError) throwSupabaseError(companiesError, 'Falha ao carregar empresas.');
+    const nameById = (companies ?? []).reduce((acc: Record<string, string>, c: any) => { acc[c.id] = c.name; return acc; }, {});
+    return (wallets ?? []).map((w: any) => ({ ...w, companyName: nameById[w.companyId] ?? w.companyId }));
+  },
+
+  listPendingWithdrawals: async () => {
+    await requireSuperUser();
+    const { data: withdrawals, error } = await supabase
+      .from('WalletWithdrawal')
+      .select('id,companyId,amount,status,pixKeyUsed,isAutomatic,requestedAt')
+      .eq('status', 'SOLICITADO')
+      .order('requestedAt', { ascending: true });
+    if (error) throwSupabaseError(error, 'Falha ao carregar solicitações de saque.');
+    if (!withdrawals || withdrawals.length === 0) return [];
+    const companyIds = Array.from(new Set(withdrawals.map((w: any) => w.companyId)));
+    const { data: companies } = await supabase.from('Company').select('id,name').in('id', companyIds);
+    const nameById = (companies ?? []).reduce((acc: Record<string, string>, c: any) => { acc[c.id] = c.name; return acc; }, {});
+    return withdrawals.map((w: any) => ({ ...w, companyName: nameById[w.companyId] ?? w.companyId }));
+  },
+
+  resolveWithdrawal: async (withdrawalId: string, approve: boolean, note?: string) => {
+    await requireSuperUser();
+    const { error } = await supabase.rpc('resolve_wallet_withdrawal', {
+      p_withdrawal_id: withdrawalId,
+      p_approve: approve,
+      p_note: note ?? null
+    });
+    if (error) throwSupabaseError(error, 'Falha ao resolver solicitação de saque.');
+    return { success: true };
   }
 };

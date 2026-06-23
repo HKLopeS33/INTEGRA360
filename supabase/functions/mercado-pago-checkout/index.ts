@@ -52,10 +52,10 @@ Deno.serve(async (req) => {
       return json({ error: `Pedido em status inválido: ${order.status}` }, 400);
     }
 
-    // ── 2. Buscar access token da empresa ──────────────────────────────────
+    // ── 2. Buscar nome da empresa + token master da plataforma ────────────
     const { data: company, error: companyError } = await adminClient
       .from('Company')
-      .select('id, name, mercadoPagoAccessToken')
+      .select('id, name')
       .eq('id', companyId)
       .single();
 
@@ -63,8 +63,11 @@ Deno.serve(async (req) => {
       console.error('Company query error:', companyError);
       return json({ error: 'Erro ao buscar dados da empresa.' }, 500);
     }
-    if (!company?.mercadoPagoAccessToken) {
-      return json({ error: 'Esta loja não possui Mercado Pago configurado.' }, 400);
+
+    const masterAccessToken = Deno.env.get('MP_MASTER_ACCESS_TOKEN');
+    if (!masterAccessToken) {
+      console.error('MP_MASTER_ACCESS_TOKEN não configurado.');
+      return json({ error: 'Pagamento online indisponível no momento.' }, 503);
     }
 
     // ── 3. Buscar itens do pedido (best-effort) ────────────────────────────
@@ -109,7 +112,7 @@ Deno.serve(async (req) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${company.mercadoPagoAccessToken}`,
+        'Authorization': `Bearer ${masterAccessToken}`,
         'X-Idempotency-Key': `checkout-${deliveryOrderId}`,
       },
       body: JSON.stringify(preference),
