@@ -63,7 +63,8 @@ const moduleConfig: Record<ActiveModule, { eyebrow: string; title: string }> = {
   financeiro: { eyebrow: 'Financeiro', title: 'Resumo Financeiro' },
   cadastros: { eyebrow: 'Cadastros', title: 'Gestão de clientes' },
   usuarios: { eyebrow: 'Usuários', title: 'Gestão de usuários' },
-  menu: { eyebrow: 'Menu', title: 'Peça para sua mesa' }
+  menu: { eyebrow: 'Menu', title: 'Peça para sua mesa' },
+  carteiras: { eyebrow: 'Plataforma', title: 'Carteiras das empresas' }
 };
 const roleAllowedModules: Record<string, ActiveModule[]> = {
   SUPER: ['financeiro', 'cadastros', 'usuarios', 'carteiras'],
