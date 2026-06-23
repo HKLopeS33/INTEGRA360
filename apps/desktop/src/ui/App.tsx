@@ -4912,12 +4912,28 @@ export function App() {
                         {group.catName}
                       </div>
                       {group.items.map((product) => (
-                        <div key={product.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: '1px solid #f4f6f4' }}>
+                        <div key={product.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: '1px solid #f4f6f4', opacity: product.available === false ? 0.55 : 1 }}>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontWeight: 600, fontSize: 14, color: '#18201d' }}>{product.name}</div>
                             {product.description && <div style={{ fontSize: 12, color: '#789088', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{product.description}</div>}
                           </div>
                           <b style={{ color: '#18201d', whiteSpace: 'nowrap' }}>{formatCurrency(product.price)}</b>
+                          <button
+                            type="button"
+                            className="secondary-button"
+                            style={{ padding: '4px 10px', fontSize: 12, color: product.available === false ? '#789088' : '#15803d', borderColor: product.available === false ? '#e5e7eb' : '#86efac' }}
+                            onClick={async () => {
+                              try {
+                                await api.updateProduct(product.id, { available: product.available === false });
+                                await loadData();
+                                showToast(product.available === false ? 'Item ativado no cardápio.' : 'Item desativado do cardápio.', 'success');
+                              } catch (e) {
+                                showToast('Falha ao atualizar disponibilidade do item.', 'error');
+                              }
+                            }}
+                          >
+                            {product.available === false ? '◯ Desativado' : '● Ativo'}
+                          </button>
                           <button
                             type="button"
                             className="secondary-button"
