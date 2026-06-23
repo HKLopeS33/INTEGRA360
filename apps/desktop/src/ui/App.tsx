@@ -433,6 +433,8 @@ export function App() {
   const [pendingWithdrawals, setPendingWithdrawals] = useState<Array<{ id: string; companyId: string; companyName: string; amount: number; isAutomatic: boolean; requestedAt: string; pixKeyUsed: string | null }>>([]);
   const [loadingWallets, setLoadingWallets] = useState(false);
   const [resolvingWithdrawalId, setResolvingWithdrawalId] = useState<string | null>(null);
+  const [feeEditInputs, setFeeEditInputs] = useState<Record<string, string>>({});
+  const [savingFeeCompanyId, setSavingFeeCompanyId] = useState<string | null>(null);
   const [platformMpStatus, setPlatformMpStatus] = useState<{ connected: boolean; publicKey: string | null; connectedAt: string | null } | null>(null);
   const [platformMpTokenInput, setPlatformMpTokenInput] = useState('');
   const [platformMpPublicKeyInput, setPlatformMpPublicKeyInput] = useState('');
@@ -728,6 +730,27 @@ export function App() {
       showToast(e?.message || 'Falha ao resolver solicitação de saque.', 'error');
     } finally {
       setResolvingWithdrawalId(null);
+    }
+  };
+
+  const saveCompanyDeliveryFee = async (companyId: string) => {
+    const raw = feeEditInputs[companyId];
+    const percent = Number((raw ?? '').replace(',', '.'));
+    if (raw == null || Number.isNaN(percent) || percent < 0 || percent > 100) {
+      showToast('Informe um percentual válido entre 0 e 100.', 'warning');
+      return;
+    }
+    setSavingFeeCompanyId(companyId);
+    try {
+      await api.setCompanyDeliveryFee(companyId, percent);
+      await loadCarteirasData();
+      setFeeEditInputs((prev) => { const next = { ...prev }; delete next[companyId]; return next; });
+      showToast('Taxa da plataforma atualizada.', 'success');
+    } catch (e: any) {
+      console.error('Erro ao atualizar taxa', e);
+      showToast(e?.message || 'Falha ao atualizar taxa.', 'error');
+    } finally {
+      setSavingFeeCompanyId(null);
     }
   };
 
@@ -6062,7 +6085,26 @@ export function App() {
                       <tr key={w.companyId} style={{ borderBottom: '1px solid #f0f0f0' }}>
                         <td style={{ padding: 12 }}>{w.companyName}</td>
                         <td style={{ padding: 12, textAlign: 'right', fontWeight: 700, color: '#15803d' }}>{formatCurrency(w.balance)}</td>
-                        <td style={{ padding: 12, textAlign: 'right' }}>{w.deliveryFeePercent}%</td>
+                        <td style={{ padding: 12, textAlign: 'right' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end' }}>
+                            <input
+                              type="text"
+                              value={feeEditInputs[w.companyId] ?? String(w.deliveryFeePercent)}
+                              onChange={(e) => setFeeEditInputs((prev) => ({ ...prev, [w.companyId]: e.target.value }))}
+                              style={{ width: 56, padding: '4px 6px', fontSize: 13, textAlign: 'right', border: '1px solid #e5e7eb', borderRadius: 6 }}
+                            />
+                            <span style={{ fontSize: 13 }}>%</span>
+                            <button
+                              type="button"
+                              className="secondary-button"
+                              style={{ padding: '3px 8px', fontSize: 11 }}
+                              disabled={savingFeeCompanyId === w.companyId || feeEditInputs[w.companyId] == null || feeEditInputs[w.companyId] === String(w.deliveryFeePercent)}
+                              onClick={() => void saveCompanyDeliveryFee(w.companyId)}
+                            >
+                              {savingFeeCompanyId === w.companyId ? '...' : 'Salvar'}
+                            </button>
+                          </div>
+                        </td>
                         <td style={{ padding: 12 }}>{w.payoutPixKey ?? '—'}</td>
                         <td style={{ padding: 12 }}>{new Date(w.updatedAt).toLocaleString('pt-BR')}</td>
                       </tr>

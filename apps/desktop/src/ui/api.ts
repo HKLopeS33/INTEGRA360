@@ -2961,6 +2961,16 @@ export const api = {
     return (wallets ?? []).map((w: any) => ({ ...w, companyName: nameById[w.companyId] ?? w.companyId }));
   },
 
+  setCompanyDeliveryFee: async (companyId: string, percent: number) => {
+    await requireSuperUser();
+    const { error } = await supabase.rpc('set_company_delivery_fee', {
+      p_company_id: companyId,
+      p_percent: percent
+    });
+    if (error) throwSupabaseError(error, 'Falha ao atualizar taxa da plataforma.');
+    return { success: true };
+  },
+
   listPendingWithdrawals: async () => {
     await requireSuperUser();
     const { data: withdrawals, error } = await supabase
