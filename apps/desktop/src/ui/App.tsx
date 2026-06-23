@@ -664,6 +664,20 @@ export function App() {
     }
   }, [activeModule]);
 
+  // Atualiza o saldo da carteira do estabelecimento automaticamente
+  useEffect(() => {
+    if (activeModule !== 'caixa') return;
+    const interval = setInterval(() => { void loadWallet(); }, 15000);
+    return () => clearInterval(interval);
+  }, [activeModule]);
+
+  // Atualiza o saldo das carteiras automaticamente enquanto a aba estiver aberta
+  useEffect(() => {
+    if (activeModule !== 'carteiras') return;
+    const interval = setInterval(() => { void loadCarteirasData(); }, 15000);
+    return () => clearInterval(interval);
+  }, [activeModule]);
+
   const loadCarteirasData = async () => {
     setLoadingWallets(true);
     try {
@@ -5007,7 +5021,7 @@ export function App() {
                     <input value={newCompanyMonthlyFee} onChange={(e) => setNewCompanyMonthlyFee(e.target.value)} placeholder="0.00" />
                   </label>
                   <label>
-                    Comissão de delivery (%) <span style={{ fontSize: 11, color: '#9ca3af', fontWeight: 400 }}>(taxa por pedido pago na plataforma)</span>
+                    Taxa da plataforma (%) <span style={{ fontSize: 11, color: '#9ca3af', fontWeight: 400 }}>(descontada de todo pagamento via Mercado Pago)</span>
                     <input value={newCompanyDeliveryFeePercent} onChange={(e) => setNewCompanyDeliveryFeePercent(e.target.value)} placeholder="0" />
                   </label>
                   <label>
@@ -6038,7 +6052,7 @@ export function App() {
                     <tr style={{ borderBottom: '2px solid #e5e7eb', backgroundColor: '#f9fafb' }}>
                       <th style={{ padding: 12, textAlign: 'left', fontWeight: 700, fontSize: 13 }}>Empresa</th>
                       <th style={{ padding: 12, textAlign: 'right', fontWeight: 700, fontSize: 13 }}>Saldo</th>
-                      <th style={{ padding: 12, textAlign: 'right', fontWeight: 700, fontSize: 13 }}>Comissão</th>
+                      <th style={{ padding: 12, textAlign: 'right', fontWeight: 700, fontSize: 13 }}>Taxa</th>
                       <th style={{ padding: 12, textAlign: 'left', fontWeight: 700, fontSize: 13 }}>Chave Pix de repasse</th>
                       <th style={{ padding: 12, textAlign: 'left', fontWeight: 700, fontSize: 13 }}>Atualizado em</th>
                     </tr>
@@ -6255,7 +6269,7 @@ export function App() {
                 <label>Telefone<input value={editPhone} onChange={(e) => setEditPhone(e.target.value)} /></label>
                 <label>Endereco<input value={editAddress} onChange={(e) => setEditAddress(e.target.value)} /></label>
                 <label>Mensalidade<input value={editMonthlyFee} onChange={(e) => setEditMonthlyFee(e.target.value)} /></label>
-                <label>Comissão de delivery (%)<input value={editDeliveryFeePercent} onChange={(e) => setEditDeliveryFeePercent(e.target.value)} /></label>
+                <label>Taxa da plataforma (%)<input value={editDeliveryFeePercent} onChange={(e) => setEditDeliveryFeePercent(e.target.value)} /></label>
                 <hr />
                 <h4>Administrador</h4>
                 <label>Nome admin<input value={editAdminName} onChange={(e) => setEditAdminName(e.target.value)} /></label>
@@ -6671,7 +6685,7 @@ export function App() {
                     <div style={{ fontSize: 12, color: '#15803d', fontWeight: 700, textTransform: 'uppercase' }}>Saldo disponível</div>
                     <div style={{ fontSize: 28, fontWeight: 800, color: '#15803d' }}>{formatCurrency(walletInfo?.balance ?? 0)}</div>
                     {walletInfo && walletInfo.deliveryFeePercent > 0 && (
-                      <div style={{ fontSize: 12, color: '#4ade80', marginTop: 2 }}>Comissão de delivery: {walletInfo.deliveryFeePercent}%</div>
+                      <div style={{ fontSize: 12, color: '#4ade80', marginTop: 2 }}>Taxa da plataforma: {walletInfo.deliveryFeePercent}%</div>
                     )}
                   </div>
 
