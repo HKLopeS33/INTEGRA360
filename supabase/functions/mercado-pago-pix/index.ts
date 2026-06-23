@@ -75,6 +75,9 @@ Deno.serve(async (req) => {
 
     // Idempotency key avoids duplicate charges on retry.
     const idempotencyKey = `${userRow.companyId}-${tabId ?? deliveryOrderId ?? crypto.randomUUID()}-${Date.now()}`;
+    // Sem notification_url o Mercado Pago não tem para onde avisar quando o
+    // cliente paga — o webhook nunca seria chamado.
+    const notificationUrl = `${supabaseUrl}/functions/v1/mercado-pago-webhook?companyId=${encodeURIComponent(userRow.companyId)}`;
 
     const mpResponse = await fetch(MP_API, {
       method: 'POST',
@@ -88,6 +91,8 @@ Deno.serve(async (req) => {
         description,
         payment_method_id: 'pix',
         payer: { email: payerEmail },
+        external_reference: deliveryOrderId ?? tabId ?? undefined,
+        notification_url: notificationUrl,
       }),
     });
 

@@ -86,6 +86,10 @@ Deno.serve(async (req) => {
 
     const amount = Number(order.total);
     const idempotencyKey = `delivery-${deliveryOrderId}-${Date.now()}`;
+    // Sem notification_url o Mercado Pago não tem para onde avisar quando o
+    // cliente paga — o webhook nunca seria chamado e o pedido ficaria parado
+    // em AGUARDANDO_PAGAMENTO mesmo após o pagamento ser aprovado.
+    const notificationUrl = `${supabaseUrl}/functions/v1/mercado-pago-webhook?companyId=${encodeURIComponent(companyId)}`;
 
     const mpResponse = await fetch(MP_API, {
       method: 'POST',
@@ -99,6 +103,8 @@ Deno.serve(async (req) => {
         description: `Pedido delivery — ${company.name} (${order.customerName})`,
         payment_method_id: 'pix',
         payer: { email: body.payerEmail || 'cliente@integra360.app' },
+        external_reference: deliveryOrderId,
+        notification_url: notificationUrl,
       }),
     });
 
