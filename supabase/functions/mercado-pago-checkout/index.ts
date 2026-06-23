@@ -8,6 +8,7 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
+import { getMasterAccessToken } from '../_shared/platformMercadoPago.ts';
 
 const MP_PREFERENCES_API = 'https://api.mercadopago.com/checkout/preferences';
 
@@ -64,9 +65,9 @@ Deno.serve(async (req) => {
       return json({ error: 'Erro ao buscar dados da empresa.' }, 500);
     }
 
-    const masterAccessToken = Deno.env.get('MP_MASTER_ACCESS_TOKEN');
+    const masterAccessToken = await getMasterAccessToken(adminClient);
     if (!masterAccessToken) {
-      console.error('MP_MASTER_ACCESS_TOKEN não configurado.');
+      console.error('Token master do Mercado Pago não configurado.');
       return json({ error: 'Pagamento online indisponível no momento.' }, 503);
     }
 

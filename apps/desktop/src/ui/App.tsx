@@ -428,6 +428,10 @@ export function App() {
   const [pendingWithdrawals, setPendingWithdrawals] = useState<Array<{ id: string; companyId: string; companyName: string; amount: number; isAutomatic: boolean; requestedAt: string; pixKeyUsed: string | null }>>([]);
   const [loadingWallets, setLoadingWallets] = useState(false);
   const [resolvingWithdrawalId, setResolvingWithdrawalId] = useState<string | null>(null);
+  const [platformMpStatus, setPlatformMpStatus] = useState<{ connected: boolean; publicKey: string | null; connectedAt: string | null } | null>(null);
+  const [platformMpTokenInput, setPlatformMpTokenInput] = useState('');
+  const [platformMpPublicKeyInput, setPlatformMpPublicKeyInput] = useState('');
+  const [savingPlatformMpToken, setSavingPlatformMpToken] = useState(false);
 
   // Company individual reports state
   const [companyReportDateType, setCompanyReportDateType] = useState<'day' | 'week'>('day');
@@ -658,17 +662,39 @@ export function App() {
   const loadCarteirasData = async () => {
     setLoadingWallets(true);
     try {
-      const [wallets, withdrawals] = await Promise.all([
+      const [wallets, withdrawals, mpStatus] = await Promise.all([
         api.listCompanyWallets(),
-        api.listPendingWithdrawals()
+        api.listPendingWithdrawals(),
+        api.getPlatformMercadoPagoStatus()
       ]);
       setCompanyWallets((wallets ?? []).map((w: any) => ({ ...w, balance: Number(w.balance), deliveryFeePercent: Number(w.deliveryFeePercent) })));
       setPendingWithdrawals((withdrawals ?? []).map((w: any) => ({ ...w, amount: Number(w.amount) })));
+      setPlatformMpStatus(mpStatus);
+      setPlatformMpPublicKeyInput(mpStatus?.publicKey ?? '');
     } catch (e) {
       console.error('Erro ao carregar carteiras', e);
       showToast('Falha ao carregar carteiras.', 'error');
     } finally {
       setLoadingWallets(false);
+    }
+  };
+
+  const savePlatformMercadoPagoToken = async () => {
+    if (!platformMpTokenInput.trim()) {
+      showToast('Informe o Access Token do Mercado Pago.', 'warning');
+      return;
+    }
+    setSavingPlatformMpToken(true);
+    try {
+      await api.setPlatformMercadoPagoToken(platformMpTokenInput.trim(), platformMpPublicKeyInput.trim() || undefined);
+      setPlatformMpTokenInput('');
+      await loadCarteirasData();
+      showToast('Configuração do Mercado Pago salva.', 'success');
+    } catch (e: any) {
+      console.error('Erro ao salvar token Mercado Pago', e);
+      showToast(e?.message || 'Falha ao salvar configuração do Mercado Pago.', 'error');
+    } finally {
+      setSavingPlatformMpToken(false);
     }
   };
 
@@ -5765,6 +5791,43 @@ export function App() {
                 </div>
                 <button className="secondary-button" type="button" onClick={() => void loadCarteirasData()} disabled={loadingWallets}>
                   {loadingWallets ? '⏳' : '↻ Atualizar'}
+                </button>
+              </div>
+
+              <div style={{ background: platformMpStatus?.connected ? '#f0fdf4' : '#fffbeb', border: `1px solid ${platformMpStatus?.connected ? '#bbf7d0' : '#fde68a'}`, borderRadius: 10, padding: '14px 16px', marginBottom: 24 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 10, flexWrap: 'wrap' }}>
+                  <div>
+                    <h3 style={{ margin: '0 0 2px', fontSize: 14, fontWeight: 700 }}>Mercado Pago — conta master da plataforma</h3>
+                    <p style={{ margin: 0, fontSize: 12, color: platformMpStatus?.connected ? '#15803d' : '#92400e' }}>
+                      {platformMpStatus?.connected
+                        ? `✅ Configurado${platformMpStatus.connectedAt ? ' em ' + new Date(platformMpStatus.connectedAt).toLocaleString('pt-BR') : ''}`
+                        : '⚠️ Não configurado — pagamentos online ficarão indisponíveis até configurar o Access Token.'}
+                    </p>
+                  </div>
+                </div>
+                <div className="form-grid" style={{ gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  <label>
+                    Access Token {platformMpStatus?.connected && <span style={{ fontSize: 11, fontWeight: 400, color: '#789088' }}>(deixe em branco para manter o atual)</span>}
+                    <input
+                      type="password"
+                      value={platformMpTokenInput}
+                      onChange={(e) => setPlatformMpTokenInput(e.target.value)}
+                      placeholder="APP_USR-..."
+                      autoComplete="off"
+                    />
+                  </label>
+                  <label>
+                    Public Key <span style={{ fontSize: 11, fontWeight: 400, color: '#789088' }}>(opcional)</span>
+                    <input
+                      value={platformMpPublicKeyInput}
+                      onChange={(e) => setPlatformMpPublicKeyInput(e.target.value)}
+                      placeholder="APP_USR-..."
+                      autoComplete="off"
+                    />
+                  </label>
+                </div>
+                <button className="primary-button" type="button" style={{ marginTop: 10, width: 'fit-content' }} disabled={savingPlatformMpToken} onClick={() => void savePlatformMercadoPagoToken()}>
+                  {savingPlatformMpToken ? 'Salvando...' : 'Salvar configuração'}
                 </button>
               </div>
 

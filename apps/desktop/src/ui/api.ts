@@ -2950,5 +2950,28 @@ export const api = {
     });
     if (error) throwSupabaseError(error, 'Falha ao resolver solicitação de saque.');
     return { success: true };
+  },
+
+  // --- Configuração Mercado Pago da plataforma (conta master, AdminSuper) ---
+  setPlatformMercadoPagoToken: async (accessToken: string, publicKey?: string) => {
+    await requireSuperUser();
+    const { error } = await supabase.rpc('set_platform_mercado_pago_token', {
+      p_access_token: accessToken,
+      p_public_key: publicKey ?? null
+    });
+    if (error) throwSupabaseError(error, 'Falha ao salvar configuração do Mercado Pago.');
+    return { success: true };
+  },
+
+  getPlatformMercadoPagoStatus: async () => {
+    await requireSuperUser();
+    const { data, error } = await supabase.rpc('get_platform_mercado_pago_status');
+    if (error) throwSupabaseError(error, 'Falha ao carregar status do Mercado Pago.');
+    const row = Array.isArray(data) ? data[0] : data;
+    return {
+      connected: !!row?.connected,
+      publicKey: row?.public_key ?? null,
+      connectedAt: row?.connected_at ?? null
+    };
   }
 };

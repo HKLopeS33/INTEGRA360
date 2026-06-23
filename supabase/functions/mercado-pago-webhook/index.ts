@@ -8,6 +8,7 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
+import { getMasterAccessToken } from '../_shared/platformMercadoPago.ts';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -64,9 +65,9 @@ Deno.serve(async (req) => {
       return new Response('no company context', { status: 200, headers: corsHeaders });
     }
 
-    const masterAccessToken = Deno.env.get('MP_MASTER_ACCESS_TOKEN');
+    const masterAccessToken = await getMasterAccessToken(adminClient);
     if (!masterAccessToken) {
-      console.error('MP_MASTER_ACCESS_TOKEN não configurado.');
+      console.error('Token master do Mercado Pago não configurado.');
       return new Response('master token missing', { status: 200, headers: corsHeaders });
     }
 
@@ -150,9 +151,9 @@ Deno.serve(async (req) => {
 
 // ── Helper: processar pagamento já rastreado (PIX direto) ──────────────────
 async function processPayment(adminClient: any, paymentId: string, existing: any, _extra: any) {
-  const masterAccessToken = Deno.env.get('MP_MASTER_ACCESS_TOKEN');
+  const masterAccessToken = await getMasterAccessToken(adminClient);
   if (!masterAccessToken) {
-    console.error('MP_MASTER_ACCESS_TOKEN não configurado.');
+    console.error('Token master do Mercado Pago não configurado.');
     return new Response('master token missing', { status: 200, headers: corsHeaders });
   }
 
