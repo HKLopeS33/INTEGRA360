@@ -9,6 +9,7 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
 import { getMasterAccessToken } from '../_shared/platformMercadoPago.ts';
+import { creditDeliveryWallet, creditTabWallet } from '../_shared/walletCredit.ts';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -211,38 +212,4 @@ async function processPayment(adminClient: any, paymentId: string, existing: any
   }
 
   return new Response('ok', { status: 200, headers: corsHeaders });
-}
-
-// ── Helpers: creditam a carteira da empresa via RPC (atômico) ─────────────
-
-async function creditDeliveryWallet(adminClient: any, companyId: string, amount: number, deliveryOrderId: string) {
-  const { data: wallet } = await adminClient
-    .from('Wallet')
-    .select('deliveryFeePercent')
-    .eq('companyId', companyId)
-    .maybeSingle();
-  const feePercent = Number(wallet?.deliveryFeePercent ?? 0);
-  const netAmount = amount * (1 - feePercent / 100);
-
-  const { error } = await adminClient.rpc('credit_wallet', {
-    p_company_id: companyId,
-    p_amount: netAmount,
-    p_type: 'CREDITO_DELIVERY',
-    p_description: `Pedido delivery ${deliveryOrderId} (comissão ${feePercent}%)`,
-    p_delivery_order_id: deliveryOrderId,
-    p_tab_id: null,
-  });
-  if (error) console.error('Failed to credit wallet (delivery)', error);
-}
-
-async function creditTabWallet(adminClient: any, companyId: string, amount: number, tabId: string) {
-  const { error } = await adminClient.rpc('credit_wallet', {
-    p_company_id: companyId,
-    p_amount: amount,
-    p_type: 'CREDITO_MESA',
-    p_description: `Pix mesa/comanda ${tabId}`,
-    p_delivery_order_id: null,
-    p_tab_id: tabId,
-  });
-  if (error) console.error('Failed to credit wallet (mesa)', error);
 }

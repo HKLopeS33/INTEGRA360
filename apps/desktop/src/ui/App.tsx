@@ -294,7 +294,7 @@ export function App() {
   const [publicDeliveryCategories, setPublicDeliveryCategories] = useState<Array<{ id: string; name: string; sort: number; imageUrl?: string | null }>>([]);
   const [publicDeliveryProducts, setPublicDeliveryProducts] = useState<Array<{ id: string; categoryId: string; name: string; description: string | null; price: number; available: boolean }>>([]);
   const [publicDeliveryCart, setPublicDeliveryCart] = useState<Array<{ product: { id: string; name: string; price: number }; quantity: number; note: string }>>([]);
-  const [publicDeliveryStep, setPublicDeliveryStep] = useState<'menu' | 'checkout' | 'payment' | 'payment_return' | 'success' | 'tracking'>('menu');
+  const [publicDeliveryStep, setPublicDeliveryStep] = useState<'menu' | 'checkout' | 'payment' | 'card_payment' | 'payment_return' | 'success' | 'tracking'>('menu');
   const [publicDeliveryTrackingStatus, setPublicDeliveryTrackingStatus] = useState<string>('RECEBIDO');
   const [publicDeliveryTrackingBar, setPublicDeliveryTrackingBar] = useState(0); // 0-100
   const [publicDeliveryName, setPublicDeliveryName] = useState('');
@@ -318,6 +318,11 @@ export function App() {
   const [publicPixLoading, setPublicPixLoading] = useState(false);
   const [publicPixError, setPublicPixError] = useState<string | null>(null);
   const [publicPixPaymentStatus, setPublicPixPaymentStatus] = useState<string>('PENDENTE');
+  const [publicCardMpPublicKey, setPublicCardMpPublicKey] = useState<string | null>(null);
+  const [publicCardBrickReady, setPublicCardBrickReady] = useState(false);
+  const [publicCardError, setPublicCardError] = useState<string | null>(null);
+  const [publicCardProcessing, setPublicCardProcessing] = useState(false);
+  const publicCardBrickControllerRef = useRef<any>(null);
   const [menuCart, setMenuCart] = useState<Array<{ product: Product; quantity: number; note: string }>>([]);
   const [menuModalTable, setMenuModalTable] = useState<RestaurantTable | null>(null);
   const [tableCart, setTableCart] = useState<Array<{ product: Product; quantity: number; note: string }>>([]);
@@ -1530,18 +1535,11 @@ export function App() {
       // Salva snapshot para a mensagem WhatsApp (antes de limpar o carrinho)
       setPublicDeliverySnapshot({ items: cartSnapshot, paymentMethod: publicDeliveryPayment, grandTotal: grandTotalSnap });
 
-      if (publicDeliveryPayment === 'ONLINE') {
-        // Criar preference do Checkout Pro e redirecionar o cliente para a página de pagamento MP
-        try {
-          const backUrl = `${window.location.origin}${window.location.pathname}`;
-          const pref = await publicDeliveryApi.createCheckoutPreference(publicDeliveryCompanyId!, result.id, backUrl);
-          // Redireciona para o checkout do Mercado Pago (abre na mesma aba)
-          window.location.href = pref.initPoint;
-        } catch (prefErr: any) {
-          setPublicDeliveryError(prefErr?.message ?? 'Falha ao abrir o pagamento. Tente novamente.');
-          setPublicDeliverySubmitting(false);
-        }
-        return; // não continua — página vai ser redirecionada
+      if (publicDeliveryPayment === 'PIX_ONLINE') {
+        setPublicDeliveryStep('payment');
+        void generatePublicPixCharge(result.id);
+      } else if (publicDeliveryPayment === 'CARTAO_ONLINE') {
+        setPublicDeliveryStep('card_payment');
       } else {
         setPublicDeliveryStep('success');
       }
@@ -1585,6 +1583,100 @@ export function App() {
     const interval = setInterval(poll, 3000);
     return () => { stopped = true; clearInterval(interval); };
   }, [publicDeliveryStep, publicDeliveryOrderId]);
+
+  // Carrega o SDK do Mercado Pago uma única vez e busca a public key da plataforma
+  // (necessária para montar o formulário de cartão embutido no cardápio público).
+  useEffect(() => {
+    if (!publicDeliveryMpAvailable) return;
+    if (!(window as any).MercadoPago && !document.getElementById('mp-sdk-script')) {
+      const script = document.createElement('script');
+      script.id = 'mp-sdk-script';
+      script.src = 'https://sdk.mercadopago.com/js/v2';
+      script.async = true;
+      document.body.appendChild(script);
+    }
+    if (!publicCardMpPublicKey) {
+      publicDeliveryApi.getPlatformPublicKey().then((key) => { if (key) setPublicCardMpPublicKey(key); });
+    }
+  }, [publicDeliveryMpAvailable]);
+
+  // Monta o Card Payment Brick (formulário de cartão embutido) quando o cliente
+  // escolhe pagar com cartão. O número do cartão é tokenizado pelo SDK da MP
+  // direto no navegador — nunca passa pelo nosso backend.
+  useEffect(() => {
+    if (publicDeliveryStep !== 'card_payment') return;
+    if (!publicCardMpPublicKey || !publicDeliveryOrderId || !publicDeliveryCompanyId) return;
+
+    let cancelled = false;
+    setPublicCardError(null);
+    setPublicCardBrickReady(false);
+
+    const mount = async () => {
+      let attempts = 0;
+      while (!(window as any).MercadoPago && attempts < 50) {
+        await new Promise((r) => setTimeout(r, 100));
+        attempts++;
+      }
+      if (cancelled || !(window as any).MercadoPago) return;
+
+      const mp = new (window as any).MercadoPago(publicCardMpPublicKey, { locale: 'pt-BR' });
+      const amount = publicDeliverySnapshot?.grandTotal ?? 0;
+
+      try {
+        const controller = await mp.bricks().create('cardPayment', 'publicCardPaymentBrick', {
+          initialization: { amount },
+          customization: { paymentMethods: { maxInstallments: 1 } },
+          callbacks: {
+            onReady: () => { if (!cancelled) setPublicCardBrickReady(true); },
+            onError: (error: any) => { console.error('Card Brick error', error); },
+            onSubmit: (cardFormData: any) => new Promise<void>((resolve, reject) => {
+              setPublicCardProcessing(true);
+              setPublicCardError(null);
+              publicDeliveryApi.payWithCard(publicDeliveryCompanyId!, publicDeliveryOrderId!, {
+                token: cardFormData.token,
+                paymentMethodId: cardFormData.payment_method_id,
+                issuerId: cardFormData.issuer_id,
+                payerEmail: cardFormData.payer?.email,
+                payerDocType: cardFormData.payer?.identification?.type,
+                payerDocNumber: cardFormData.payer?.identification?.number,
+              }).then((result) => {
+                setPublicCardProcessing(false);
+                if (result.status === 'approved') {
+                  setPublicDeliveryStep('success');
+                  resolve();
+                } else if (result.status === 'rejected') {
+                  setPublicCardError('Pagamento recusado. Verifique os dados ou tente outro cartão.');
+                  reject(new Error('Pagamento recusado.'));
+                } else {
+                  // in_process/pending — aguarda confirmação assíncrona (webhook)
+                  setPublicDeliveryStep('payment_return');
+                  resolve();
+                }
+              }).catch((e: any) => {
+                setPublicCardProcessing(false);
+                setPublicCardError(e?.message ?? 'Falha ao processar pagamento.');
+                reject(e);
+              });
+            }),
+          },
+        });
+        publicCardBrickControllerRef.current = controller;
+      } catch (e) {
+        console.error('Falha ao montar formulário de cartão', e);
+        if (!cancelled) setPublicCardError('Falha ao carregar formulário de pagamento. Recarregue a página.');
+      }
+    };
+
+    void mount();
+
+    return () => {
+      cancelled = true;
+      if (publicCardBrickControllerRef.current?.unmount) {
+        try { publicCardBrickControllerRef.current.unmount(); } catch { /* já desmontado */ }
+      }
+      publicCardBrickControllerRef.current = null;
+    };
+  }, [publicDeliveryStep, publicCardMpPublicKey, publicDeliveryOrderId, publicDeliveryCompanyId]);
 
   const openTabs = useMemo(() => {
     const grouped = new Map<string, {
@@ -2686,10 +2778,6 @@ export function App() {
     const cartTotal = publicDeliveryCart.reduce((s, i) => s + i.quantity * i.product.price, 0);
     const grandTotal = cartTotal + publicDeliveryFee;
     const cartCount = publicDeliveryCart.reduce((s, i) => s + i.quantity, 0);
-    // Sempre apenas 2 opções: pagamento online (MP) ou dinheiro na entrega
-    const paymentLabels: Record<string, string> = publicDeliveryMpAvailable
-      ? { ONLINE: 'Pagamento online', DINHEIRO: 'Dinheiro (na entrega)' }
-      : { DINHEIRO: 'Dinheiro (na entrega)' };
     return (
       <main style={{ minHeight: '100vh', background: '#f3f4f6', fontFamily: 'system-ui, sans-serif' }}>
         <div style={{ background: '#18201d', color: '#fff', padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 12, position: 'sticky', top: 0, zIndex: 100 }}>
@@ -2776,8 +2864,38 @@ export function App() {
               </div>
             </div>
           )}
+
+          {publicDeliveryStep === 'card_payment' && (
+            <div style={{ padding: '20px 4px' }}>
+              <div style={{ textAlign: 'center', marginBottom: 16 }}>
+                <div style={{ fontSize: 40 }}>💳</div>
+                <h2 style={{ margin: '10px 0 4px', fontSize: 19 }}>Pagamento com cartão</h2>
+                <p style={{ color: '#6b7280', fontSize: 13, margin: 0 }}>
+                  Somente à vista (1x) · {formatCurrency(publicDeliverySnapshot?.grandTotal ?? 0)}
+                </p>
+              </div>
+              {publicCardError && (
+                <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 10, padding: '12px 16px', color: '#b91c1c', marginBottom: 16, fontSize: 14, textAlign: 'center' }}>
+                  {publicCardError}
+                </div>
+              )}
+              {!publicCardBrickReady && !publicCardError && (
+                <p style={{ textAlign: 'center', color: '#6b7280', fontSize: 13 }}>Carregando formulário de pagamento...</p>
+              )}
+              {publicCardProcessing && (
+                <p style={{ textAlign: 'center', color: '#6b7280', fontSize: 13 }}>⏳ Processando pagamento...</p>
+              )}
+              <div id="publicCardPaymentBrick" style={{ maxWidth: 420, margin: '0 auto' }} />
+              <div style={{ textAlign: 'center', marginTop: 12 }}>
+                <button type="button" onClick={() => setPublicDeliveryStep('checkout')}
+                  style={{ background: 'none', border: 'none', color: '#6b7280', fontSize: 13, cursor: 'pointer', textDecoration: 'underline' }}>
+                  Voltar e escolher outra forma de pagamento
+                </button>
+              </div>
+            </div>
+          )}
           {publicDeliveryStep === 'success' && (() => {
-            const paymentLabelMap: Record<string, string> = { ONLINE: 'Pagamento online (Mercado Pago)', DINHEIRO: 'Dinheiro', PIX: 'PIX (na entrega)', CREDITO: 'Cartão de crédito', DEBITO: 'Cartão de débito', PIX_ONLINE: 'PIX online (Mercado Pago)' };
+            const paymentLabelMap: Record<string, string> = { ONLINE: 'Pagamento online (Mercado Pago)', DINHEIRO: 'Dinheiro', PIX: 'PIX (na entrega)', CREDITO: 'Cartão de crédito', DEBITO: 'Cartão de débito', PIX_ONLINE: 'Pix (Mercado Pago)', CARTAO_ONLINE: 'Cartão à vista (Mercado Pago)' };
             const snap = publicDeliverySnapshot;
             const storePhone = publicDeliveryCompany?.phone?.replace(/\D/g, '') ?? '';
             const buildWhatsAppUrl = () => {
@@ -2858,7 +2976,7 @@ export function App() {
             const currentStage = isCancelled ? null : STAGES[currentIdx];
             const isFinished = publicDeliveryTrackingStatus === 'ENTREGUE';
 
-            const paymentLabelMap: Record<string, string> = { ONLINE: 'Pagamento online (Mercado Pago)', DINHEIRO: 'Dinheiro', PIX: 'PIX (na entrega)', CREDITO: 'Cartão de crédito', DEBITO: 'Cartão de débito', PIX_ONLINE: 'PIX online (Mercado Pago)' };
+            const paymentLabelMap: Record<string, string> = { ONLINE: 'Pagamento online (Mercado Pago)', DINHEIRO: 'Dinheiro', PIX: 'PIX (na entrega)', CREDITO: 'Cartão de crédito', DEBITO: 'Cartão de débito', PIX_ONLINE: 'Pix (Mercado Pago)', CARTAO_ONLINE: 'Cartão à vista (Mercado Pago)' };
             const snap = publicDeliverySnapshot;
             const storePhone = publicDeliveryCompany?.phone?.replace(/\D/g, '') ?? '';
             const buildWhatsAppUrl = () => {
@@ -2984,20 +3102,30 @@ export function App() {
                 <label style={{ display: 'grid', gap: 4, fontSize: 14 }}>Endereco de entrega *<input value={publicDeliveryAddress} onChange={(e) => setPublicDeliveryAddress(e.target.value)} placeholder="Rua, numero, bairro" style={{ padding: '10px 12px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 14 }} /></label>
                 <div style={{ display: 'grid', gap: 8 }}>
                   <label style={{ fontSize: 14, fontWeight: 600, color: '#374151' }}>Forma de pagamento</label>
-                  {/* Apenas 2 opções: online (MP) ou dinheiro na entrega */}
+                  {/* 3 opções, pagamento processado dentro da própria plataforma */}
                   <div style={{ display: 'grid', gap: 8 }}>
-                    {/* Pagamento online — só exibe se MP estiver configurado */}
+                    {/* Cartão — à vista, formulário embutido (Mercado Pago Brick) */}
                     {publicDeliveryMpAvailable && (
-                      <button type="button" onClick={() => setPublicDeliveryPayment('ONLINE')}
-                        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', borderRadius: 12, cursor: 'pointer', textAlign: 'left', border: publicDeliveryPayment === 'ONLINE' ? '2px solid #009ee3' : '2px solid #e5e7eb', background: publicDeliveryPayment === 'ONLINE' ? '#e8f6fd' : '#fff', transition: 'all .15s' }}>
+                      <button type="button" onClick={() => setPublicDeliveryPayment('CARTAO_ONLINE')}
+                        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', borderRadius: 12, cursor: 'pointer', textAlign: 'left', border: publicDeliveryPayment === 'CARTAO_ONLINE' ? '2px solid #009ee3' : '2px solid #e5e7eb', background: publicDeliveryPayment === 'CARTAO_ONLINE' ? '#e8f6fd' : '#fff', transition: 'all .15s' }}>
                         <span style={{ fontSize: 26, flexShrink: 0 }}>💳</span>
                         <span style={{ flex: 1 }}>
-                          <span style={{ display: 'block', fontWeight: 700, fontSize: 15, color: '#18201d' }}>Pagamento online</span>
-                          <span style={{ display: 'block', fontSize: 12, color: '#6b7280', marginTop: 2 }}>Cartão de crédito, débito ou PIX — via Mercado Pago</span>
+                          <span style={{ display: 'block', fontWeight: 700, fontSize: 15, color: '#18201d' }}>Cartão</span>
+                          <span style={{ display: 'block', fontSize: 12, color: '#6b7280', marginTop: 2 }}>Crédito ou débito — somente à vista</span>
                         </span>
-                        {publicDeliveryPayment === 'ONLINE'
-                          ? <span style={{ color: '#009ee3', fontSize: 20, flexShrink: 0 }}>✓</span>
-                          : <span style={{ display: 'inline-block', background: '#009ee3', color: '#fff', fontSize: 10, fontWeight: 700, borderRadius: 20, padding: '3px 8px', flexShrink: 0 }}>MP</span>}
+                        {publicDeliveryPayment === 'CARTAO_ONLINE' && <span style={{ color: '#009ee3', fontSize: 20, flexShrink: 0 }}>✓</span>}
+                      </button>
+                    )}
+                    {/* Pix — QR code / copia e cola gerado na hora */}
+                    {publicDeliveryMpAvailable && (
+                      <button type="button" onClick={() => setPublicDeliveryPayment('PIX_ONLINE')}
+                        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', borderRadius: 12, cursor: 'pointer', textAlign: 'left', border: publicDeliveryPayment === 'PIX_ONLINE' ? '2px solid #009ee3' : '2px solid #e5e7eb', background: publicDeliveryPayment === 'PIX_ONLINE' ? '#e8f6fd' : '#fff', transition: 'all .15s' }}>
+                        <span style={{ fontSize: 26, flexShrink: 0 }}>🔑</span>
+                        <span style={{ flex: 1 }}>
+                          <span style={{ display: 'block', fontWeight: 700, fontSize: 15, color: '#18201d' }}>Pix</span>
+                          <span style={{ display: 'block', fontSize: 12, color: '#6b7280', marginTop: 2 }}>QR code ou copia e cola — confirmação automática</span>
+                        </span>
+                        {publicDeliveryPayment === 'PIX_ONLINE' && <span style={{ color: '#009ee3', fontSize: 20, flexShrink: 0 }}>✓</span>}
                       </button>
                     )}
                     {/* Dinheiro na entrega */}
@@ -3012,10 +3140,10 @@ export function App() {
                     </button>
                   </div>
                   {/* Aviso contextual */}
-                  {publicDeliveryPayment === 'ONLINE' && (
+                  {(publicDeliveryPayment === 'CARTAO_ONLINE' || publicDeliveryPayment === 'PIX_ONLINE') && (
                     <div style={{ background: '#e8f6fd', border: '1px solid #93c5fd', borderRadius: 8, padding: '10px 12px', fontSize: 13, color: '#1d4ed8', display: 'flex', gap: 8 }}>
                       <span>🔒</span>
-                      <span>O pedido só é enviado ao restaurante <strong>após a confirmação do pagamento</strong>. Você será redirecionado ao Mercado Pago.</span>
+                      <span>O pedido só é enviado ao restaurante <strong>após a confirmação do pagamento</strong>, feito aqui mesmo na página.</span>
                     </div>
                   )}
                   {publicDeliveryPayment === 'DINHEIRO' && (
@@ -3031,9 +3159,11 @@ export function App() {
                 style={{ background: publicDeliverySubmitting ? '#9ca3af' : '#18201d', color: '#fff', border: 'none', borderRadius: 12, padding: '14px 20px', cursor: publicDeliverySubmitting ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                 {publicDeliverySubmitting
                   ? '⏳ Aguarde...'
-                  : publicDeliveryPayment === 'ONLINE'
-                    ? `💳 Pagar com Mercado Pago · ${formatCurrency(grandTotal)}`
-                    : `✅ Confirmar pedido · ${formatCurrency(grandTotal)}`}
+                  : publicDeliveryPayment === 'CARTAO_ONLINE'
+                    ? `💳 Ir para pagamento · ${formatCurrency(grandTotal)}`
+                    : publicDeliveryPayment === 'PIX_ONLINE'
+                      ? `🔑 Gerar Pix · ${formatCurrency(grandTotal)}`
+                      : `✅ Confirmar pedido · ${formatCurrency(grandTotal)}`}
               </button>
             </div>
           )}

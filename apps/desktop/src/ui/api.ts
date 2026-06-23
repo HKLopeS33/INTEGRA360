@@ -151,7 +151,7 @@ export const publicDeliveryApi = {
 
     // Pedidos pagos online (Mercado Pago) só são liberados para o estabelecimento
     // após confirmação do pagamento via webhook — ficam "aguardando pagamento" até lá.
-    const isOnlinePayment = payload.paymentMethod === 'ONLINE' || payload.paymentMethod === 'PIX_ONLINE';
+    const isOnlinePayment = payload.paymentMethod === 'ONLINE' || payload.paymentMethod === 'PIX_ONLINE' || payload.paymentMethod === 'CARTAO_ONLINE';
 
     const orderRes = await anonFetch('/DeliveryOrder', {
       method: 'POST',
@@ -249,6 +249,41 @@ export const publicDeliveryApi = {
       throw new Error(data?.error || 'Falha ao gerar cobrança Pix.');
     }
     return data as { mpPaymentId: string; status: string; qrCode: string | null; qrCodeBase64: string | null; ticketUrl: string | null };
+  },
+
+  // Public key da conta Mercado Pago master — segura para embutir no front-end
+  // (usada para montar o Card Payment Brick no cardápio público).
+  getPlatformPublicKey: async (): Promise<string | null> => {
+    const { data, error } = await supabaseAnon.rpc('get_platform_mercado_pago_public_key');
+    if (error) {
+      console.error('Falha ao carregar public key do Mercado Pago', error);
+      return null;
+    }
+    return (data as string) ?? null;
+  },
+
+  // Processa pagamento de cartão (token gerado pelo Card Payment Brick no
+  // navegador do cliente — o número do cartão nunca passa pelo nosso backend).
+  payWithCard: async (companyId: string, deliveryOrderId: string, formData: {
+    token: string;
+    paymentMethodId: string;
+    issuerId?: string;
+    payerEmail?: string;
+    payerDocType?: string;
+    payerDocNumber?: string;
+  }) => {
+    const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL ?? (import.meta as any).env.NEXT_PUBLIC_SUPABASE_URL;
+    const anonKey = (import.meta as any).env.VITE_SUPABASE_ANON_KEY ?? (import.meta as any).env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+    const res = await fetch(`${supabaseUrl}/functions/v1/mercado-pago-card-payment`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${anonKey}`, 'apikey': anonKey },
+      body: JSON.stringify({ companyId, deliveryOrderId, ...formData }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data?.error) {
+      throw new Error(data?.error || 'Pagamento recusado. Tente outro cartão.');
+    }
+    return data as { status: string; statusDetail: string; mpPaymentId: string };
   },
 };
 
