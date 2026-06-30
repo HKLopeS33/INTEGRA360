@@ -2,6 +2,13 @@ import type { Order, Product, RestaurantTable } from './types.js';
 import { supabase, supabaseAnon, getAuthToken, setAuthToken } from './supabase.ts';
 import { getCompanyById, getCompanyForCurrentUser, getUserRowById, invalidateUserCache, loadCurrentUser, requireCompanyUser, requireCompanyUserWithRoles, requireSuperUser } from './supabase-db.ts';
 
+// Ordenação "natural": trata números embutidos no nome como números, não como
+// texto — sem isso "10. Item" vem antes de "7. Item" (comparação de string
+// puxa '1' < '7'), o que fica visivelmente fora de ordem pro cliente no
+// cardápio. Ex.: ["7. Batata simples", "10. Batata especial"] -> mantém 7 antes de 10.
+const naturalNameCompare = (a: string, b: string) =>
+  (a ?? '').localeCompare(b ?? '', 'pt-BR', { numeric: true, sensitivity: 'base' });
+
 // Cria usuário no Supabase Auth via Admin REST API (service role key).
 // Isso é necessário para aceitar emails com domínios internos (.local, etc.)
 // e confirmar o email automaticamente sem enviar mensagem.
@@ -132,7 +139,9 @@ export const publicDeliveryApi = {
     return {
       company: companies[0] as { id: string; name: string; menuBannerUrl: string | null; phone: string | null },
       categories: categories as Array<{ id: string; name: string; sort: number; imageUrl: string | null }>,
-      products: products.map((p: any) => ({ ...p, price: Number(p.price) })) as Array<{ id: string; categoryId: string; name: string; description: string | null; price: number; available: boolean }>,
+      products: products
+        .map((p: any) => ({ ...p, price: Number(p.price) }))
+        .sort((a: any, b: any) => naturalNameCompare(a.name, b.name)) as Array<{ id: string; categoryId: string; name: string; description: string | null; price: number; available: boolean }>,
     };
   },
 
@@ -522,10 +531,12 @@ export const api = {
       throwSupabaseError(error, 'Falha ao carregar produtos.');
     }
 
-    return (data || []).map((product) => ({
-      ...product,
-      price: Number(product.price)
-    }));
+    return (data || [])
+      .map((product) => ({
+        ...product,
+        price: Number(product.price)
+      }))
+      .sort((a, b) => naturalNameCompare(a.name, b.name));
   },
 
   uploadProductImage: async (file: File, productId: string): Promise<string> => {
