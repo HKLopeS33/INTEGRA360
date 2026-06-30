@@ -1363,6 +1363,7 @@ export const api = {
         .select('id,customerName,total,deliveryFee,paymentMethod,status,createdAt,receiptNumber')
         .eq('companyId', user.companyId)
         .neq('status', 'CANCELADO')
+        .eq('paymentStatus', 'PAGO')
         .gte('createdAt', today.toISOString())
         .lt('createdAt', tomorrow.toISOString())
         .order('createdAt', { ascending: true }),
@@ -2816,12 +2817,14 @@ export const api = {
       .lt('createdAt', endDate.toISOString());
     if (ordersError) throwSupabaseError(ordersError, 'Falha ao carregar pedidos.');
 
-    // Pedidos de delivery no mesmo período
+    // Pedidos de delivery no mesmo período — só pedidos confirmados/pagos
+    // (exclui AGUARDANDO_PAGAMENTO, que ainda não foi efetivado pelo cliente).
     const { data: deliveryOrders } = await supabase
       .from('DeliveryOrder')
       .select('id,total,status,createdAt,customerName')
       .eq('companyId', user.companyId)
       .neq('status', 'CANCELADO')
+      .eq('paymentStatus', 'PAGO')
       .gte('createdAt', startDate.toISOString())
       .lt('createdAt', endDate.toISOString());
 
