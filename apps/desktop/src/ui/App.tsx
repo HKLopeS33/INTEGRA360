@@ -104,6 +104,52 @@ const getNavItems = (role?: string) => {
   return allowedModuleIds.map((moduleId) => moduleOptions[moduleId]).filter((item) => item !== undefined && item.id !== 'menu');
 };
 
+// ── Persistência local do pedido do cardápio público (sobrevive a fechar o
+// site/app — o cliente reabre e continua de onde parou: pagamento, acompanhamento etc.) ──
+type PublicDeliverySavedState = {
+  savedAt: number;
+  step: string;
+  cart: Array<{ product: { id: string; name: string; price: number }; quantity: number; note: string }>;
+  name: string;
+  phone: string;
+  address: string;
+  payment: string;
+  notes: string;
+  orderId: string | null;
+  receiptNumber: number | null;
+  trackingStatus: string;
+  snapshot: { items: Array<{ name: string; quantity: number; unitPrice: number; note: string }>; paymentMethod: string; grandTotal: number } | null;
+};
+
+const PUBLIC_DELIVERY_STATE_TTL_MS = 48 * 60 * 60 * 1000; // 48h — depois disso descarta (pedido provavelmente já resolvido)
+
+const publicDeliveryStorageKey = (companyId: string) => `integra360_delivery_state_${companyId}`;
+
+const loadPublicDeliveryState = (companyId: string): PublicDeliverySavedState | null => {
+  try {
+    const raw = localStorage.getItem(publicDeliveryStorageKey(companyId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as PublicDeliverySavedState;
+    if (!parsed?.savedAt || Date.now() - parsed.savedAt > PUBLIC_DELIVERY_STATE_TTL_MS) {
+      localStorage.removeItem(publicDeliveryStorageKey(companyId));
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+};
+
+const savePublicDeliveryState = (companyId: string, state: Omit<PublicDeliverySavedState, 'savedAt'>) => {
+  try {
+    localStorage.setItem(publicDeliveryStorageKey(companyId), JSON.stringify({ ...state, savedAt: Date.now() }));
+  } catch { /* localStorage indisponível (modo privado, quota etc.) — ignora silenciosamente */ }
+};
+
+const clearPublicDeliveryState = (companyId: string) => {
+  try { localStorage.removeItem(publicDeliveryStorageKey(companyId)); } catch { /* ignore */ }
+};
+
 // ── Splash screen ────────────────────────────────────────────────────────────
 type SplashState = 'checking' | 'downloading' | 'ready' | 'done';
 
@@ -464,6 +510,30 @@ export function App() {
     const deliveryId = params.get('delivery');
     if (deliveryId) {
       setPublicDeliveryCompanyId(deliveryId);
+
+      // Restaura o pedido em andamento (se o cliente fechou o site/app no meio do fluxo)
+      const saved = loadPublicDeliveryState(deliveryId);
+      if (saved) {
+        setPublicDeliveryCart(saved.cart);
+        setPublicDeliveryName(saved.name);
+        setPublicDeliveryPhone(saved.phone);
+        setPublicDeliveryAddress(saved.address);
+        setPublicDeliveryPayment(saved.payment);
+        setPublicDeliveryNotes(saved.notes);
+        setPublicDeliveryOrderId(saved.orderId);
+        setPublicDeliveryReceiptNumber(saved.receiptNumber);
+        setPublicDeliveryTrackingStatus(saved.trackingStatus);
+        setPublicDeliverySnapshot(saved.snapshot);
+        // Pagamento com cartão não dá pra retomar no meio (o Brick não guarda
+        // dados digitados) — volta pra escolha de forma de pagamento.
+        setPublicDeliveryStep(saved.step === 'card_payment' ? 'checkout' : (saved.step as any));
+        if (saved.step === 'payment' && saved.orderId) {
+          // Regenera/recupera a mesma cobrança Pix (a Edge Function reaproveita
+          // a cobrança pendente existente em vez de criar uma nova).
+          setTimeout(() => void generatePublicPixCharge(saved.orderId!), 0);
+        }
+      }
+
       publicDeliveryApi.getMenu(deliveryId).then((data) => {
         setPublicDeliveryCompany(data.company);
         setPublicDeliveryCategories(data.categories);
@@ -501,6 +571,35 @@ export function App() {
       }
     }
   }, []);
+
+  // Salva o progresso do pedido do cardápio público no localStorage a cada
+  // mudança relevante, pra cliente continuar de onde parou se fechar o
+  // site/app (ex.: reabrir direto na tela de pagamento ou de acompanhamento).
+  useEffect(() => {
+    if (!publicDeliveryCompanyId) return;
+    if (publicDeliveryStep === 'menu' && publicDeliveryCart.length === 0) {
+      // Nada em andamento — não precisa persistir (evita lixo acumulando).
+      clearPublicDeliveryState(publicDeliveryCompanyId);
+      return;
+    }
+    savePublicDeliveryState(publicDeliveryCompanyId, {
+      step: publicDeliveryStep,
+      cart: publicDeliveryCart,
+      name: publicDeliveryName,
+      phone: publicDeliveryPhone,
+      address: publicDeliveryAddress,
+      payment: publicDeliveryPayment,
+      notes: publicDeliveryNotes,
+      orderId: publicDeliveryOrderId,
+      receiptNumber: publicDeliveryReceiptNumber,
+      trackingStatus: publicDeliveryTrackingStatus,
+      snapshot: publicDeliverySnapshot,
+    });
+  }, [
+    publicDeliveryCompanyId, publicDeliveryStep, publicDeliveryCart, publicDeliveryName,
+    publicDeliveryPhone, publicDeliveryAddress, publicDeliveryPayment, publicDeliveryNotes,
+    publicDeliveryOrderId, publicDeliveryReceiptNumber, publicDeliveryTrackingStatus, publicDeliverySnapshot,
+  ]);
 
   // ── Verificador de atualização para Android (APK sideloaded) ──────────────
   useEffect(() => {
