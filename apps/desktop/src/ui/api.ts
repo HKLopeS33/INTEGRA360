@@ -294,6 +294,12 @@ export const publicDeliveryApi = {
     }
     return data as { status: string; statusDetail: string; mpPaymentId: string };
   },
+
+  // Registra uma visita ao cardápio público. Chamado anonimamente assim que o
+  // cliente abre o link — não requer sessão de autenticação.
+  incrementMenuOpenCount: async (companyId: string): Promise<void> => {
+    await supabaseAnon.rpc('increment_menu_open_count', { p_company_id: companyId });
+  },
 };
 
 export const api = {
@@ -1823,7 +1829,7 @@ export const api = {
     await requireSuperUser();
     const { data: companies, error: companiesError } = await supabase
       .from('Company')
-      .select('id,name,email,cnpj,active')
+      .select('id,name,email,cnpj,active,menuOpenCount')
       .order('name', { ascending: true });
     if (companiesError) {
       throwSupabaseError(companiesError, 'Falha ao carregar empresas.');
@@ -1877,7 +1883,8 @@ export const api = {
         lastRenewed: subscription?.lastRenewed ?? null,
         payments: paymentsByCompany[company.id] ?? [],
         walletBalance: wallet ? Number(wallet.balance) : 0,
-        deliveryFeePercent: wallet ? Number(wallet.deliveryFeePercent) : 0
+        deliveryFeePercent: wallet ? Number(wallet.deliveryFeePercent) : 0,
+        menuOpenCount: Number(company.menuOpenCount ?? 0)
       };
     });
   },

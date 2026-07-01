@@ -538,6 +538,8 @@ export function App() {
         setPublicDeliveryCompany(data.company);
         setPublicDeliveryCategories(data.categories);
         setPublicDeliveryProducts(data.products);
+        // Contabiliza a visita assincronamente — falha silenciosa intencional
+        void publicDeliveryApi.incrementMenuOpenCount(deliveryId);
       }).catch(() => {
         setPublicDeliveryError('Cardápio não encontrado ou loja inativa.');
       });
@@ -5300,12 +5302,13 @@ export function App() {
                         <th style={{ textAlign: 'left', padding: 12, fontWeight: 600, borderBottom: '2px solid #e5e7eb' }}>Status</th>
                         <th style={{ textAlign: 'left', padding: 12, fontWeight: 600, borderBottom: '2px solid #e5e7eb', whiteSpace: 'nowrap' }}>Vencimento</th>
                         <th style={{ textAlign: 'left', padding: 12, fontWeight: 600, borderBottom: '2px solid #e5e7eb' }}>Mensalidade</th>
+                        <th style={{ textAlign: 'right', padding: 12, fontWeight: 600, borderBottom: '2px solid #e5e7eb', whiteSpace: 'nowrap' }}>Acessos ao cardápio</th>
                         <th style={{ textAlign: 'left', padding: 12, fontWeight: 600, borderBottom: '2px solid #e5e7eb' }}>Ações</th>
                       </tr>
                     </thead>
                     <tbody>
                       {loadingCompanies ? (
-                        <tr><td colSpan={7} style={{ padding: 12, textAlign: 'center' }}>Carregando...</td></tr>
+                        <tr><td colSpan={8} style={{ padding: 12, textAlign: 'center' }}>Carregando...</td></tr>
                       ) : (companies || []).filter((c) => {
                         // apply search
                         if (companySearch && !(c.name || '').toLowerCase().includes(companySearch.toLowerCase())) return false;
@@ -5322,7 +5325,7 @@ export function App() {
                         if (companyFilterStatus === 'paid' && !allPaid) return false;
                         return true;
                       }).length === 0 ? (
-                        <tr><td colSpan={7} style={{ padding: 12, textAlign: 'center' }}>Nenhuma empresa cadastrada.</td></tr>
+                        <tr><td colSpan={8} style={{ padding: 12, textAlign: 'center' }}>Nenhuma empresa cadastrada.</td></tr>
                       ) : (companies || []).filter((c) => {
                         if (companySearch && !(c.name || '').toLowerCase().includes(companySearch.toLowerCase())) return false;
                         const now = Date.now();
@@ -5376,6 +5379,11 @@ export function App() {
                             })()}
                           </td>
                           <td style={{ padding: 12 }}>{formatCurrency(Number(c.monthlyFee ?? 0))}</td>
+                          <td style={{ padding: 12, textAlign: 'right' }}>
+                            <span style={{ fontWeight: 600, color: (c.menuOpenCount ?? 0) > 0 ? '#2563eb' : '#9ca3af' }}>
+                              {(c.menuOpenCount ?? 0).toLocaleString('pt-BR')}
+                            </span>
+                          </td>
                           <td style={{ padding: 12 }}>
                             <div style={{ position: 'relative' }} data-action-menu-id={c.id}>
                               <button 
