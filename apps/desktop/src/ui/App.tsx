@@ -360,6 +360,8 @@ export function App() {
     grandTotal: number;
   } | null>(null);
   const [publicDeliveryMpAvailable, setPublicDeliveryMpAvailable] = useState(false);
+  const [publicDeliveryShowResumeBanner, setPublicDeliveryShowResumeBanner] = useState(false);
+  const [publicDeliveryCartBounce, setPublicDeliveryCartBounce] = useState(false);
   const [publicPixCharge, setPublicPixCharge] = useState<{ qrCode: string | null; qrCodeBase64: string | null; ticketUrl: string | null } | null>(null);
   const [publicPixLoading, setPublicPixLoading] = useState(false);
   const [publicPixError, setPublicPixError] = useState<string | null>(null);
@@ -531,6 +533,11 @@ export function App() {
           // Regenera/recupera a mesma cobrança Pix (a Edge Function reaproveita
           // a cobrança pendente existente em vez de criar uma nova).
           setTimeout(() => void generatePublicPixCharge(saved.orderId!), 0);
+        }
+        // Mostra banner de retomada apenas se o cliente estava no cardápio ou checkout
+        // (não para telas de pagamento/sucesso/rastreamento já restauradas acima)
+        if (['menu', 'checkout', 'card_payment'].includes(saved.step) && saved.cart.length > 0) {
+          setPublicDeliveryShowResumeBanner(true);
         }
       }
 
@@ -1628,6 +1635,8 @@ export function App() {
       if (existing) return prev.map((i) => i.product.id === product.id ? { ...i, quantity: i.quantity + 1 } : i);
       return [...prev, { product, quantity: 1, note: '' }];
     });
+    setPublicDeliveryCartBounce(true);
+    setTimeout(() => setPublicDeliveryCartBounce(false), 400);
   };
 
   const updatePublicCartItem = (productId: string, updates: Partial<{ quantity: number; note: string }>) => {
@@ -3306,7 +3315,40 @@ export function App() {
             </div>
           )}
           {publicDeliveryStep === 'menu' && (
-            <div style={{ display: 'grid', gap: 20, paddingBottom: cartCount > 0 ? 88 : 0 }}>
+            <div style={{ display: 'grid', gap: 20, paddingBottom: cartCount > 0 ? 96 : 0 }}>
+              {/* Banner de retomada de pedido em andamento */}
+              {publicDeliveryShowResumeBanner && publicDeliveryCart.length > 0 && (
+                <div style={{ background: 'linear-gradient(135deg, #18201d 0%, #2d3a36 100%)', borderRadius: 14, padding: '16px 18px', display: 'flex', alignItems: 'center', gap: 14, boxShadow: '0 4px 16px rgba(0,0,0,0.18)', border: '1px solid #374151' }}>
+                  <div style={{ fontSize: 32, flexShrink: 0 }}>🛒</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ color: '#f1c44e', fontWeight: 700, fontSize: 14, marginBottom: 2 }}>Pedido em andamento</div>
+                    <div style={{ color: '#d1d5db', fontSize: 13 }}>
+                      {publicDeliveryCart.reduce((s, i) => s + i.quantity, 0)} {publicDeliveryCart.reduce((s, i) => s + i.quantity, 0) === 1 ? 'item' : 'itens'} · {formatCurrency(publicDeliveryCart.reduce((s, i) => s + i.quantity * i.product.price, 0))}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                    <button type="button"
+                      onClick={() => { setPublicDeliveryShowResumeBanner(false); setPublicDeliveryStep('checkout'); }}
+                      style={{ background: '#f1c44e', color: '#18201d', border: 'none', borderRadius: 8, padding: '8px 14px', fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                      Continuar
+                    </button>
+                    <button type="button"
+                      onClick={() => {
+                        setPublicDeliveryShowResumeBanner(false);
+                        setPublicDeliveryCart([]);
+                        setPublicDeliveryName('');
+                        setPublicDeliveryPhone('');
+                        setPublicDeliveryAddress('');
+                        setPublicDeliveryNotes('');
+                        setPublicDeliveryOrderId(null);
+                        clearPublicDeliveryState(publicDeliveryCompanyId!);
+                      }}
+                      style={{ background: 'transparent', color: '#9ca3af', border: '1px solid #374151', borderRadius: 8, padding: '8px 10px', fontSize: 13, cursor: 'pointer' }}>
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              )}
               {/* Banner do cardápio */}
               {publicDeliveryCompany?.menuBannerUrl && (
                 <div style={{ borderRadius: 14, overflow: 'hidden', boxShadow: '0 2px 12px rgba(0,0,0,0.10)' }}>
@@ -3343,7 +3385,7 @@ export function App() {
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                                   <button type="button" onClick={() => updatePublicCartItem(product.id, { quantity: cartItem.quantity - 1 })} style={{ width: 32, height: 32, borderRadius: '50%', border: '1px solid #e5e7eb', background: '#f9fafb', cursor: 'pointer', fontSize: 18, display: 'grid', placeItems: 'center' }}>-</button>
                                   <span style={{ fontWeight: 700, minWidth: 20, textAlign: 'center' }}>{cartItem.quantity}</span>
-                                  <button type="button" onClick={() => updatePublicCartItem(product.id, { quantity: cartItem.quantity + 1 })} style={{ width: 32, height: 32, borderRadius: '50%', border: 'none', background: '#18201d', color: '#fff', cursor: 'pointer', fontSize: 18, display: 'grid', placeItems: 'center' }}>+</button>
+                                  <button type="button" onClick={() => { updatePublicCartItem(product.id, { quantity: cartItem.quantity + 1 }); setPublicDeliveryCartBounce(true); setTimeout(() => setPublicDeliveryCartBounce(false), 400); }} style={{ width: 32, height: 32, borderRadius: '50%', border: 'none', background: '#18201d', color: '#fff', cursor: 'pointer', fontSize: 18, display: 'grid', placeItems: 'center' }}>+</button>
                                 </div>
                               ) : (
                                 <button type="button" onClick={() => addToPublicCart(product)} style={{ background: '#18201d', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 14px', cursor: 'pointer', fontWeight: 600, fontSize: 14, whiteSpace: 'nowrap', flexShrink: 0 }}>+ Adicionar</button>
@@ -3357,11 +3399,30 @@ export function App() {
                 );
               })}
               {cartCount > 0 && (
-                <div style={{ position: 'fixed', bottom: 'calc(20px + env(safe-area-inset-bottom))', left: '50%', transform: 'translateX(-50%)', zIndex: 200, width: 'calc(100% - 32px)', maxWidth: 608 }}>
+                <div style={{ position: 'fixed', bottom: 'calc(16px + env(safe-area-inset-bottom))', left: '50%', transform: 'translateX(-50%)', zIndex: 200, width: 'calc(100% - 32px)', maxWidth: 608 }}>
                   <button type="button" onClick={() => setPublicDeliveryStep('checkout')}
-                    style={{ width: '100%', background: '#18201d', color: '#fff', border: 'none', borderRadius: 12, padding: '14px 20px', cursor: 'pointer', fontWeight: 700, fontSize: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 4px 20px rgba(0,0,0,0.3)' }}>
-                    <span>{cartCount} {cartCount === 1 ? 'item' : 'itens'}</span>
-                    <span>Ver carrinho · {formatCurrency(cartTotal)}</span>
+                    style={{
+                      width: '100%', border: 'none', borderRadius: 14, padding: '0', cursor: 'pointer',
+                      background: 'linear-gradient(135deg, #f1c44e 0%, #e6b800 100%)',
+                      boxShadow: '0 6px 24px rgba(241,196,78,0.45)',
+                      transform: publicDeliveryCartBounce ? 'scale(1.04)' : 'scale(1)',
+                      transition: 'transform 0.15s cubic-bezier(0.34,1.56,0.64,1)',
+                      display: 'flex', alignItems: 'stretch', overflow: 'hidden',
+                    }}>
+                    {/* Lado esquerdo — badge de quantidade */}
+                    <div style={{ background: 'rgba(0,0,0,0.12)', padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                      <span style={{ background: '#18201d', color: '#f1c44e', borderRadius: '50%', width: 26, height: 26, display: 'grid', placeItems: 'center', fontWeight: 800, fontSize: 13 }}>{cartCount}</span>
+                      <span style={{ color: '#18201d', fontWeight: 600, fontSize: 13 }}>{cartCount === 1 ? 'item' : 'itens'}</span>
+                    </div>
+                    {/* Lado direito — CTA + valor */}
+                    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '14px 18px' }}>
+                      <span style={{ color: '#18201d', fontWeight: 800, fontSize: 16 }}>Finalizar pedido</span>
+                      <span style={{ color: '#18201d', fontWeight: 700, fontSize: 15 }}>→</span>
+                    </div>
+                    {/* Valor total */}
+                    <div style={{ background: 'rgba(0,0,0,0.10)', padding: '14px 18px', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+                      <span style={{ color: '#18201d', fontWeight: 800, fontSize: 15 }}>{formatCurrency(cartTotal)}</span>
+                    </div>
                   </button>
                 </div>
               )}
