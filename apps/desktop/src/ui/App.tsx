@@ -378,6 +378,7 @@ export function App() {
   const [publicDeliveryShowResumeBanner, setPublicDeliveryShowResumeBanner] = useState(false);
   const [publicDeliveryCartBounce, setPublicDeliveryCartBounce] = useState(false);
   const [publicDeliveryProfilePrefilled, setPublicDeliveryProfilePrefilled] = useState(false);
+  const [publicDeliveryActiveCategory, setPublicDeliveryActiveCategory] = useState<string | null>(null);
   const [publicPixCharge, setPublicPixCharge] = useState<{ qrCode: string | null; qrCodeBase64: string | null; ticketUrl: string | null } | null>(null);
   const [publicPixLoading, setPublicPixLoading] = useState(false);
   const [publicPixError, setPublicPixError] = useState<string | null>(null);
@@ -2967,12 +2968,6 @@ export function App() {
             <div style={{ fontWeight: 700, fontSize: 16 }}>{publicDeliveryCompany?.name ?? 'Carregando...'}</div>
             <div style={{ fontSize: 12, color: '#9ca3af' }}>Cardápio digital · Delivery</div>
           </div>
-          {cartCount > 0 && publicDeliveryStep === 'menu' && (
-            <button type="button" onClick={() => setPublicDeliveryStep('checkout')}
-              style={{ marginLeft: 'auto', background: '#f1c44e', color: '#18201d', border: 'none', borderRadius: 8, padding: '8px 16px', fontWeight: 700, cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
-              {cartCount} {cartCount === 1 ? 'item' : 'itens'} · {formatCurrency(cartTotal)}
-            </button>
-          )}
           {publicDeliveryStep === 'checkout' && (
             <button type="button" onClick={() => setPublicDeliveryStep('menu')}
               style={{ marginLeft: 'auto', background: 'transparent', color: '#9ca3af', border: '1px solid #374151', borderRadius: 8, padding: '8px 14px', cursor: 'pointer', fontSize: 13 }}>
@@ -3353,161 +3348,180 @@ export function App() {
               </button>
             </div>
           )}
-          {publicDeliveryStep === 'menu' && (
-            <div style={{ display: 'grid', gap: 20, paddingBottom: cartCount > 0 ? 96 : 0 }}>
-              {/* Banner de retomada de pedido em andamento */}
-              {publicDeliveryShowResumeBanner && publicDeliveryCart.length > 0 && (
-                <div style={{ background: 'linear-gradient(135deg, #18201d 0%, #2d3a36 100%)', borderRadius: 14, padding: '16px 18px', display: 'flex', alignItems: 'center', gap: 14, boxShadow: '0 4px 16px rgba(0,0,0,0.18)', border: '1px solid #374151' }}>
-                  <div style={{ fontSize: 32, flexShrink: 0 }}>🛒</div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ color: '#f1c44e', fontWeight: 700, fontSize: 14, marginBottom: 2 }}>Pedido em andamento</div>
-                    <div style={{ color: '#d1d5db', fontSize: 13 }}>
-                      {publicDeliveryCart.reduce((s, i) => s + i.quantity, 0)} {publicDeliveryCart.reduce((s, i) => s + i.quantity, 0) === 1 ? 'item' : 'itens'} · {formatCurrency(publicDeliveryCart.reduce((s, i) => s + i.quantity * i.product.price, 0))}
+          {publicDeliveryStep === 'menu' && (() => {
+            const topProducts = [...publicDeliveryProducts]
+              .filter((p) => (p as any).salesCount > 0)
+              .sort((a, b) => ((b as any).salesCount ?? 0) - ((a as any).salesCount ?? 0))
+              .slice(0, 5);
+            const hasTop = topProducts.length > 0;
+            // Categorias que têm pelo menos 1 produto visível
+            const visibleCats = publicDeliveryCategories.filter((cat) =>
+              publicDeliveryProducts.some((p) => p.categoryId === cat.id)
+            );
+            // Tab ativa: 'top' | category.id | null (ainda carregando)
+            const activeTab = publicDeliveryActiveCategory ??
+              (hasTop ? 'top' : visibleCats[0]?.id ?? null);
+            // Produtos da tab ativa
+            const visibleProducts = activeTab === 'top'
+              ? topProducts
+              : publicDeliveryProducts.filter((p) => p.categoryId === activeTab);
+            const activeCat = visibleCats.find((c) => c.id === activeTab);
+
+            const renderProductCard = (product: typeof publicDeliveryProducts[0], isTop: boolean) => {
+              const cartItem = publicDeliveryCart.find((i) => i.product.id === product.id);
+              return (
+                <div key={`${isTop ? 'top-' : ''}${product.id}`}
+                  style={{ background: '#fff', borderRadius: 12, border: isTop ? '2px solid #f1c44e' : '1px solid #e5e7eb', overflow: 'hidden', display: 'flex', alignItems: 'stretch' }}>
+                  <div style={{ flex: 1, padding: '12px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 2 }}>{product.name}</div>
+                      {product.description && <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 6 }}>{product.description}</div>}
+                      <div style={{ fontWeight: 700, color: '#18201d', fontSize: 15 }}>{formatCurrency(product.price)}</div>
                     </div>
+                    {cartItem ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                        <button type="button" onClick={() => updatePublicCartItem(product.id, { quantity: cartItem.quantity - 1 })} style={{ width: 32, height: 32, borderRadius: '50%', border: '1px solid #e5e7eb', background: '#f9fafb', cursor: 'pointer', fontSize: 18, display: 'grid', placeItems: 'center' }}>-</button>
+                        <span style={{ fontWeight: 700, minWidth: 20, textAlign: 'center' }}>{cartItem.quantity}</span>
+                        <button type="button" onClick={() => { updatePublicCartItem(product.id, { quantity: cartItem.quantity + 1 }); setPublicDeliveryCartBounce(true); setTimeout(() => setPublicDeliveryCartBounce(false), 400); }} style={{ width: 32, height: 32, borderRadius: '50%', border: 'none', background: '#18201d', color: '#fff', cursor: 'pointer', fontSize: 18, display: 'grid', placeItems: 'center' }}>+</button>
+                      </div>
+                    ) : (
+                      <button type="button" onClick={() => addToPublicCart(product)} style={{ background: '#18201d', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 14px', cursor: 'pointer', fontWeight: 600, fontSize: 14, whiteSpace: 'nowrap', flexShrink: 0 }}>+ Adicionar</button>
+                    )}
                   </div>
-                  <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-                    <button type="button"
-                      onClick={() => { setPublicDeliveryShowResumeBanner(false); setPublicDeliveryStep('checkout'); }}
-                      style={{ background: '#f1c44e', color: '#18201d', border: 'none', borderRadius: 8, padding: '8px 14px', fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                      Continuar
-                    </button>
-                    <button type="button"
-                      onClick={() => {
+                </div>
+              );
+            };
+
+            return (
+              <>
+                {/* Banner do cardápio — edge-to-edge, fora do container com padding */}
+                {publicDeliveryCompany?.menuBannerUrl && (
+                  <div style={{ margin: '0 -16px', marginTop: -20 }}>
+                    <img src={publicDeliveryCompany.menuBannerUrl} alt="Banner"
+                      style={{ width: '100%', maxHeight: 200, objectFit: 'cover', display: 'block' }} />
+                  </div>
+                )}
+
+                {/* Banner de retomada de pedido em andamento */}
+                {publicDeliveryShowResumeBanner && publicDeliveryCart.length > 0 && (
+                  <div style={{ background: 'linear-gradient(135deg, #18201d 0%, #2d3a36 100%)', borderRadius: 14, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, boxShadow: '0 4px 16px rgba(0,0,0,0.18)', border: '1px solid #374151', marginTop: publicDeliveryCompany?.menuBannerUrl ? 12 : 0 }}>
+                    <div style={{ fontSize: 28, flexShrink: 0 }}>🛒</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ color: '#f1c44e', fontWeight: 700, fontSize: 13, marginBottom: 2 }}>Pedido em andamento</div>
+                      <div style={{ color: '#d1d5db', fontSize: 12 }}>
+                        {publicDeliveryCart.reduce((s, i) => s + i.quantity, 0)} {publicDeliveryCart.reduce((s, i) => s + i.quantity, 0) === 1 ? 'item' : 'itens'} · {formatCurrency(publicDeliveryCart.reduce((s, i) => s + i.quantity * i.product.price, 0))}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                      <button type="button" onClick={() => { setPublicDeliveryShowResumeBanner(false); setPublicDeliveryStep('checkout'); }}
+                        style={{ background: '#f1c44e', color: '#18201d', border: 'none', borderRadius: 8, padding: '7px 12px', fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                        Continuar
+                      </button>
+                      <button type="button" onClick={() => {
                         setPublicDeliveryShowResumeBanner(false);
                         setPublicDeliveryCart([]);
-                        setPublicDeliveryName('');
-                        setPublicDeliveryPhone('');
-                        setPublicDeliveryAddress('');
-                        setPublicDeliveryNotes('');
+                        setPublicDeliveryName(''); setPublicDeliveryPhone('');
+                        setPublicDeliveryAddress(''); setPublicDeliveryNotes('');
                         setPublicDeliveryOrderId(null);
                         clearPublicDeliveryState(publicDeliveryCompanyId!);
-                      }}
-                      style={{ background: 'transparent', color: '#9ca3af', border: '1px solid #374151', borderRadius: 8, padding: '8px 10px', fontSize: 13, cursor: 'pointer' }}>
-                      ✕
+                      }} style={{ background: 'transparent', color: '#9ca3af', border: '1px solid #374151', borderRadius: 8, padding: '7px 10px', fontSize: 13, cursor: 'pointer' }}>
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Tabs de categorias — sticky abaixo do header */}
+                {(hasTop || visibleCats.length > 0) && (
+                  <div style={{
+                    position: 'sticky', top: 73, zIndex: 90,
+                    margin: '0 -16px',
+                    background: '#fff',
+                    borderBottom: '2px solid #f3f4f6',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+                  }}>
+                    <div style={{ display: 'flex', overflowX: 'auto', gap: 0, scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
+                      {hasTop && (
+                        <button type="button"
+                          onClick={() => setPublicDeliveryActiveCategory('top')}
+                          style={{
+                            flexShrink: 0, border: 'none', background: 'transparent',
+                            padding: '12px 16px', cursor: 'pointer', fontSize: 13, fontWeight: activeTab === 'top' ? 700 : 500,
+                            color: activeTab === 'top' ? '#18201d' : '#6b7280',
+                            borderBottom: activeTab === 'top' ? '2px solid #f1c44e' : '2px solid transparent',
+                            display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap',
+                            transition: 'color .15s',
+                          }}>
+                          🔥 Mais pedidos
+                        </button>
+                      )}
+                      {visibleCats.map((cat) => (
+                        <button type="button" key={cat.id}
+                          onClick={() => setPublicDeliveryActiveCategory(cat.id)}
+                          style={{
+                            flexShrink: 0, border: 'none', background: 'transparent',
+                            padding: '12px 16px', cursor: 'pointer', fontSize: 13, fontWeight: activeTab === cat.id ? 700 : 500,
+                            color: activeTab === cat.id ? '#18201d' : '#6b7280',
+                            borderBottom: activeTab === cat.id ? '2px solid #f1c44e' : '2px solid transparent',
+                            display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap',
+                            transition: 'color .15s',
+                          }}>
+                          {cat.imageUrl && (
+                            <img src={cat.imageUrl} alt="" style={{ width: 20, height: 20, borderRadius: 4, objectFit: 'cover' }} />
+                          )}
+                          {cat.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Produtos da tab ativa */}
+                <div style={{ display: 'grid', gap: 10, paddingBottom: cartCount > 0 ? 96 : 16 }}>
+                  {publicDeliveryCategories.length === 0 && publicDeliveryProducts.length === 0 && !publicDeliveryError && (
+                    <div style={{ textAlign: 'center', padding: 40, color: '#9ca3af' }}>Carregando cardápio...</div>
+                  )}
+                  {activeTab === 'top' && (
+                    <div style={{ paddingTop: 4, fontSize: 12, color: '#9ca3af', fontStyle: 'italic' }}>Os itens mais pedidos neste restaurante</div>
+                  )}
+                  {activeTab !== 'top' && activeCat?.imageUrl && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingTop: 4 }}>
+                      <img src={activeCat.imageUrl} alt={activeCat.name} style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: 8 }} />
+                      <span style={{ fontWeight: 700, fontSize: 14, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{activeCat.name}</span>
+                    </div>
+                  )}
+                  {visibleProducts.map((product) => renderProductCard(product, activeTab === 'top'))}
+                </div>
+
+                {/* Botão flutuante do carrinho */}
+                {cartCount > 0 && (
+                  <div style={{ position: 'fixed', bottom: 'calc(16px + env(safe-area-inset-bottom))', left: '50%', transform: 'translateX(-50%)', zIndex: 200, width: 'calc(100% - 32px)', maxWidth: 608 }}>
+                    <button type="button" onClick={() => setPublicDeliveryStep('checkout')}
+                      style={{
+                        width: '100%', border: 'none', borderRadius: 14, padding: '0', cursor: 'pointer',
+                        background: 'linear-gradient(135deg, #f1c44e 0%, #e6b800 100%)',
+                        boxShadow: '0 6px 24px rgba(241,196,78,0.45)',
+                        transform: publicDeliveryCartBounce ? 'scale(1.04)' : 'scale(1)',
+                        transition: 'transform 0.15s cubic-bezier(0.34,1.56,0.64,1)',
+                        display: 'flex', alignItems: 'stretch', overflow: 'hidden',
+                      }}>
+                      <div style={{ background: 'rgba(0,0,0,0.12)', padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                        <span style={{ background: '#18201d', color: '#f1c44e', borderRadius: '50%', width: 26, height: 26, display: 'grid', placeItems: 'center', fontWeight: 800, fontSize: 13 }}>{cartCount}</span>
+                        <span style={{ color: '#18201d', fontWeight: 600, fontSize: 13 }}>{cartCount === 1 ? 'item' : 'itens'}</span>
+                      </div>
+                      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '14px 18px' }}>
+                        <span style={{ color: '#18201d', fontWeight: 800, fontSize: 16 }}>Finalizar pedido</span>
+                        <span style={{ color: '#18201d', fontWeight: 700, fontSize: 15 }}>→</span>
+                      </div>
+                      <div style={{ background: 'rgba(0,0,0,0.10)', padding: '14px 18px', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+                        <span style={{ color: '#18201d', fontWeight: 800, fontSize: 15 }}>{formatCurrency(cartTotal)}</span>
+                      </div>
                     </button>
                   </div>
-                </div>
-              )}
-              {/* Banner do cardápio */}
-              {publicDeliveryCompany?.menuBannerUrl && (
-                <div style={{ borderRadius: 14, overflow: 'hidden', boxShadow: '0 2px 12px rgba(0,0,0,0.10)' }}>
-                  <img src={publicDeliveryCompany.menuBannerUrl} alt="Banner" style={{ width: '100%', maxHeight: 200, objectFit: 'cover', display: 'block' }} />
-                </div>
-              )}
-              {publicDeliveryCategories.length === 0 && publicDeliveryProducts.length === 0 && !publicDeliveryError && (
-                <div style={{ textAlign: 'center', padding: 40, color: '#9ca3af' }}>Carregando cardapio...</div>
-              )}
-              {/* Seção "Mais pedidos" — top 5 por salesCount */}
-              {(() => {
-                const topProducts = [...publicDeliveryProducts]
-                  .filter((p) => (p as any).salesCount > 0)
-                  .sort((a, b) => ((b as any).salesCount ?? 0) - ((a as any).salesCount ?? 0))
-                  .slice(0, 5);
-                if (topProducts.length === 0) return null;
-                return (
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                      <span style={{ fontSize: 18 }}>🔥</span>
-                      <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Mais pedidos</h3>
-                    </div>
-                    <div style={{ display: 'grid', gap: 10 }}>
-                      {topProducts.map((product) => {
-                        const cartItem = publicDeliveryCart.find((i) => i.product.id === product.id);
-                        return (
-                          <div key={`top-${product.id}`} style={{ background: '#fff', borderRadius: 12, border: '2px solid #f1c44e', overflow: 'hidden', display: 'flex', alignItems: 'stretch' }}>
-                            <div style={{ flex: 1, padding: '12px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
-                              <div style={{ flex: 1 }}>
-                                <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 2 }}>{product.name}</div>
-                                {product.description && <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 6 }}>{product.description}</div>}
-                                <div style={{ fontWeight: 700, color: '#18201d', fontSize: 15 }}>{formatCurrency(product.price)}</div>
-                              </div>
-                              {cartItem ? (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                                  <button type="button" onClick={() => updatePublicCartItem(product.id, { quantity: cartItem.quantity - 1 })} style={{ width: 32, height: 32, borderRadius: '50%', border: '1px solid #e5e7eb', background: '#f9fafb', cursor: 'pointer', fontSize: 18, display: 'grid', placeItems: 'center' }}>-</button>
-                                  <span style={{ fontWeight: 700, minWidth: 20, textAlign: 'center' }}>{cartItem.quantity}</span>
-                                  <button type="button" onClick={() => { updatePublicCartItem(product.id, { quantity: cartItem.quantity + 1 }); setPublicDeliveryCartBounce(true); setTimeout(() => setPublicDeliveryCartBounce(false), 400); }} style={{ width: 32, height: 32, borderRadius: '50%', border: 'none', background: '#18201d', color: '#fff', cursor: 'pointer', fontSize: 18, display: 'grid', placeItems: 'center' }}>+</button>
-                                </div>
-                              ) : (
-                                <button type="button" onClick={() => addToPublicCart(product)} style={{ background: '#18201d', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 14px', cursor: 'pointer', fontWeight: 600, fontSize: 14, whiteSpace: 'nowrap', flexShrink: 0 }}>+ Adicionar</button>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })()}
-              {publicDeliveryCategories.map((cat) => {
-                const catProducts = publicDeliveryProducts.filter((p) => p.categoryId === cat.id);
-                if (catProducts.length === 0) return null;
-                return (
-                  <div key={cat.id}>
-                    {/* Header da categoria com foto */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-                      {cat.imageUrl && (
-                        <img src={cat.imageUrl} alt={cat.name} style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 8, flexShrink: 0 }} />
-                      )}
-                      <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{cat.name}</h3>
-                    </div>
-                    <div style={{ display: 'grid', gap: 10 }}>
-                      {catProducts.map((product) => {
-                        const cartItem = publicDeliveryCart.find((i) => i.product.id === product.id);
-                        return (
-                          <div key={product.id} style={{ background: '#fff', borderRadius: 12, border: '1px solid #e5e7eb', overflow: 'hidden', display: 'flex', alignItems: 'stretch', gap: 0 }}>
-                            <div style={{ flex: 1, padding: '12px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
-                              <div style={{ flex: 1 }}>
-                                <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 2 }}>{product.name}</div>
-                                {product.description && <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 6 }}>{product.description}</div>}
-                                <div style={{ fontWeight: 700, color: '#18201d', fontSize: 15 }}>{formatCurrency(product.price)}</div>
-                              </div>
-                              {cartItem ? (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                                  <button type="button" onClick={() => updatePublicCartItem(product.id, { quantity: cartItem.quantity - 1 })} style={{ width: 32, height: 32, borderRadius: '50%', border: '1px solid #e5e7eb', background: '#f9fafb', cursor: 'pointer', fontSize: 18, display: 'grid', placeItems: 'center' }}>-</button>
-                                  <span style={{ fontWeight: 700, minWidth: 20, textAlign: 'center' }}>{cartItem.quantity}</span>
-                                  <button type="button" onClick={() => { updatePublicCartItem(product.id, { quantity: cartItem.quantity + 1 }); setPublicDeliveryCartBounce(true); setTimeout(() => setPublicDeliveryCartBounce(false), 400); }} style={{ width: 32, height: 32, borderRadius: '50%', border: 'none', background: '#18201d', color: '#fff', cursor: 'pointer', fontSize: 18, display: 'grid', placeItems: 'center' }}>+</button>
-                                </div>
-                              ) : (
-                                <button type="button" onClick={() => addToPublicCart(product)} style={{ background: '#18201d', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 14px', cursor: 'pointer', fontWeight: 600, fontSize: 14, whiteSpace: 'nowrap', flexShrink: 0 }}>+ Adicionar</button>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-              {cartCount > 0 && (
-                <div style={{ position: 'fixed', bottom: 'calc(16px + env(safe-area-inset-bottom))', left: '50%', transform: 'translateX(-50%)', zIndex: 200, width: 'calc(100% - 32px)', maxWidth: 608 }}>
-                  <button type="button" onClick={() => setPublicDeliveryStep('checkout')}
-                    style={{
-                      width: '100%', border: 'none', borderRadius: 14, padding: '0', cursor: 'pointer',
-                      background: 'linear-gradient(135deg, #f1c44e 0%, #e6b800 100%)',
-                      boxShadow: '0 6px 24px rgba(241,196,78,0.45)',
-                      transform: publicDeliveryCartBounce ? 'scale(1.04)' : 'scale(1)',
-                      transition: 'transform 0.15s cubic-bezier(0.34,1.56,0.64,1)',
-                      display: 'flex', alignItems: 'stretch', overflow: 'hidden',
-                    }}>
-                    {/* Lado esquerdo — badge de quantidade */}
-                    <div style={{ background: 'rgba(0,0,0,0.12)', padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                      <span style={{ background: '#18201d', color: '#f1c44e', borderRadius: '50%', width: 26, height: 26, display: 'grid', placeItems: 'center', fontWeight: 800, fontSize: 13 }}>{cartCount}</span>
-                      <span style={{ color: '#18201d', fontWeight: 600, fontSize: 13 }}>{cartCount === 1 ? 'item' : 'itens'}</span>
-                    </div>
-                    {/* Lado direito — CTA + valor */}
-                    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '14px 18px' }}>
-                      <span style={{ color: '#18201d', fontWeight: 800, fontSize: 16 }}>Finalizar pedido</span>
-                      <span style={{ color: '#18201d', fontWeight: 700, fontSize: 15 }}>→</span>
-                    </div>
-                    {/* Valor total */}
-                    <div style={{ background: 'rgba(0,0,0,0.10)', padding: '14px 18px', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
-                      <span style={{ color: '#18201d', fontWeight: 800, fontSize: 15 }}>{formatCurrency(cartTotal)}</span>
-                    </div>
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
+                )}
+              </>
+            );
+          })()}
         </div>
       </main>
     );
