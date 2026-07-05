@@ -129,7 +129,7 @@ export const publicDeliveryApi = {
     const [companyRes, categoriesRes, productsRes] = await Promise.all([
       anonFetch(`/Company?id=eq.${encodeURIComponent(companyId)}&active=eq.true&select=id,name,menuBannerUrl,phone&limit=1`),
       anonFetch(`/Category?companyId=eq.${encodeURIComponent(companyId)}&active=eq.true&select=id,name,sort,imageUrl&order=sort.asc`),
-      anonFetch(`/Product?companyId=eq.${encodeURIComponent(companyId)}&active=eq.true&available=eq.true&select=id,categoryId,name,description,price,available&order=name.asc`),
+      anonFetch(`/Product?companyId=eq.${encodeURIComponent(companyId)}&active=eq.true&available=eq.true&select=id,categoryId,name,description,price,available,salesCount&order=name.asc`),
     ]);
     if (!companyRes.ok) throw new Error('Empresa não encontrada ou inativa.');
     const companies: any[] = await companyRes.json();
@@ -140,8 +140,8 @@ export const publicDeliveryApi = {
       company: companies[0] as { id: string; name: string; menuBannerUrl: string | null; phone: string | null },
       categories: categories as Array<{ id: string; name: string; sort: number; imageUrl: string | null }>,
       products: products
-        .map((p: any) => ({ ...p, price: Number(p.price) }))
-        .sort((a: any, b: any) => naturalNameCompare(a.name, b.name)) as Array<{ id: string; categoryId: string; name: string; description: string | null; price: number; available: boolean }>,
+        .map((p: any) => ({ ...p, price: Number(p.price), salesCount: Number(p.salesCount ?? 0) }))
+        .sort((a: any, b: any) => naturalNameCompare(a.name, b.name)) as Array<{ id: string; categoryId: string; name: string; description: string | null; price: number; available: boolean; salesCount: number }>,
     };
   },
 

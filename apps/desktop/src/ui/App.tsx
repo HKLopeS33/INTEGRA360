@@ -150,6 +150,21 @@ const clearPublicDeliveryState = (companyId: string) => {
   try { localStorage.removeItem(publicDeliveryStorageKey(companyId)); } catch { /* ignore */ }
 };
 
+// Perfil do cliente no cardápio público — salvo globalmente (não por empresa)
+// para pré-preencher nome/telefone/endereço em visitas futuras.
+const CUSTOMER_PROFILE_KEY = 'integra360_customer_profile';
+type CustomerProfile = { name: string; phone: string; address: string };
+const loadCustomerProfile = (): CustomerProfile | null => {
+  try {
+    const raw = localStorage.getItem(CUSTOMER_PROFILE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as CustomerProfile;
+  } catch { return null; }
+};
+const saveCustomerProfile = (profile: CustomerProfile) => {
+  try { localStorage.setItem(CUSTOMER_PROFILE_KEY, JSON.stringify(profile)); } catch { /* ignore */ }
+};
+
 // ── Splash screen ────────────────────────────────────────────────────────────
 type SplashState = 'checking' | 'downloading' | 'ready' | 'done';
 
@@ -362,6 +377,7 @@ export function App() {
   const [publicDeliveryMpAvailable, setPublicDeliveryMpAvailable] = useState(false);
   const [publicDeliveryShowResumeBanner, setPublicDeliveryShowResumeBanner] = useState(false);
   const [publicDeliveryCartBounce, setPublicDeliveryCartBounce] = useState(false);
+  const [publicDeliveryProfilePrefilled, setPublicDeliveryProfilePrefilled] = useState(false);
   const [publicPixCharge, setPublicPixCharge] = useState<{ qrCode: string | null; qrCodeBase64: string | null; ticketUrl: string | null } | null>(null);
   const [publicPixLoading, setPublicPixLoading] = useState(false);
   const [publicPixError, setPublicPixError] = useState<string | null>(null);
@@ -609,6 +625,20 @@ export function App() {
     publicDeliveryPhone, publicDeliveryAddress, publicDeliveryPayment, publicDeliveryNotes,
     publicDeliveryOrderId, publicDeliveryReceiptNumber, publicDeliveryTrackingStatus, publicDeliverySnapshot,
   ]);
+
+  // Pré-preenche nome/telefone/endereço a partir do perfil salvo quando o
+  // cliente abre o checkout — só aplica se os campos ainda estiverem vazios
+  // (evita sobrescrever dados já restaurados pelo estado salvo do pedido).
+  useEffect(() => {
+    if (publicDeliveryStep !== 'checkout') return;
+    if (publicDeliveryName || publicDeliveryAddress) return;
+    const profile = loadCustomerProfile();
+    if (!profile) return;
+    if (profile.name) setPublicDeliveryName(profile.name);
+    if (profile.phone) setPublicDeliveryPhone(profile.phone);
+    if (profile.address) setPublicDeliveryAddress(profile.address);
+    setPublicDeliveryProfilePrefilled(true);
+  }, [publicDeliveryStep]);
 
   // ── Verificador de atualização para Android (APK sideloaded) ──────────────
   useEffect(() => {
@@ -1681,6 +1711,8 @@ export function App() {
       setPublicDeliveryReceiptNumber(result.receiptNumber ?? null);
       // Salva snapshot para a mensagem WhatsApp (antes de limpar o carrinho)
       setPublicDeliverySnapshot({ items: cartSnapshot, paymentMethod: publicDeliveryPayment, grandTotal: grandTotalSnap });
+      // Salva perfil do cliente para pré-preencher em visitas futuras
+      saveCustomerProfile({ name: publicDeliveryName.trim(), phone: publicDeliveryPhone.trim(), address: publicDeliveryAddress.trim() });
 
       if (publicDeliveryPayment === 'PIX_ONLINE') {
         setPublicDeliveryStep('payment');
@@ -3243,7 +3275,14 @@ export function App() {
                 <div style={{ padding: '10px 16px 14px', display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 16, borderTop: '1px solid #f3f4f6' }}><span>Total</span><span>{formatCurrency(grandTotal)}</span></div>
               </div>
               <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #e5e7eb', padding: 16, display: 'grid', gap: 12 }}>
-                <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>Seus dados</div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <div style={{ fontWeight: 700, fontSize: 15 }}>Seus dados</div>
+                  {publicDeliveryProfilePrefilled && (
+                    <span style={{ fontSize: 12, color: '#16a34a', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 6, padding: '3px 8px', fontWeight: 600 }}>
+                      ✓ Dados do último pedido
+                    </span>
+                  )}
+                </div>
                 <label style={{ display: 'grid', gap: 4, fontSize: 14 }}>Nome *<input value={publicDeliveryName} onChange={(e) => setPublicDeliveryName(e.target.value)} placeholder="Seu nome completo" style={{ padding: '10px 12px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 14 }} /></label>
                 <label style={{ display: 'grid', gap: 4, fontSize: 14 }}>Telefone<input value={publicDeliveryPhone} onChange={(e) => setPublicDeliveryPhone(e.target.value)} placeholder="(00) 00000-0000" type="tel" style={{ padding: '10px 12px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 14 }} /></label>
                 <label style={{ display: 'grid', gap: 4, fontSize: 14 }}>Endereco de entrega *<input value={publicDeliveryAddress} onChange={(e) => setPublicDeliveryAddress(e.target.value)} placeholder="Rua, numero, bairro" style={{ padding: '10px 12px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 14 }} /></label>
@@ -3358,6 +3397,47 @@ export function App() {
               {publicDeliveryCategories.length === 0 && publicDeliveryProducts.length === 0 && !publicDeliveryError && (
                 <div style={{ textAlign: 'center', padding: 40, color: '#9ca3af' }}>Carregando cardapio...</div>
               )}
+              {/* Seção "Mais pedidos" — top 5 por salesCount */}
+              {(() => {
+                const topProducts = [...publicDeliveryProducts]
+                  .filter((p) => (p as any).salesCount > 0)
+                  .sort((a, b) => ((b as any).salesCount ?? 0) - ((a as any).salesCount ?? 0))
+                  .slice(0, 5);
+                if (topProducts.length === 0) return null;
+                return (
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                      <span style={{ fontSize: 18 }}>🔥</span>
+                      <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Mais pedidos</h3>
+                    </div>
+                    <div style={{ display: 'grid', gap: 10 }}>
+                      {topProducts.map((product) => {
+                        const cartItem = publicDeliveryCart.find((i) => i.product.id === product.id);
+                        return (
+                          <div key={`top-${product.id}`} style={{ background: '#fff', borderRadius: 12, border: '2px solid #f1c44e', overflow: 'hidden', display: 'flex', alignItems: 'stretch' }}>
+                            <div style={{ flex: 1, padding: '12px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 2 }}>{product.name}</div>
+                                {product.description && <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 6 }}>{product.description}</div>}
+                                <div style={{ fontWeight: 700, color: '#18201d', fontSize: 15 }}>{formatCurrency(product.price)}</div>
+                              </div>
+                              {cartItem ? (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                                  <button type="button" onClick={() => updatePublicCartItem(product.id, { quantity: cartItem.quantity - 1 })} style={{ width: 32, height: 32, borderRadius: '50%', border: '1px solid #e5e7eb', background: '#f9fafb', cursor: 'pointer', fontSize: 18, display: 'grid', placeItems: 'center' }}>-</button>
+                                  <span style={{ fontWeight: 700, minWidth: 20, textAlign: 'center' }}>{cartItem.quantity}</span>
+                                  <button type="button" onClick={() => { updatePublicCartItem(product.id, { quantity: cartItem.quantity + 1 }); setPublicDeliveryCartBounce(true); setTimeout(() => setPublicDeliveryCartBounce(false), 400); }} style={{ width: 32, height: 32, borderRadius: '50%', border: 'none', background: '#18201d', color: '#fff', cursor: 'pointer', fontSize: 18, display: 'grid', placeItems: 'center' }}>+</button>
+                                </div>
+                              ) : (
+                                <button type="button" onClick={() => addToPublicCart(product)} style={{ background: '#18201d', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 14px', cursor: 'pointer', fontWeight: 600, fontSize: 14, whiteSpace: 'nowrap', flexShrink: 0 }}>+ Adicionar</button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
               {publicDeliveryCategories.map((cat) => {
                 const catProducts = publicDeliveryProducts.filter((p) => p.categoryId === cat.id);
                 if (catProducts.length === 0) return null;
