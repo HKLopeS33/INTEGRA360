@@ -351,7 +351,7 @@ export function App() {
   const [menuTableId, setMenuTableId] = useState<string | null>(null);
   // Delivery público (link para cliente)
   const [publicDeliveryCompanyId, setPublicDeliveryCompanyId] = useState<string | null>(null);
-  const [publicDeliveryCompany, setPublicDeliveryCompany] = useState<{ id: string; name: string; menuBannerUrl?: string | null; phone?: string | null } | null>(null);
+  const [publicDeliveryCompany, setPublicDeliveryCompany] = useState<{ id: string; name: string; menuBannerUrl?: string | null; phone?: string | null; deliveryFeeAmount?: number; openingTime?: string; closingTime?: string } | null>(null);
   const [publicDeliveryCategories, setPublicDeliveryCategories] = useState<Array<{ id: string; name: string; sort: number; imageUrl?: string | null }>>([]);
   const [publicDeliveryProducts, setPublicDeliveryProducts] = useState<Array<{ id: string; categoryId: string; name: string; description: string | null; price: number; available: boolean }>>([]);
   const [publicDeliveryCart, setPublicDeliveryCart] = useState<Array<{ product: { id: string; name: string; price: number }; quantity: number; note: string }>>([]);
@@ -449,6 +449,9 @@ export function App() {
   const [storePhone, setStorePhone] = useState('');
   const [storeCity, setStoreCity] = useState('');
   const [storePixKey, setStorePixKey] = useState('');
+  const [storeDeliveryFeeAmount, setStoreDeliveryFeeAmount] = useState('0');
+  const [storeOpeningTime, setStoreOpeningTime] = useState('18:00');
+  const [storeClosingTime, setStoreClosingTime] = useState('00:00');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -562,6 +565,7 @@ export function App() {
         setPublicDeliveryCompany(data.company);
         setPublicDeliveryCategories(data.categories);
         setPublicDeliveryProducts(data.products);
+        setPublicDeliveryFee(data.company.deliveryFeeAmount ?? 0);
         // Contabiliza a visita assincronamente — falha silenciosa intencional
         void publicDeliveryApi.incrementMenuOpenCount(deliveryId);
       }).catch(() => {
@@ -768,6 +772,9 @@ export function App() {
       setPrinterKitchen(kitchenPrinter);
       setPrinterCashier(cashierPrinter);
       setPrintingDisabled(printDisabled);
+      setStoreDeliveryFeeAmount(String(currentCompany.deliveryFeeAmount ?? 0));
+      setStoreOpeningTime(currentCompany.openingTime ?? '18:00');
+      setStoreClosingTime(currentCompany.closingTime ?? '00:00');
 
       // Persiste no localStorage para uso imediato no PIX
       localStorage.setItem('storeName', name);
@@ -1380,7 +1387,10 @@ export function App() {
           address: storeAddress,
           kitchenPrinter: printerKitchen,
           cashierPrinter: printerCashier,
-          printingDisabled
+          printingDisabled,
+          deliveryFeeAmount: Number(storeDeliveryFeeAmount) || 0,
+          openingTime: storeOpeningTime || '18:00',
+          closingTime: storeClosingTime || '00:00',
         });
         // Atualiza o state diretamente para garantir que PIX usa a nova chave imediatamente
         setCurrentCompany({ ...response.company, pixKey: storePixKey });
@@ -3475,6 +3485,49 @@ export function App() {
                     </div>
                   </div>
                 )}
+
+                {/* Card de informações: frete + horário */}
+                {publicDeliveryCompany && ((() => {
+                  const fee = publicDeliveryCompany.deliveryFeeAmount ?? 0;
+                  const opening = publicDeliveryCompany.openingTime ?? '18:00';
+                  const closing = publicDeliveryCompany.closingTime ?? '00:00';
+                  // Verifica se está aberto agora
+                  const now = new Date();
+                  const [oh, om] = opening.split(':').map(Number);
+                  const [ch, cm] = closing.split(':').map(Number);
+                  const nowMin = now.getHours() * 60 + now.getMinutes();
+                  const openMin = oh * 60 + om;
+                  const closeMin = ch * 60 + cm;
+                  // Suporta virada de meia-noite (ex: 18:00 até 00:30)
+                  const isOpen = closeMin <= openMin
+                    ? nowMin >= openMin || nowMin < closeMin
+                    : nowMin >= openMin && nowMin < closeMin;
+                  return (
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      {/* Frete */}
+                      <div style={{ flex: 1, minWidth: 130, background: fee === 0 ? '#f0fdf4' : '#fff', border: `1px solid ${fee === 0 ? '#bbf7d0' : '#e5e7eb'}`, borderRadius: 10, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontSize: 20 }}>🛵</span>
+                        <div>
+                          <div style={{ fontSize: 11, color: '#9ca3af', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Entrega</div>
+                          <div style={{ fontWeight: 700, fontSize: 14, color: fee === 0 ? '#16a34a' : '#18201d' }}>
+                            {fee === 0 ? 'Grátis' : formatCurrency(fee)}
+                          </div>
+                        </div>
+                      </div>
+                      {/* Horário */}
+                      <div style={{ flex: 1, minWidth: 130, background: isOpen ? '#f0fdf4' : '#fef2f2', border: `1px solid ${isOpen ? '#bbf7d0' : '#fca5a5'}`, borderRadius: 10, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontSize: 20 }}>🕐</span>
+                        <div>
+                          <div style={{ fontSize: 11, color: '#9ca3af', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Horário</div>
+                          <div style={{ fontWeight: 700, fontSize: 14, color: isOpen ? '#16a34a' : '#b91c1c' }}>
+                            {isOpen ? 'Aberto agora' : 'Fechado'}
+                          </div>
+                          <div style={{ fontSize: 11, color: '#6b7280', marginTop: 1 }}>{opening} – {closing}</div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })())}
 
                 {/* Produtos da tab ativa */}
                 <div style={{ display: 'grid', gap: 10, paddingBottom: cartCount > 0 ? 96 : 16 }}>
@@ -7442,6 +7495,48 @@ export function App() {
                         />
                       </div>
                     )}
+                    <div style={{ borderTop: '1px solid #f3f4f6', marginTop: 20, paddingTop: 16 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Entrega e Horário</div>
+                      <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 12 }}>Exibidos no cardápio online para o cliente antes de montar o pedido.</p>
+                      <div style={{ display: 'grid', gap: 12 }}>
+                        <label style={{ display: 'grid', gap: 4, fontSize: 13 }}>
+                          Taxa de entrega (R$) — deixe 0 para "Frete grátis"
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.50"
+                            value={storeDeliveryFeeAmount}
+                            onChange={(e) => setStoreDeliveryFeeAmount(e.target.value)}
+                            placeholder="0"
+                            style={{ padding: '8px 10px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 14 }}
+                          />
+                        </label>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                          <label style={{ display: 'grid', gap: 4, fontSize: 13 }}>
+                            Abre às
+                            <input
+                              type="time"
+                              value={storeOpeningTime}
+                              onChange={(e) => setStoreOpeningTime(e.target.value)}
+                              style={{ padding: '8px 10px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 14 }}
+                            />
+                          </label>
+                          <label style={{ display: 'grid', gap: 4, fontSize: 13 }}>
+                            Fecha às
+                            <input
+                              type="time"
+                              value={storeClosingTime}
+                              onChange={(e) => setStoreClosingTime(e.target.value)}
+                              style={{ padding: '8px 10px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 14 }}
+                            />
+                          </label>
+                        </div>
+                        <button className="primary-button" type="button" style={{ width: 'fit-content' }} onClick={saveStoreSettings}>
+                          Salvar entrega e horário
+                        </button>
+                      </div>
+                    </div>
+
                     <div style={{ borderTop: '1px solid #f3f4f6', marginTop: 20, paddingTop: 16 }}>
                       <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Banner do cardápio</div>
                       <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 12 }}>Imagem exibida no topo do cardápio online. Ideal: 1200×400px.</p>

@@ -59,7 +59,10 @@ const normalizeCompany = (company: any) => ({
   cashierPrinter: company.cashierPrinter ?? null,
   printingDisabled: company.printingDisabled ?? false,
   menuBannerUrl: company.menuBannerUrl ?? null,
-  active: company.active
+  active: company.active,
+  deliveryFeeAmount: Number(company.deliveryFeeAmount ?? 0),
+  openingTime: company.openingTime ?? '18:00',
+  closingTime: company.closingTime ?? '00:00',
 });
 
 const normalizeTableDisplay = (tabs: Array<{ status: string }>) => {
@@ -127,7 +130,7 @@ const anonFetch = async (path: string, options?: RequestInit) => {
 export const publicDeliveryApi = {
   getMenu: async (companyId: string) => {
     const [companyRes, categoriesRes, productsRes] = await Promise.all([
-      anonFetch(`/Company?id=eq.${encodeURIComponent(companyId)}&active=eq.true&select=id,name,menuBannerUrl,phone&limit=1`),
+      anonFetch(`/Company?id=eq.${encodeURIComponent(companyId)}&active=eq.true&select=id,name,menuBannerUrl,phone,deliveryFeeAmount,openingTime,closingTime&limit=1`),
       anonFetch(`/Category?companyId=eq.${encodeURIComponent(companyId)}&active=eq.true&select=id,name,sort,imageUrl&order=sort.asc`),
       anonFetch(`/Product?companyId=eq.${encodeURIComponent(companyId)}&active=eq.true&available=eq.true&select=id,categoryId,name,description,price,available,salesCount&order=name.asc`),
     ]);
@@ -137,7 +140,7 @@ export const publicDeliveryApi = {
     const categories: any[] = await categoriesRes.json();
     const products: any[] = await productsRes.json();
     return {
-      company: companies[0] as { id: string; name: string; menuBannerUrl: string | null; phone: string | null },
+      company: { ...companies[0], deliveryFeeAmount: Number(companies[0].deliveryFeeAmount ?? 0) } as { id: string; name: string; menuBannerUrl: string | null; phone: string | null; deliveryFeeAmount: number; openingTime: string; closingTime: string },
       categories: categories as Array<{ id: string; name: string; sort: number; imageUrl: string | null }>,
       products: products
         .map((p: any) => ({ ...p, price: Number(p.price), salesCount: Number(p.salesCount ?? 0) }))
@@ -346,7 +349,7 @@ export const api = {
     return { company: normalizeCompany(company) };
   },
 
-  updateCompanyProfile: async (payload: { name?: string; cnpj?: string; email?: string; phone?: string; address?: string; city?: string; state?: string; country?: string; pixKey?: string; kitchenPrinter?: string; cashierPrinter?: string; printingDisabled?: boolean }) => {
+  updateCompanyProfile: async (payload: { name?: string; cnpj?: string; email?: string; phone?: string; address?: string; city?: string; state?: string; country?: string; pixKey?: string; kitchenPrinter?: string; cashierPrinter?: string; printingDisabled?: boolean; deliveryFeeAmount?: number; openingTime?: string; closingTime?: string }) => {
     const user = await requireCompanyUser();
     const { data, error } = await supabase
       .from('Company')
@@ -363,9 +366,12 @@ export const api = {
         kitchenPrinter: payload.kitchenPrinter ?? null,
         cashierPrinter: payload.cashierPrinter ?? null,
         printingDisabled: payload.printingDisabled ?? false,
+        ...(payload.deliveryFeeAmount !== undefined && { deliveryFeeAmount: payload.deliveryFeeAmount }),
+        ...(payload.openingTime !== undefined && { openingTime: payload.openingTime }),
+        ...(payload.closingTime !== undefined && { closingTime: payload.closingTime }),
       })
       .eq('id', user.companyId)
-      .select('id,name,email,cnpj,phone,address,city,state,country,pixKey,kitchenPrinter,cashierPrinter,printingDisabled,menuBannerUrl,active')
+      .select('id,name,email,cnpj,phone,address,city,state,country,pixKey,kitchenPrinter,cashierPrinter,printingDisabled,menuBannerUrl,active,deliveryFeeAmount,openingTime,closingTime')
       .single();
 
     if (error) {
