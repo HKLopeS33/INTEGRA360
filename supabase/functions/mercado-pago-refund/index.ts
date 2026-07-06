@@ -45,11 +45,11 @@ Deno.serve(async (req) => {
 
     const adminClient = createClient(supabaseUrl, serviceKey);
 
-    // Verificar que o usuário é ADMIN da empresa
+    // Verificar que o usuário tem role permitida (tabela User, id = auth user id)
     const { data: companyUser } = await adminClient
-      .from('CompanyUser')
+      .from('User')
       .select('companyId, role')
-      .eq('userId', user.id)
+      .eq('id', user.id)
       .maybeSingle();
 
     const allowedRoles = ['ADMIN', 'GERENTE', 'CAIXA'];
