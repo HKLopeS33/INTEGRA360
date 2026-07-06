@@ -59,9 +59,11 @@ Deno.serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const deliveryOrderId = String(body.deliveryOrderId ?? '');
-    const action = String(body.action ?? ''); // 'approve' | 'reject'
+    const action = String(body.action ?? ''); // 'approve' | 'reject' | 'approve_manual'
+    // approve_manual: cancela o pedido no sistema sem chamar a API do MP
+    // (o reembolso financeiro é feito manualmente pelo admin no painel do MP)
 
-    if (!deliveryOrderId || !['approve', 'reject'].includes(action)) {
+    if (!deliveryOrderId || !['approve', 'reject', 'approve_manual'].includes(action)) {
       return json({ error: 'Parâmetros inválidos.' }, 400);
     }
 
@@ -92,7 +94,16 @@ Deno.serve(async (req) => {
       return json({ ok: true, action: 'rejected' });
     }
 
-    // action === 'approve': executar o estorno
+    if (action === 'approve_manual') {
+      // Cancela no sistema sem chamar MP — admin faz o reembolso manualmente no painel MP
+      await adminClient
+        .from('DeliveryOrder')
+        .update({ status: 'CANCELADO', paymentStatus: 'ESTORNADO', cancellationRequestedAt: null })
+        .eq('id', deliveryOrderId);
+      return json({ ok: true, action: 'cancelled_manual_refund' });
+    }
+
+    // action === 'approve': executar o estorno via API do MP
     // Verificar se o pagamento foi feito via MP (paymentStatus = PAGO)
     if (order.paymentStatus !== 'PAGO') {
       // Cancelamento sem estorno financeiro (ex: pedido em dinheiro)
@@ -104,7 +115,7 @@ Deno.serve(async (req) => {
     }
 
     // Buscar o mpPaymentId no registro de pagamento
-    const { data: mpPayment } = await adminClient
+    const { data: mpPayment, error: mpPaymentError } = await adminClient
       .from('MercadoPagoPayment')
       .select('mpPaymentId')
       .eq('deliveryOrderId', deliveryOrderId)
@@ -113,8 +124,10 @@ Deno.serve(async (req) => {
       .limit(1)
       .maybeSingle();
 
+    console.log('mpPayment lookup:', { mpPayment, mpPaymentError, deliveryOrderId });
+
     if (!mpPayment?.mpPaymentId) {
-      // Pagamento pago mas sem registro MP (ex: dinheiro marcado como PAGO manualmente)
+      // Pagamento pago mas sem registro MP (ex: dinheiro/pix na entrega)
       await adminClient
         .from('DeliveryOrder')
         .update({ status: 'CANCELADO', paymentStatus: 'ESTORNADO', cancellationRequestedAt: null })
@@ -122,8 +135,18 @@ Deno.serve(async (req) => {
       return json({ ok: true, action: 'cancelled_no_mp_record' });
     }
 
+    // Buscar access token master
+    let accessToken: string;
+    try {
+      accessToken = await getMasterAccessToken(adminClient);
+      console.log('accessToken obtido:', !!accessToken);
+    } catch (tokenErr) {
+      console.error('Erro ao obter accessToken:', tokenErr);
+      return json({ error: `Erro ao obter token MP: ${String(tokenErr)}` }, 500);
+    }
+
     // Chamar API de reembolso do Mercado Pago
-    const accessToken = await getMasterAccessToken(adminClient);
+    console.log('Chamando MP refund para mpPaymentId:', mpPayment.mpPaymentId);
     const mpRes = await fetch(`https://api.mercadopago.com/v1/payments/${mpPayment.mpPaymentId}/refunds`, {
       method: 'POST',
       headers: {
@@ -131,20 +154,21 @@ Deno.serve(async (req) => {
         'Content-Type': 'application/json',
         'X-Idempotency-Key': `refund-${deliveryOrderId}`,
       },
-      body: JSON.stringify({}), // reembolso total
+      body: JSON.stringify({}),
     });
 
     const mpData = await mpRes.json();
+    console.log('MP refund response:', mpRes.status, JSON.stringify(mpData));
 
     if (!mpRes.ok) {
-      console.error('MP refund error:', mpData);
-      return json({ error: 'Falha ao processar estorno no Mercado Pago.', detail: mpData }, 502);
+      const mpMessage = mpData?.message ?? mpData?.error ?? JSON.stringify(mpData);
+      return json({ error: `Falha no Mercado Pago (${mpRes.status}): ${mpMessage}`, detail: mpData }, 502);
     }
 
     const refundMpId = String(mpData.id ?? '');
 
     // Atualizar pedido
-    await adminClient
+    const { error: updateError } = await adminClient
       .from('DeliveryOrder')
       .update({
         status: 'CANCELADO',
@@ -153,6 +177,7 @@ Deno.serve(async (req) => {
         cancellationRequestedAt: null,
       })
       .eq('id', deliveryOrderId);
+    if (updateError) console.error('Erro ao atualizar DeliveryOrder:', updateError);
 
     // Debitar da wallet (valor líquido que havia sido creditado)
     const { data: wallet } = await adminClient
@@ -164,18 +189,19 @@ Deno.serve(async (req) => {
     const feePercent = Number(wallet?.deliveryFeePercent ?? 0);
     const netAmount  = Number(order.total) * (1 - feePercent / 100);
 
-    await adminClient.rpc('credit_wallet', {
-      p_company_id:       companyUser.companyId,
-      p_amount:           -netAmount,
-      p_type:             'ESTORNO_DELIVERY',
-      p_description:      `Estorno pedido delivery ${deliveryOrderId}`,
+    const { error: walletError } = await adminClient.rpc('credit_wallet', {
+      p_company_id:        companyUser.companyId,
+      p_amount:            -netAmount,
+      p_type:              'ESTORNO_DELIVERY',
+      p_description:       `Estorno pedido delivery ${deliveryOrderId}`,
       p_delivery_order_id: deliveryOrderId,
-      p_tab_id:           null,
+      p_tab_id:            null,
     });
+    if (walletError) console.error('Erro ao debitar wallet:', walletError);
 
     return json({ ok: true, action: 'refunded', refundMpId });
   } catch (err) {
-    console.error('mercado-pago-refund error:', err);
-    return json({ error: 'Erro interno.' }, 500);
+    console.error('mercado-pago-refund unhandled error:', String(err), err);
+    return json({ error: `Erro interno: ${String(err)}` }, 500);
   }
 });

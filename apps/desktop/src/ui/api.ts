@@ -895,6 +895,25 @@ export const api = {
     return data;
   },
 
+  // Cancela o pedido no sistema sem chamar a API do MP.
+  // Usar quando o estorno automático falha — admin faz o reembolso manualmente no painel MP.
+  approveManualRefund: async (deliveryOrderId: string) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token ?? '';
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/mercado-pago-refund`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+        'apikey': SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ deliveryOrderId, action: 'approve_manual' }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error ?? 'Falha ao cancelar pedido.');
+    return data;
+  },
+
   // ─────────────────────────────────────────────────────────────────────────
 
   orders: async (active?: boolean) => {
