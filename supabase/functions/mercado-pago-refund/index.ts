@@ -52,8 +52,9 @@ Deno.serve(async (req) => {
       .eq('userId', user.id)
       .maybeSingle();
 
-    if (!companyUser || companyUser.role !== 'ADMIN') {
-      return json({ error: 'Acesso negado. Somente ADMIN pode aprovar estornos.' }, 403);
+    const allowedRoles = ['ADMIN', 'GERENTE', 'CAIXA'];
+    if (!companyUser || !allowedRoles.includes(companyUser.role)) {
+      return json({ error: 'Acesso negado. Somente ADMIN, GERENTE ou CAIXA podem aprovar estornos.' }, 403);
     }
 
     const body = await req.json().catch(() => ({}));
