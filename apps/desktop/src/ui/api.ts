@@ -861,7 +861,7 @@ export const api = {
     }));
   },
 
-  approveRefund: async (deliveryOrderId: string) => {
+  approveRefund: async (deliveryOrderId: string): Promise<{ ok: boolean; action: string; warning?: string }> => {
     const { data: { session } } = await supabase.auth.getSession();
     const token = session?.access_token ?? '';
     const res = await fetch(`${SUPABASE_URL}/functions/v1/mercado-pago-refund`, {

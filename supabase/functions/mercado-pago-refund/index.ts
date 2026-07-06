@@ -161,8 +161,18 @@ Deno.serve(async (req) => {
     console.log('MP refund response:', mpRes.status, JSON.stringify(mpData));
 
     if (!mpRes.ok) {
-      const mpMessage = mpData?.message ?? mpData?.error ?? JSON.stringify(mpData);
-      return json({ error: `Falha no Mercado Pago (${mpRes.status}): ${mpMessage}`, detail: mpData }, 502);
+      // MP retornou erro — cancela o pedido no sistema mesmo assim e avisa
+      // que o estorno financeiro precisa ser tratado manualmente no painel MP.
+      console.error('MP refund failed, falling back to manual cancel:', mpRes.status, JSON.stringify(mpData));
+      await adminClient
+        .from('DeliveryOrder')
+        .update({ status: 'CANCELADO', paymentStatus: 'ESTORNADO', cancellationRequestedAt: null })
+        .eq('id', deliveryOrderId);
+      return json({
+        ok: true,
+        action: 'cancelled_mp_error',
+        warning: `Pedido cancelado no sistema, mas o estorno no Mercado Pago falhou (${mpRes.status}). Acesse o painel do MP para estornar manualmente o pagamento.`,
+      });
     }
 
     const refundMpId = String(mpData.id ?? '');

@@ -6902,30 +6902,20 @@ export function App() {
                                   <div style={{ fontWeight: 700, fontSize: 13, color: '#c2410c' }}>Estorno solicitado</div>
                                   {order.status === 'ENTREGUE' && <div style={{ fontSize: 12, color: '#9a3412', fontWeight: 600, marginTop: 2 }}>⚠️ Atenção: pedido já foi entregue. Possível má fé.</div>}
                                   {(order as any).cancellationReason && <div style={{ fontSize: 12, color: '#7c2d12', marginTop: 4 }}>Motivo: {(order as any).cancellationReason}</div>}
-                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
-                                    <button type="button" style={{ flex: 1, minWidth: 120, padding: '8px 0', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 7, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}
+                                  <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                                    <button type="button" style={{ flex: 1, padding: '8px 0', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
                                       onClick={async () => {
-                                        if (!confirm(order.status === 'ENTREGUE' ? '⚠️ O pedido já foi entregue. Tem certeza que deseja aprovar o estorno via Mercado Pago?' : 'Aprovar estorno via Mercado Pago?')) return;
-                                        try { await api.approveRefund(order.id); void loadDeliveryOrders(); }
-                                        catch (e: any) {
-                                          const msg = e.message ?? 'Falha ao aprovar estorno.';
-                                          if (confirm(`${msg}\n\nDeseja cancelar o pedido manualmente? (você precisará fazer o estorno no painel do Mercado Pago)`)) {
-                                            try { await api.approveManualRefund(order.id); void loadDeliveryOrders(); }
-                                            catch (e2: any) { alert(e2.message ?? 'Falha ao cancelar.'); }
-                                          }
+                                        if (!confirm(order.status === 'ENTREGUE' ? '⚠️ O pedido já foi entregue. Tem certeza que deseja aprovar o estorno?' : 'Confirmar aprovação do estorno?')) return;
+                                        try {
+                                          const result = await api.approveRefund(order.id);
+                                          void loadDeliveryOrders();
+                                          if (result.warning) alert(`⚠️ ${result.warning}`);
                                         }
+                                        catch (e: any) { alert(e.message ?? 'Falha ao aprovar estorno.'); }
                                       }}>
-                                      ✓ Estorno via MP
+                                      ✓ Aprovar estorno
                                     </button>
-                                    <button type="button" style={{ flex: 1, minWidth: 120, padding: '8px 0', background: '#6b7280', color: '#fff', border: 'none', borderRadius: 7, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}
-                                      onClick={async () => {
-                                        if (!confirm('Cancelar o pedido no sistema sem estorno automático?\n\nVocê precisará fazer o reembolso manualmente no painel do Mercado Pago.')) return;
-                                        try { await api.approveManualRefund(order.id); void loadDeliveryOrders(); }
-                                        catch (e: any) { alert(e.message ?? 'Falha ao cancelar.'); }
-                                      }}>
-                                      ✓ Cancelar manualmente
-                                    </button>
-                                    <button type="button" style={{ flex: 1, minWidth: 100, padding: '8px 0', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 7, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}
+                                    <button type="button" style={{ flex: 1, padding: '8px 0', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
                                       onClick={async () => {
                                         if (!confirm('Rejeitar solicitação de cancelamento?')) return;
                                         try { await api.rejectRefund(order.id); void loadDeliveryOrders(); }
