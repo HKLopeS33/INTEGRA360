@@ -388,6 +388,10 @@ export function App() {
   const [publicCardError, setPublicCardError] = useState<string | null>(null);
   const [publicCardProcessing, setPublicCardProcessing] = useState(false);
   const publicCardBrickControllerRef = useRef<any>(null);
+  const [publicCancellationReason, setPublicCancellationReason] = useState('');
+  const [publicCancellationSubmitting, setPublicCancellationSubmitting] = useState(false);
+  const [publicCancellationRequested, setPublicCancellationRequested] = useState(false);
+  const [publicCancellationError, setPublicCancellationError] = useState<string | null>(null);
   const [menuCart, setMenuCart] = useState<Array<{ product: Product; quantity: number; note: string }>>([]);
   const [menuModalTable, setMenuModalTable] = useState<RestaurantTable | null>(null);
   const [tableCart, setTableCart] = useState<Array<{ product: Product; quantity: number; note: string }>>([]);
@@ -3227,6 +3231,46 @@ export function App() {
                         </div>
                       );
                     })}
+                  </div>
+                )}
+
+                {/* Solicitar estorno — disponível quando pedido não está cancelado */}
+                {!isCancelled && publicDeliveryOrderId && (
+                  <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 12, padding: 16, marginBottom: 12 }}>
+                    {publicCancellationRequested ? (
+                      <div style={{ textAlign: 'center', color: '#ea580c', fontWeight: 600, fontSize: 14 }}>
+                        ⏳ Solicitação de cancelamento enviada. O estabelecimento irá analisar.
+                      </div>
+                    ) : (
+                      <>
+                        <div style={{ fontWeight: 700, fontSize: 14, color: '#c2410c', marginBottom: 8 }}>Solicitar cancelamento / estorno</div>
+                        <textarea
+                          value={publicCancellationReason}
+                          onChange={(e) => setPublicCancellationReason(e.target.value)}
+                          placeholder="Descreva o motivo do cancelamento..."
+                          rows={3}
+                          style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #fed7aa', fontSize: 13, resize: 'vertical', boxSizing: 'border-box' }}
+                        />
+                        {publicCancellationError && <div style={{ color: '#dc2626', fontSize: 13, marginTop: 4 }}>{publicCancellationError}</div>}
+                        <button
+                          type="button"
+                          disabled={publicCancellationSubmitting || !publicCancellationReason.trim()}
+                          onClick={async () => {
+                            if (!publicCancellationReason.trim() || !publicDeliveryOrderId) return;
+                            setPublicCancellationSubmitting(true);
+                            setPublicCancellationError(null);
+                            try {
+                              const result = await publicDeliveryApi.requestCancellation(publicDeliveryOrderId, publicCancellationReason.trim());
+                              if (result.error) { setPublicCancellationError(result.error); }
+                              else { setPublicCancellationRequested(true); setPublicCancellationReason(''); }
+                            } catch { setPublicCancellationError('Falha ao enviar solicitação. Tente novamente.'); }
+                            finally { setPublicCancellationSubmitting(false); }
+                          }}
+                          style={{ marginTop: 8, width: '100%', padding: '10px 0', background: publicCancellationSubmitting || !publicCancellationReason.trim() ? '#e5e7eb' : '#ea580c', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 14, cursor: publicCancellationSubmitting || !publicCancellationReason.trim() ? 'not-allowed' : 'pointer' }}>
+                          {publicCancellationSubmitting ? 'Enviando...' : 'Solicitar cancelamento'}
+                        </button>
+                      </>
+                    )}
                   </div>
                 )}
 
@@ -6848,8 +6892,37 @@ export function App() {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                       {deliveryOrders.map((order) => {
                         const cfg = statusConfig[order.status] ?? statusConfig.RECEBIDO;
+                        const hasCancellationRequest = !!(order as any).cancellationRequestedAt;
                         return (
-                          <div key={order.id} style={{ border: '1.5px solid #e5e7eb', borderRadius: 12, padding: 16, background: '#fafbfa' }}>
+                          <div key={order.id} style={{ border: hasCancellationRequest ? '1.5px solid #f97316' : '1.5px solid #e5e7eb', borderRadius: 12, padding: 16, background: hasCancellationRequest ? '#fff7ed' : '#fafbfa' }}>
+                            {hasCancellationRequest && (
+                              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, background: '#ffedd5', border: '1px solid #fed7aa', borderRadius: 8, padding: '8px 12px', marginBottom: 12 }}>
+                                <span style={{ fontSize: 16 }}>⚠️</span>
+                                <div style={{ flex: 1 }}>
+                                  <div style={{ fontWeight: 700, fontSize: 13, color: '#c2410c' }}>Estorno solicitado</div>
+                                  {order.status === 'ENTREGUE' && <div style={{ fontSize: 12, color: '#9a3412', fontWeight: 600, marginTop: 2 }}>⚠️ Atenção: pedido já foi entregue. Possível má fé.</div>}
+                                  {(order as any).cancellationReason && <div style={{ fontSize: 12, color: '#7c2d12', marginTop: 4 }}>Motivo: {(order as any).cancellationReason}</div>}
+                                  <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                                    <button type="button" style={{ flex: 1, padding: '8px 0', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
+                                      onClick={async () => {
+                                        if (!confirm(order.status === 'ENTREGUE' ? '⚠️ O pedido já foi entregue. Tem certeza que deseja aprovar o estorno?' : 'Confirmar aprovação do estorno?')) return;
+                                        try { await api.approveRefund(order.id); void loadDeliveryOrders(); }
+                                        catch (e: any) { alert(e.message ?? 'Falha ao aprovar estorno.'); }
+                                      }}>
+                                      ✓ Aprovar estorno
+                                    </button>
+                                    <button type="button" style={{ flex: 1, padding: '8px 0', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
+                                      onClick={async () => {
+                                        if (!confirm('Rejeitar solicitação de cancelamento?')) return;
+                                        try { await api.rejectRefund(order.id); void loadDeliveryOrders(); }
+                                        catch (e: any) { alert(e.message ?? 'Falha ao rejeitar.'); }
+                                      }}>
+                                      ✗ Rejeitar
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
                               <div>
                                 <div style={{ fontWeight: 700, fontSize: 15 }}>{order.customerName}</div>
@@ -7355,7 +7428,15 @@ export function App() {
                             type="button"
                             className="secondary-button"
                             onClick={() => setSelectedReceipt(receipt)}
-                            style={{ textAlign: 'left', padding: '8px 12px', background: receipt.type === 'delivery' ? '#fffbeb' : undefined, borderColor: receipt.type === 'delivery' ? '#fde68a' : undefined }}
+                            style={{
+                              textAlign: 'left', padding: '8px 12px',
+                              background: receipt.type === 'delivery'
+                                ? (receipt.paymentStatus === 'ESTORNADO' ? '#fef2f2' : receipt.status === 'CANCELADO' ? '#f9fafb' : '#fffbeb')
+                                : undefined,
+                              borderColor: receipt.type === 'delivery'
+                                ? (receipt.paymentStatus === 'ESTORNADO' ? '#fca5a5' : receipt.status === 'CANCELADO' ? '#e5e7eb' : '#fde68a')
+                                : undefined,
+                            }}
                           >
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                               <span>
@@ -7364,7 +7445,15 @@ export function App() {
                                   : <><strong>Nº {String(receipt.receiptNumber).padStart(6, '0')}</strong> - {receipt.tableName}</>
                                 }
                               </span>
-                              <span style={{ fontWeight: 700 }}>{formatCurrency(receipt.total)}</span>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                {receipt.type === 'delivery' && receipt.paymentStatus === 'ESTORNADO' && (
+                                  <span style={{ fontSize: 10, fontWeight: 700, background: '#fee2e2', color: '#b91c1c', border: '1px solid #fca5a5', borderRadius: 4, padding: '2px 6px' }}>ESTORNADO</span>
+                                )}
+                                {receipt.type === 'delivery' && receipt.status === 'CANCELADO' && receipt.paymentStatus !== 'ESTORNADO' && (
+                                  <span style={{ fontSize: 10, fontWeight: 700, background: '#f3f4f6', color: '#6b7280', border: '1px solid #d1d5db', borderRadius: 4, padding: '2px 6px' }}>CANCELADO</span>
+                                )}
+                                <span style={{ fontWeight: 700, color: receipt.paymentStatus === 'ESTORNADO' || receipt.status === 'CANCELADO' ? '#9ca3af' : undefined, textDecoration: receipt.paymentStatus === 'ESTORNADO' ? 'line-through' : undefined }}>{formatCurrency(receipt.total)}</span>
+                              </div>
                             </div>
                             {receipt.type === 'delivery' && receipt.status && (
                               <div style={{ fontSize: 11, color: '#92400e', marginTop: 2 }}>{receipt.status} · {receipt.paymentMethod}</div>

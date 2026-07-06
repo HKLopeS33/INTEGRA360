@@ -303,6 +303,16 @@ export const publicDeliveryApi = {
   incrementMenuOpenCount: async (companyId: string): Promise<void> => {
     await supabaseAnon.rpc('increment_menu_open_count', { p_company_id: companyId });
   },
+
+  // Cliente solicita cancelamento do pedido (sem autenticação, via RPC anon)
+  requestCancellation: async (orderId: string, reason: string): Promise<{ ok?: boolean; error?: string }> => {
+    const { data, error } = await supabaseAnon.rpc('request_delivery_cancellation', {
+      p_order_id: orderId,
+      p_reason: reason,
+    });
+    if (error) return { error: error.message };
+    return data as { ok?: boolean; error?: string };
+  },
 };
 
 export const api = {
@@ -761,7 +771,7 @@ export const api = {
     const user = await requireCompanyUserWithRoles(['ADMIN', 'GERENTE', 'CAIXA', 'GARCOM', 'COZINHA']);
     let query = supabase
       .from('DeliveryOrder')
-      .select('id,customerName,customerPhone,customerAddress,status,paymentMethod,deliveryFee,total,notes,createdAt,closedAt')
+      .select('id,customerName,customerPhone,customerAddress,status,paymentMethod,paymentStatus,deliveryFee,total,notes,createdAt,closedAt,cancellationRequestedAt,cancellationReason')
       .eq('companyId', user.companyId)
       // Pedidos com pagamento online pendente ainda não foram confirmados pelo
       // Mercado Pago — não devem aparecer para o estabelecimento até o pagamento ser aprovado.
@@ -769,7 +779,8 @@ export const api = {
       .order('createdAt', { ascending: false });
     if (status === 'all') { /* sem filtro — retorna todos (exceto aguardando pagamento) */ }
     else if (status) query = query.eq('status', status);
-    else query = query.neq('status', 'ENTREGUE').neq('status', 'CANCELADO');
+    // Padrão: pedidos ativos + pedidos com estorno solicitado (mesmo que ENTREGUE)
+    else query = query.or('status.neq.ENTREGUE,cancellationRequestedAt.not.is.null').neq('status', 'CANCELADO');
 
     const { data: orders, error } = await query;
     if (error) throwSupabaseError(error, 'Falha ao carregar pedidos de delivery.');
@@ -831,6 +842,57 @@ export const api = {
       .eq('companyId', user.companyId);
     if (error) throwSupabaseError(error, 'Falha ao salvar número do recibo.');
     return next as number;
+  },
+
+  // Retorna pedidos com solicitação de cancelamento pendente (para o painel do restaurante)
+  listPendingCancellations: async () => {
+    const user = await requireCompanyUserWithRoles(['ADMIN', 'GERENTE', 'CAIXA']);
+    const { data, error } = await supabase
+      .from('DeliveryOrder')
+      .select('id,customerName,customerPhone,total,status,paymentMethod,paymentStatus,cancellationReason,cancellationRequestedAt,createdAt')
+      .eq('companyId', user.companyId)
+      .not('cancellationRequestedAt', 'is', null)
+      .neq('status', 'CANCELADO')
+      .order('cancellationRequestedAt', { ascending: true });
+    if (error) throwSupabaseError(error, 'Falha ao carregar solicitações de cancelamento.');
+    return (data || []).map((o: any) => ({
+      ...o,
+      total: Number(o.total),
+    }));
+  },
+
+  approveRefund: async (deliveryOrderId: string) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token ?? '';
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/mercado-pago-refund`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+        'apikey': SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ deliveryOrderId, action: 'approve' }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error ?? 'Falha ao aprovar estorno.');
+    return data;
+  },
+
+  rejectRefund: async (deliveryOrderId: string) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token ?? '';
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/mercado-pago-refund`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+        'apikey': SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ deliveryOrderId, action: 'reject' }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error ?? 'Falha ao rejeitar cancelamento.');
+    return data;
   },
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -1381,12 +1443,12 @@ export const api = {
         .gte('receiptGeneratedAt', today.toISOString())
         .lt('receiptGeneratedAt', tomorrow.toISOString())
         .order('receiptGeneratedAt', { ascending: true }),
+      // Inclui pedidos pagos normais + cancelados/estornados (para exibir nos recibos com badge)
       supabase
         .from('DeliveryOrder')
-        .select('id,customerName,total,deliveryFee,paymentMethod,status,createdAt,receiptNumber')
+        .select('id,customerName,total,deliveryFee,paymentMethod,status,paymentStatus,createdAt,receiptNumber')
         .eq('companyId', user.companyId)
-        .neq('status', 'CANCELADO')
-        .eq('paymentStatus', 'PAGO')
+        .or('paymentStatus.eq.PAGO,paymentStatus.eq.ESTORNADO,status.eq.CANCELADO')
         .gte('createdAt', today.toISOString())
         .lt('createdAt', tomorrow.toISOString())
         .order('createdAt', { ascending: true }),
@@ -1422,6 +1484,7 @@ export const api = {
       receiptGeneratedAt: formatDate(d.createdAt),
       paymentMethod: d.paymentMethod,
       status: d.status,
+      paymentStatus: d.paymentStatus,
     }));
 
     return [...mesaReceipts, ...deliveryReceipts].sort((a, b) =>

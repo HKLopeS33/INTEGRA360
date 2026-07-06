@@ -18,12 +18,15 @@ export interface DeliveryOrder {
   customerAddress: string;
   status: DeliveryStatus;
   paymentMethod: string;
+  paymentStatus?: string;
   deliveryFee: number;
   total: number;
   notes?: string;
   items: DeliveryOrderItem[];
   createdAt: string;
   closedAt?: string;
+  cancellationRequestedAt?: string | null;
+  cancellationReason?: string | null;
 }
 export type DisplayStatus = 'LIVRE' | 'AMARELO' | 'VERMELHO';
 export type OrderStatus = 'ENVIADO' | 'EM_PREPARO' | 'PRONTO' | 'ENTREGUE' | 'CANCELADO';
