@@ -6908,7 +6908,7 @@ export function App() {
                                         if (!confirm(order.status === 'ENTREGUE' ? '⚠️ O pedido já foi entregue. Tem certeza que deseja aprovar o estorno?' : 'Confirmar aprovação do estorno?')) return;
                                         try {
                                           const result = await api.approveRefund(order.id);
-                                          void loadDeliveryOrders();
+                                          await loadDeliveryOrders();
                                           if (result.warning) alert(`⚠️ ${result.warning}`);
                                         }
                                         catch (e: any) { alert(e.message ?? 'Falha ao aprovar estorno.'); }

@@ -779,11 +779,37 @@ export const api = {
       .order('createdAt', { ascending: false });
     if (status === 'all') { /* sem filtro — retorna todos (exceto aguardando pagamento) */ }
     else if (status) query = query.eq('status', status);
-    // Padrão: pedidos ativos + pedidos com estorno solicitado (mesmo que ENTREGUE)
-    else query = query.or('status.neq.ENTREGUE,cancellationRequestedAt.not.is.null').neq('status', 'CANCELADO');
+    else {
+      // Ativos: nem ENTREGUE nem CANCELADO
+      query = query.neq('status', 'ENTREGUE').neq('status', 'CANCELADO');
+    }
 
     const { data: orders, error } = await query;
     if (error) throwSupabaseError(error, 'Falha ao carregar pedidos de delivery.');
+
+    if (status !== 'all' && !status) {
+      // Busca separada: pedidos com estorno pendente (qualquer status exceto CANCELADO),
+      // incluindo ENTREGUE — deve aparecer no painel para o admin aprovar/rejeitar.
+      const { data: pendingCancellations } = await supabase
+        .from('DeliveryOrder')
+        .select('id,customerName,customerPhone,customerAddress,status,paymentMethod,paymentStatus,deliveryFee,total,notes,createdAt,closedAt,cancellationRequestedAt,cancellationReason')
+        .eq('companyId', user.companyId)
+        .not('cancellationRequestedAt', 'is', null)
+        .neq('status', 'CANCELADO')
+        .order('createdAt', { ascending: false });
+
+      if (pendingCancellations && pendingCancellations.length > 0) {
+        const existingIds = new Set((orders || []).map((o: any) => o.id));
+        const extra = pendingCancellations.filter((o: any) => !existingIds.has(o.id));
+        const merged = [...(orders || []), ...extra];
+        return merged.map((o: any) => ({
+          ...o,
+          deliveryFee: Number(o.deliveryFee),
+          total: Number(o.total),
+          items: [],
+        }));
+      }
+    }
 
     if (!orders || orders.length === 0) return [];
 
@@ -1467,7 +1493,7 @@ export const api = {
         .from('DeliveryOrder')
         .select('id,customerName,total,deliveryFee,paymentMethod,status,paymentStatus,createdAt,receiptNumber')
         .eq('companyId', user.companyId)
-        .or('paymentStatus.eq.PAGO,paymentStatus.eq.ESTORNADO,status.eq.CANCELADO')
+        .in('paymentStatus', ['PAGO', 'ESTORNADO'])
         .gte('createdAt', today.toISOString())
         .lt('createdAt', tomorrow.toISOString())
         .order('createdAt', { ascending: true }),
