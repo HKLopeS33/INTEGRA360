@@ -63,7 +63,7 @@ Deno.serve(async (req) => {
     // approve_manual: cancela o pedido no sistema sem chamar a API do MP
     // (o reembolso financeiro é feito manualmente pelo admin no painel do MP)
 
-    if (!deliveryOrderId || !['approve', 'reject', 'approve_manual'].includes(action)) {
+    if (!deliveryOrderId || !['approve', 'reject', 'approve_manual', 'direct_cancel'].includes(action)) {
       return json({ error: 'Parâmetros inválidos.' }, 400);
     }
 
@@ -78,11 +78,12 @@ Deno.serve(async (req) => {
     if (orderError || !order) {
       return json({ error: 'Pedido não encontrado.' }, 404);
     }
-    if (!order.cancellationRequestedAt) {
-      return json({ error: 'Nenhuma solicitação de cancelamento para este pedido.' }, 400);
-    }
     if (order.status === 'CANCELADO') {
       return json({ error: 'Pedido já foi cancelado.' }, 400);
+    }
+    // direct_cancel é iniciado pelo estabelecimento — não requer solicitação do cliente
+    if (action !== 'direct_cancel' && !order.cancellationRequestedAt) {
+      return json({ error: 'Nenhuma solicitação de cancelamento para este pedido.' }, 400);
     }
 
     if (action === 'reject') {
@@ -98,18 +99,20 @@ Deno.serve(async (req) => {
       // Cancela no sistema sem chamar MP — admin faz o reembolso manualmente no painel MP
       await adminClient
         .from('DeliveryOrder')
-        .update({ status: 'CANCELADO', paymentStatus: 'ESTORNADO', cancellationRequestedAt: null })
+        .update({ status: 'CANCELADO', paymentStatus: 'ESTORNADO', cancellationRequestedAt: null, closedAt: new Date().toISOString() })
         .eq('id', deliveryOrderId);
       return json({ ok: true, action: 'cancelled_manual_refund' });
     }
 
-    // action === 'approve': executar o estorno via API do MP
+    // action === 'approve' | 'direct_cancel': executar o estorno via API do MP
     // Verificar se o pagamento foi feito via MP (paymentStatus = PAGO)
+    const closedAt = new Date().toISOString();
+
     if (order.paymentStatus !== 'PAGO') {
       // Cancelamento sem estorno financeiro (ex: pedido em dinheiro)
       await adminClient
         .from('DeliveryOrder')
-        .update({ status: 'CANCELADO', cancellationRequestedAt: null })
+        .update({ status: 'CANCELADO', cancellationRequestedAt: null, closedAt })
         .eq('id', deliveryOrderId);
       return json({ ok: true, action: 'cancelled_no_refund' });
     }
@@ -130,7 +133,7 @@ Deno.serve(async (req) => {
       // Pagamento pago mas sem registro MP (ex: dinheiro/pix na entrega)
       await adminClient
         .from('DeliveryOrder')
-        .update({ status: 'CANCELADO', paymentStatus: 'ESTORNADO', cancellationRequestedAt: null })
+        .update({ status: 'CANCELADO', paymentStatus: 'ESTORNADO', cancellationRequestedAt: null, closedAt })
         .eq('id', deliveryOrderId);
       return json({ ok: true, action: 'cancelled_no_mp_record' });
     }
@@ -161,12 +164,10 @@ Deno.serve(async (req) => {
     console.log('MP refund response:', mpRes.status, JSON.stringify(mpData));
 
     if (!mpRes.ok) {
-      // MP retornou erro — cancela o pedido no sistema mesmo assim e avisa
-      // que o estorno financeiro precisa ser tratado manualmente no painel MP.
       console.error('MP refund failed, falling back to manual cancel:', mpRes.status, JSON.stringify(mpData));
       await adminClient
         .from('DeliveryOrder')
-        .update({ status: 'CANCELADO', paymentStatus: 'ESTORNADO', cancellationRequestedAt: null })
+        .update({ status: 'CANCELADO', paymentStatus: 'ESTORNADO', cancellationRequestedAt: null, closedAt })
         .eq('id', deliveryOrderId);
       return json({
         ok: true,
@@ -177,7 +178,6 @@ Deno.serve(async (req) => {
 
     const refundMpId = String(mpData.id ?? '');
 
-    // Atualizar pedido
     const { error: updateError } = await adminClient
       .from('DeliveryOrder')
       .update({
@@ -185,11 +185,12 @@ Deno.serve(async (req) => {
         paymentStatus: 'ESTORNADO',
         refundMpId,
         cancellationRequestedAt: null,
+        closedAt,
       })
       .eq('id', deliveryOrderId);
     if (updateError) console.error('Erro ao atualizar DeliveryOrder:', updateError);
 
-    // Debitar da wallet (valor líquido que havia sido creditado)
+    // Debitar da wallet apenas o valor líquido que havia sido creditado
     const { data: wallet } = await adminClient
       .from('Wallet')
       .select('deliveryFeePercent, balance')

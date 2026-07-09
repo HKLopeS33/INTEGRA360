@@ -6,7 +6,7 @@ import { generateKitchenTicketHTML, generateThermalHTML } from './receipt';
 type ToastType = 'success' | 'error' | 'warning' | 'info';
 interface ToastItem { id: number; message: string; type: ToastType; removing?: boolean; }
 import { api, publicDeliveryApi } from './api.js';
-import { supabase } from './supabase.ts';
+import { supabase, supabaseAnon } from './supabase.ts';
 import type { Order, Product, RestaurantTable } from './types.js';
 import { printReceipt } from './receipt';
 
@@ -419,6 +419,9 @@ export function App() {
   const [editAddress, setEditAddress] = useState('');
   const [editMonthlyFee, setEditMonthlyFee] = useState('0.00');
   const [editDeliveryFeePercent, setEditDeliveryFeePercent] = useState('0');
+  const [editPlan, setEditPlan] = useState<'STARTER' | 'PRO' | 'ENTERPRISE'>('STARTER');
+  const [editPlanMonthlyPrice, setEditPlanMonthlyPrice] = useState('');
+  const [editTrialDays, setEditTrialDays] = useState('');
   const [showUsersModal, setShowUsersModal] = useState(false);
   const [showInvoicesModal, setShowInvoicesModal] = useState(false);
   const [invoiceCompany, setInvoiceCompany] = useState<any | null>(null);
@@ -519,6 +522,22 @@ export function App() {
   const [companyTopProducts, setCompanyTopProducts] = useState<any>(null);
   const [companyLowProducts, setCompanyLowProducts] = useState<any>(null);
   const [loadingCompanyReport, setLoadingCompanyReport] = useState(false);
+
+  // Retorna true se a empresa tem acesso às funcionalidades Pro/Enterprise.
+  // Trial ativo também garante acesso completo.
+  const isPro = useMemo(() => {
+    if (!currentCompany) return false;
+    const plan = currentCompany.plan ?? 'STARTER';
+    if (plan === 'PRO' || plan === 'ENTERPRISE') return true;
+    const trialEnd = currentCompany.trialEndsAt ? new Date(currentCompany.trialEndsAt).getTime() : 0;
+    return trialEnd > Date.now();
+  }, [currentCompany]);
+
+  const trialDaysLeft = useMemo(() => {
+    if (!currentCompany?.trialEndsAt) return 0;
+    const diff = new Date(currentCompany.trialEndsAt).getTime() - Date.now();
+    return Math.max(0, Math.ceil(diff / 86400000));
+  }, [currentCompany]);
 
   const selectedTable = useMemo(
     () => tables.find((table) => table.id === selectedTableId) ?? tables[0],
@@ -684,35 +703,56 @@ export function App() {
   }, []);
   // ──────────────────────────────────────────────────────────────────────────
 
-  // Polling do status do pedido público (tela de acompanhamento)
+  // Tracking em tempo real via Supabase Realtime (substitui polling de 5s)
   useEffect(() => {
     if (publicDeliveryStep !== 'tracking' || !publicDeliveryOrderId) return;
 
     const FINAL = ['ENTREGUE', 'CANCELADO'];
-    let stopped = false;
 
-    const poll = async () => {
-      try {
-        const result = await publicDeliveryApi.getOrderStatus(publicDeliveryOrderId);
-        if (result && !stopped) {
+    // Busca inicial do status atual
+    publicDeliveryApi.getOrderStatus(publicDeliveryOrderId).then((result) => {
+      if (result) {
+        setPublicDeliveryTrackingStatus(result.status);
+        if (result.receiptNumber != null) setPublicDeliveryReceiptNumber(result.receiptNumber);
+      }
+    }).catch(() => {});
+
+    // Subscrição Realtime — atualiza instantaneamente quando o restaurante muda o status
+    const channel = supabaseAnon
+      .channel(`delivery-tracking-${publicDeliveryOrderId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'DeliveryOrder',
+          filter: `id=eq.${publicDeliveryOrderId}`,
+        },
+        (payload) => {
+          const row = payload.new as any;
+          if (row.status) setPublicDeliveryTrackingStatus(row.status);
+          if (row.receiptNumber != null) setPublicDeliveryReceiptNumber(row.receiptNumber);
+          // Para de escutar quando pedido finalizado
+          if (FINAL.includes(row.status)) supabaseAnon.removeChannel(channel);
+        },
+      )
+      .subscribe();
+
+    // Fallback: polling leve a cada 30s caso o Realtime falhe/não conecte
+    const fallback = setInterval(() => {
+      if (FINAL.includes(publicDeliveryTrackingStatus)) { clearInterval(fallback); return; }
+      publicDeliveryApi.getOrderStatus(publicDeliveryOrderId).then((result) => {
+        if (result) {
           setPublicDeliveryTrackingStatus(result.status);
           if (result.receiptNumber != null) setPublicDeliveryReceiptNumber(result.receiptNumber);
         }
-      } catch { /* silencioso */ }
+      }).catch(() => {});
+    }, 30000);
+
+    return () => {
+      supabaseAnon.removeChannel(channel);
+      clearInterval(fallback);
     };
-
-    poll();
-    const interval = setInterval(() => {
-      if (stopped) return;
-      poll().then(() => {
-        if (FINAL.includes(publicDeliveryTrackingStatus)) {
-          stopped = true;
-          clearInterval(interval);
-        }
-      });
-    }, 5000);
-
-    return () => { stopped = true; clearInterval(interval); };
   }, [publicDeliveryStep, publicDeliveryOrderId]);
 
   // Barra de progresso animada por etapa (loop contínuo)
@@ -952,6 +992,10 @@ export function App() {
   const saveTableCount = async () => {
     const desired = Math.max(0, Math.floor(Number(storeTableCount) || 0));
     if (desired === storeTableCountOriginal) return;
+    if (!isPro && desired > 10) {
+      showToast('O plano Starter permite até 10 mesas. Faça upgrade para o plano Pro para adicionar mais.', 'error');
+      return;
+    }
     setSavingTableCount(true);
     try {
       const result = await api.setMyCompanyTableCount(desired);
@@ -1214,6 +1258,9 @@ export function App() {
     setEditAddress(company.address ?? '');
     setEditMonthlyFee(String(company.monthlyFee ?? '0.00'));
     setEditDeliveryFeePercent(String(company.deliveryFeePercent ?? '0'));
+    setEditPlan((company.plan ?? 'STARTER') as 'STARTER' | 'PRO' | 'ENTERPRISE');
+    setEditPlanMonthlyPrice(String(company.planMonthlyPrice ?? ''));
+    setEditTrialDays('');
     setShowEditModal(true);
   };
 
@@ -1226,6 +1273,9 @@ export function App() {
     setEditAddress(company.address ?? '');
     setEditMonthlyFee(String(company.monthlyFee ?? '0.00'));
     setEditDeliveryFeePercent(String(company.deliveryFeePercent ?? '0'));
+    setEditPlan((company.plan ?? 'STARTER') as 'STARTER' | 'PRO' | 'ENTERPRISE');
+    setEditPlanMonthlyPrice(String(company.planMonthlyPrice ?? ''));
+    setEditTrialDays('');
     // load users and find ADMIN for this company
     try {
       setLoadingUsers(true);
@@ -1511,6 +1561,13 @@ export function App() {
         monthlyFee: Number(editMonthlyFee.replace(',', '.')) || 0,
         deliveryFeePercent: Number(editDeliveryFeePercent.replace(',', '.')) || 0
       });
+
+      // update plan if changed
+      if (editPlan !== (selectedCompany.plan ?? 'STARTER') || editTrialDays || editPlanMonthlyPrice) {
+        const trialDays    = editTrialDays ? parseInt(editTrialDays, 10) : undefined;
+        const monthlyPrice = editPlanMonthlyPrice ? Number(editPlanMonthlyPrice.replace(',', '.')) : undefined;
+        await api.setCompanyPlan(selectedCompany.id, editPlan, trialDays, monthlyPrice);
+      }
 
       // update admin user if present
       if (editAdminId) {
@@ -2962,9 +3019,11 @@ export function App() {
     }
   };
 
-  // Splash screen
+  // Splash screen — onDone must be stable (useCallback) to avoid resetting
+  // splash timers on every App re-render caused by async state updates.
+  const handleSplashDone = useCallback(() => setShowSplash(false), []);
   if (showSplash) {
-    return <SplashScreen onDone={() => setShowSplash(false)} />;
+    return <SplashScreen onDone={handleSplashDone} />;
   }
 
   // Página pública de delivery — deve ficar ANTES do login
@@ -4257,6 +4316,8 @@ export function App() {
         <nav className="nav-list" aria-label="Principal">
           {getNavItems(currentUser?.role).map((item) => {
             const Icon = item.icon;
+            // Módulos que exigem plano Pro
+            const proOnly = !isPro && (item.id === 'cozinha');
 
             return (
               <button
@@ -4264,13 +4325,28 @@ export function App() {
                 key={item.id}
                 type="button"
                 onClick={() => setActiveModule(item.id)}
+                title={proOnly ? 'Disponível no plano Pro' : undefined}
               >
                 <Icon size={18} />
                 <span>{item.label}</span>
+                {proOnly && (
+                  <span style={{ marginLeft: 'auto', fontSize: 12, opacity: 0.7 }}>🔒</span>
+                )}
               </button>
             );
           })}
         </nav>
+
+        {/* Banner de plano na sidebar */}
+        {currentCompany && currentUser?.role !== 'SUPER' && (
+          <div style={{ margin: '8px 10px', borderRadius: 8, padding: '8px 10px', fontSize: 11, background: isPro ? (trialDaysLeft > 0 ? '#fffbeb' : '#f0fdf4') : '#fef2f2', border: `1px solid ${isPro ? (trialDaysLeft > 0 ? '#fde68a' : '#bbf7d0') : '#fecaca'}`, color: isPro ? (trialDaysLeft > 0 ? '#92400e' : '#15803d') : '#991b1b', lineHeight: 1.4 }}>
+            {trialDaysLeft > 0 ? (
+              <>⏳ <strong>Trial Pro</strong> — {trialDaysLeft} dia{trialDaysLeft !== 1 ? 's' : ''} restante{trialDaysLeft !== 1 ? 's' : ''}</>
+            ) : (
+              <><strong>{currentCompany.plan ?? 'STARTER'}</strong> — {isPro ? 'Plano ativo' : 'Upgrade disponível'}</>
+            )}
+          </div>
+        )}
 
         <button className="logout-button" type="button" onClick={handleLogout}><LogOut size={18} /><span>Sair</span></button>
       </aside>
@@ -4917,6 +4993,18 @@ export function App() {
           </section>
         )}
 
+        {activeModule === 'cozinha' && !isPro && (
+          <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '14px 18px', margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ fontSize: 22 }}>🔒</span>
+            <div>
+              <div style={{ fontWeight: 700, color: '#92400e' }}>Tela de Cozinha (KDS) — Plano Pro</div>
+              <div style={{ fontSize: 13, color: '#b45309', marginTop: 2 }}>
+                O KDS está disponível no plano <strong>Pro</strong> (R$149/mês). Você ainda pode visualizar os pedidos, mas para uso em produção faça upgrade com o suporte.
+              </div>
+            </div>
+          </div>
+        )}
+
         {activeModule === 'cozinha' && (() => {
           const now = Date.now();
           const elapsed = (iso: string) => {
@@ -5551,6 +5639,7 @@ export function App() {
                         <th style={{ textAlign: 'left', padding: 12, fontWeight: 600, borderBottom: '2px solid #e5e7eb' }}>Empresa</th>
                         <th style={{ textAlign: 'left', padding: 12, fontWeight: 600, borderBottom: '2px solid #e5e7eb' }}>E-mail</th>
                         <th style={{ textAlign: 'left', padding: 12, fontWeight: 600, borderBottom: '2px solid #e5e7eb' }}>CNPJ</th>
+                        <th style={{ textAlign: 'left', padding: 12, fontWeight: 600, borderBottom: '2px solid #e5e7eb' }}>Plano</th>
                         <th style={{ textAlign: 'left', padding: 12, fontWeight: 600, borderBottom: '2px solid #e5e7eb' }}>Status</th>
                         <th style={{ textAlign: 'left', padding: 12, fontWeight: 600, borderBottom: '2px solid #e5e7eb', whiteSpace: 'nowrap' }}>Vencimento</th>
                         <th style={{ textAlign: 'left', padding: 12, fontWeight: 600, borderBottom: '2px solid #e5e7eb' }}>Mensalidade</th>
@@ -5560,7 +5649,7 @@ export function App() {
                     </thead>
                     <tbody>
                       {loadingCompanies ? (
-                        <tr><td colSpan={8} style={{ padding: 12, textAlign: 'center' }}>Carregando...</td></tr>
+                        <tr><td colSpan={9} style={{ padding: 12, textAlign: 'center' }}>Carregando...</td></tr>
                       ) : (companies || []).filter((c) => {
                         // apply search
                         if (companySearch && !(c.name || '').toLowerCase().includes(companySearch.toLowerCase())) return false;
@@ -5577,7 +5666,7 @@ export function App() {
                         if (companyFilterStatus === 'paid' && !allPaid) return false;
                         return true;
                       }).length === 0 ? (
-                        <tr><td colSpan={8} style={{ padding: 12, textAlign: 'center' }}>Nenhuma empresa cadastrada.</td></tr>
+                        <tr><td colSpan={9} style={{ padding: 12, textAlign: 'center' }}>Nenhuma empresa cadastrada.</td></tr>
                       ) : (companies || []).filter((c) => {
                         if (companySearch && !(c.name || '').toLowerCase().includes(companySearch.toLowerCase())) return false;
                         const now = Date.now();
@@ -5604,6 +5693,34 @@ export function App() {
                           <td style={{ padding: 12 }}>{c.name}</td>
                           <td style={{ padding: 12, fontSize: 13 }}>{c.email}</td>
                           <td style={{ padding: 12 }}>{c.cnpj}</td>
+                          <td style={{ padding: 12 }}>
+                            {(() => {
+                              const plan = c.plan ?? 'STARTER';
+                              const trialEnd = c.trialEndsAt ? new Date(c.trialEndsAt).getTime() : 0;
+                              const inTrial = trialEnd > Date.now();
+                              const planColors: Record<string, { bg: string; color: string }> = {
+                                STARTER: { bg: '#f3f4f6', color: '#374151' },
+                                PRO: { bg: '#fffbeb', color: '#92400e' },
+                                ENTERPRISE: { bg: '#eff6ff', color: '#1d4ed8' },
+                              };
+                              const pc = planColors[plan] ?? planColors.STARTER;
+                              return (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                  <span style={{ background: pc.bg, color: pc.color, border: `1px solid ${pc.color}30`, borderRadius: 6, padding: '2px 8px', fontSize: 12, fontWeight: 700, width: 'fit-content' }}>
+                                    {plan}
+                                  </span>
+                                  {c.planMonthlyPrice > 0 && (
+                                    <span style={{ fontSize: 10, color: pc.color }}>{formatCurrency(c.planMonthlyPrice)}/mês</span>
+                                  )}
+                                  {inTrial && (
+                                    <span style={{ fontSize: 10, color: '#92400e' }}>
+                                      Trial: {Math.max(0, Math.ceil((trialEnd - Date.now()) / 86400000))}d restantes
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                          </td>
                           <td style={{ padding: 12 }}>
                             {(() => {
                               const expired = c.expiresAt && new Date(c.expiresAt).getTime() < Date.now();
@@ -6671,6 +6788,32 @@ export function App() {
                 <label>Endereco<input value={editAddress} onChange={(e) => setEditAddress(e.target.value)} /></label>
                 <label>Mensalidade<input value={editMonthlyFee} onChange={(e) => setEditMonthlyFee(e.target.value)} /></label>
                 <label>Taxa da plataforma (%)<input value={editDeliveryFeePercent} onChange={(e) => setEditDeliveryFeePercent(e.target.value)} /></label>
+                <label>
+                  Plano
+                  <select
+                    value={editPlan}
+                    onChange={(e) => {
+                      const p = e.target.value as 'STARTER' | 'PRO' | 'ENTERPRISE';
+                      setEditPlan(p);
+                      if (!editPlanMonthlyPrice) {
+                        setEditPlanMonthlyPrice(p === 'STARTER' ? '79' : p === 'PRO' ? '149' : '0');
+                      }
+                    }}
+                    style={{ display: 'block', width: '100%', marginTop: 4, padding: '6px 8px', borderRadius: 6, border: '1px solid #d1d5db' }}
+                  >
+                    <option value="STARTER">Starter (até 10 mesas)</option>
+                    <option value="PRO">Pro (mesas ilimitadas + KDS + Carteira)</option>
+                    <option value="ENTERPRISE">Enterprise (personalizado)</option>
+                  </select>
+                </label>
+                <label>
+                  Preço do plano (R$/mês)
+                  <input type="number" min="0" step="0.01" value={editPlanMonthlyPrice} onChange={(e) => setEditPlanMonthlyPrice(e.target.value)} placeholder="Ex: 149" />
+                </label>
+                <label>
+                  Trial (dias a adicionar, deixe vazio para não alterar)
+                  <input type="number" min="0" value={editTrialDays} onChange={(e) => setEditTrialDays(e.target.value)} placeholder="Ex: 14" />
+                </label>
                 <hr />
                 <h4>Administrador</h4>
                 <label>Nome admin<input value={editAdminName} onChange={(e) => setEditAdminName(e.target.value)} /></label>
@@ -7115,6 +7258,11 @@ export function App() {
                   </div>
                 </div>
                 <div style={{ display: 'grid', gap: 14 }}>
+                  {!isPro && (
+                    <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#92400e' }}>
+                      🔒 <strong>Plano Pro</strong> — Pagamentos online via Pix e Cartão, e saldo na Carteira, estão disponíveis no plano Pro. Entre em contato com o suporte para fazer upgrade.
+                    </div>
+                  )}
                   <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '14px 16px' }}>
                     <div style={{ fontSize: 12, color: '#15803d', fontWeight: 700, textTransform: 'uppercase' }}>Saldo disponível</div>
                     <div style={{ fontSize: 28, fontWeight: 800, color: '#15803d' }}>{formatCurrency(walletInfo?.balance ?? 0)}</div>

@@ -123,6 +123,12 @@ Deno.serve(async (req) => {
           if (updatedRows && updatedRows.length > 0) {
             const amount = Number(mpData.transaction_amount ?? dlvOrder.total);
             await creditDeliveryWallet(adminClient, companyIdToUse, amount, deliveryOrderId);
+            // Notifica o cliente que o pedido foi recebido após confirmação do pagamento
+            fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/whatsapp-notify`, {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ orderId: deliveryOrderId, status: 'RECEBIDO' }),
+            }).catch(() => {});
           }
         }
       }

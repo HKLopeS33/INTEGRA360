@@ -63,6 +63,9 @@ const normalizeCompany = (company: any) => ({
   deliveryFeeAmount: Number(company.deliveryFeeAmount ?? 0),
   openingTime: company.openingTime ?? '18:00',
   closingTime: company.closingTime ?? '00:00',
+  plan: (company.plan ?? 'STARTER') as 'STARTER' | 'PRO' | 'ENTERPRISE',
+  planMonthlyPrice: Number(company.planMonthlyPrice ?? 0),
+  trialEndsAt: company.trialEndsAt ?? null,
 });
 
 const normalizeTableDisplay = (tabs: Array<{ status: string }>) => {
@@ -215,6 +218,11 @@ export const publicDeliveryApi = {
         receiptNumber = rows[0]?.receiptNumber ?? null;
       }
     } catch { /* não crítico — exibe o número se disponível */ }
+
+    // Notificação WhatsApp para pedidos em dinheiro (status já é RECEBIDO no insert)
+    if (!isOnlinePayment) {
+      supabaseAnon.functions.invoke('whatsapp-notify', { body: { orderId, status: 'RECEBIDO' } }).catch(() => {});
+    }
 
     return { id: orderId, receiptNumber };
   },
@@ -764,6 +772,7 @@ export const api = {
         })));
       if (itemsError) throwSupabaseError(itemsError, 'Falha ao salvar itens do pedido.');
     }
+    supabase.functions.invoke('whatsapp-notify', { body: { orderId: order.id, status: 'RECEBIDO' } }).catch(() => {});
     return { id: order.id };
   },
 
@@ -833,15 +842,27 @@ export const api = {
   },
 
   updateDeliveryStatus: async (orderId: string, status: string) => {
-    const user = await requireCompanyUserWithRoles(['ADMIN', 'GERENTE', 'CAIXA', 'GARCOM', 'COZINHA']);
+    await requireCompanyUserWithRoles(['ADMIN', 'GERENTE', 'CAIXA', 'GARCOM', 'COZINHA']);
+
+    if (status === 'CANCELADO') {
+      // Delega à Edge Function: estorna MP (se pago online) e debita carteira atomicamente
+      const { data, error } = await supabase.functions.invoke('mercado-pago-refund', {
+        body: { deliveryOrderId: orderId, action: 'direct_cancel' },
+      });
+      if (error) throwSupabaseError(error, 'Falha ao cancelar pedido.');
+      if (data?.error) throw new Error(data.error);
+      supabase.functions.invoke('whatsapp-notify', { body: { orderId, status } }).catch(() => {});
+      return { success: true };
+    }
+
     const update: any = { status, updatedAt: new Date().toISOString() };
-    if (status === 'ENTREGUE' || status === 'CANCELADO') update.closedAt = new Date().toISOString();
+    if (status === 'ENTREGUE') update.closedAt = new Date().toISOString();
     const { error } = await supabase
       .from('DeliveryOrder')
       .update(update)
-      .eq('id', orderId)
-      .eq('companyId', user.companyId);
+      .eq('id', orderId);
     if (error) throwSupabaseError(error, 'Falha ao atualizar status do pedido.');
+    supabase.functions.invoke('whatsapp-notify', { body: { orderId, status } }).catch(() => {});
     return { success: true };
   },
 
@@ -1943,7 +1964,7 @@ export const api = {
     await requireSuperUser();
     const { data: companies, error: companiesError } = await supabase
       .from('Company')
-      .select('id,name,email,cnpj,active,menuOpenCount')
+      .select('id,name,email,cnpj,active,menuOpenCount,plan,planMonthlyPrice,trialEndsAt')
       .order('name', { ascending: true });
     if (companiesError) {
       throwSupabaseError(companiesError, 'Falha ao carregar empresas.');
@@ -1998,9 +2019,25 @@ export const api = {
         payments: paymentsByCompany[company.id] ?? [],
         walletBalance: wallet ? Number(wallet.balance) : 0,
         deliveryFeePercent: wallet ? Number(wallet.deliveryFeePercent) : 0,
-        menuOpenCount: Number(company.menuOpenCount ?? 0)
+        menuOpenCount: Number(company.menuOpenCount ?? 0),
+        plan: (company.plan ?? 'STARTER') as 'STARTER' | 'PRO' | 'ENTERPRISE',
+        planMonthlyPrice: Number(company.planMonthlyPrice ?? 0),
+        trialEndsAt: company.trialEndsAt ?? null,
       };
     });
+  },
+
+  setCompanyPlan: async (companyId: string, plan: 'STARTER' | 'PRO' | 'ENTERPRISE', trialDays?: number, monthlyPrice?: number) => {
+    await requireSuperUser();
+    const { data, error } = await supabase.rpc('set_company_plan', {
+      p_company_id:    companyId,
+      p_plan:          plan,
+      p_trial_days:    trialDays ?? null,
+      p_monthly_price: monthlyPrice ?? null,
+    });
+    if (error) throwSupabaseError(error, 'Falha ao alterar plano.');
+    if (data?.error) throw new Error(data.error);
+    return data as { ok: boolean; plan: string };
   },
 
   updateCompanyAsSuperAdmin: async (companyId: string, payload: { name?: string; email?: string; phone?: string; address?: string; monthlyFee?: number; deliveryFeePercent?: number }) => {

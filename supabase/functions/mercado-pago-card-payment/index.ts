@@ -129,6 +129,12 @@ Deno.serve(async (req) => {
       // evita crédito duplicado caso o webhook chegue depois para o mesmo pagamento.
       if (updatedRows && updatedRows.length > 0) {
         await creditDeliveryWallet(adminClient, companyId, amount, deliveryOrderId);
+        // Notifica o cliente que o pedido foi recebido após confirmação do pagamento
+        fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/whatsapp-notify`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orderId: deliveryOrderId, status: 'RECEBIDO' }),
+        }).catch(() => {});
       }
     }
 
