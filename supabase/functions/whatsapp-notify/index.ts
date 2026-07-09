@@ -74,7 +74,7 @@ Deno.serve(async (req) => {
     // Buscar dados do pedido
     const { data: order, error: orderErr } = await admin
       .from('DeliveryOrder')
-      .select('id,orderNumber,customerName,customerAddress,total,paymentMethod,companyId')
+      .select('id,receiptNumber,customerName,customerAddress,total,paymentMethod,companyId')
       .eq('id', orderId)
       .maybeSingle();
 
@@ -114,7 +114,7 @@ Deno.serve(async (req) => {
       }
     } catch { /* ignora — texto padrão */ }
 
-    const orderNumber   = String(order.orderNumber ?? orderId.slice(0, 8));
+    const orderNumber   = String(order.receiptNumber ?? orderId.slice(0, 8));
     const customerName  = String(order.customerName ?? 'Cliente');
     const address       = String(order.customerAddress ?? 'Não informado');
     const total         = formatCurrency(Number(order.total ?? 0));
