@@ -221,7 +221,7 @@ export const publicDeliveryApi = {
 
     // Notificação WhatsApp para pedidos em dinheiro (status já é RECEBIDO no insert)
     if (!isOnlinePayment) {
-      supabaseAnon.functions.invoke('whatsapp-notify', { body: { orderId, status: 'RECEBIDO' } }).catch(() => {});
+      fetch(`${SUPABASE_URL}/functions/v1/whatsapp-notify`, { method: 'POST', headers: { 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ orderId, status: 'RECEBIDO' }) }).catch(() => {});
     }
 
     return { id: orderId, receiptNumber };
@@ -772,7 +772,7 @@ export const api = {
         })));
       if (itemsError) throwSupabaseError(itemsError, 'Falha ao salvar itens do pedido.');
     }
-    supabase.functions.invoke('whatsapp-notify', { body: { orderId: order.id, status: 'RECEBIDO' } }).catch(() => {});
+    fetch(`${SUPABASE_URL}/functions/v1/whatsapp-notify`, { method: 'POST', headers: { 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ orderId: order.id, status: 'RECEBIDO' }) }).catch(() => {});
     return { id: order.id };
   },
 
@@ -851,7 +851,7 @@ export const api = {
       });
       if (error) throwSupabaseError(error, 'Falha ao cancelar pedido.');
       if (data?.error) throw new Error(data.error);
-      supabase.functions.invoke('whatsapp-notify', { body: { orderId, status } }).catch(() => {});
+      fetch(`${SUPABASE_URL}/functions/v1/whatsapp-notify`, { method: 'POST', headers: { 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ orderId, status }) }).catch(() => {});
       return { success: true };
     }
 
@@ -862,7 +862,7 @@ export const api = {
       .update(update)
       .eq('id', orderId);
     if (error) throwSupabaseError(error, 'Falha ao atualizar status do pedido.');
-    supabase.functions.invoke('whatsapp-notify', { body: { orderId, status } }).catch(() => {});
+    fetch(`${SUPABASE_URL}/functions/v1/whatsapp-notify`, { method: 'POST', headers: { 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ orderId, status }) }).catch(() => {});
     return { success: true };
   },
 

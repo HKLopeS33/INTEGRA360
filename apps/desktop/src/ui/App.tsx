@@ -447,7 +447,7 @@ export function App() {
   const [newUserActive, setNewUserActive] = useState(true);
   const [profilePhoto, setProfilePhoto] = useState('');
   const [storeName, setStoreName] = useState('Integra360');
-  const [ajustesSubTab, setAjustesSubTab] = useState<'loja' | 'tecnico' | 'pagamentos'>('loja');
+  const [ajustesSubTab, setAjustesSubTab] = useState<'loja' | 'tecnico' | 'pagamentos' | 'assinatura'>('loja');
   const [storeTableCount, setStoreTableCount] = useState('10');
   const [storeTableCountOriginal, setStoreTableCountOriginal] = useState(10);
   const [savingTableCount, setSavingTableCount] = useState(false);
@@ -7628,9 +7628,10 @@ export function App() {
             <div style={{ position: 'relative', background: '#fff', flexShrink: 0 }}>
             <div className="ajustes-subtabs" style={{ display: 'flex', gap: 0, borderBottom: '2px solid #eef2ef', background: '#fff', padding: '0 8px', overflowX: 'auto', flexShrink: 0 }}>
               {([
-                { key: 'loja',       label: '🏪 Dados da Loja' },
-                { key: 'tecnico',    label: '⚙️ Configurações Técnicas' },
-                { key: 'pagamentos', label: '💳 Pagamentos' },
+                { key: 'loja',        label: '🏪 Dados da Loja' },
+                { key: 'tecnico',     label: '⚙️ Configurações Técnicas' },
+                { key: 'pagamentos',  label: '💳 Pagamentos' },
+                { key: 'assinatura',  label: '📋 Assinatura' },
               ] as const).map((tab) => (
                 <button
                   key={tab.key}
@@ -8010,6 +8011,105 @@ export function App() {
                 )}
               </div>
             )}
+
+            {/* ── ABA: ASSINATURA ── */}
+            {ajustesSubTab === 'assinatura' && (() => {
+              const plan = currentCompany?.plan ?? 'STARTER';
+              const planLabel: Record<string, string> = { STARTER: 'Starter', PRO: 'Pro', ENTERPRISE: 'Enterprise' };
+              const planPrice: Record<string, string> = { STARTER: 'R$ 79/mês', PRO: 'R$ 149/mês', ENTERPRISE: 'Sob consulta' };
+              const planFeatures: Record<string, string[]> = {
+                STARTER: ['Até 10 mesas', 'Delivery básico', 'Cardápio digital', 'Impressão de recibos', 'Relatórios básicos'],
+                PRO: ['Mesas ilimitadas', 'Delivery completo', 'Pagamentos online (Pix + Cartão)', 'Carteira e saques', 'KDS (Cozinha)', 'Relatórios avançados', 'WhatsApp automático'],
+                ENTERPRISE: ['Tudo do Pro', 'Múltiplas unidades', 'SLA prioritário', 'Onboarding dedicado'],
+              };
+              const whatsappUpgradeUrl = (targetPlan: string) => {
+                const msg = encodeURIComponent(
+                  `Olá! Sou cliente do Integra360 (${currentCompany?.name ?? ''}) e gostaria de fazer upgrade para o plano ${targetPlan}. Poderia me ajudar?`
+                );
+                return `https://wa.me/5587996469350?text=${msg}`;
+              };
+              return (
+                <div style={{ flex: 1, overflowY: 'auto', padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
+                  {/* Plano atual */}
+                  <div className="panel" style={{ padding: 24 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
+                      <div>
+                        <span className="eyebrow">Sua assinatura</span>
+                        <h2 style={{ margin: 0 }}>Plano atual</h2>
+                      </div>
+                      <span style={{ background: isPro ? '#f0fdf4' : '#fef2f2', color: isPro ? '#15803d' : '#991b1b', border: `1px solid ${isPro ? '#bbf7d0' : '#fecaca'}`, borderRadius: 20, padding: '4px 14px', fontWeight: 700, fontSize: 13 }}>
+                        {planLabel[plan] ?? plan}
+                      </span>
+                    </div>
+                    {trialDaysLeft > 0 && (
+                      <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#92400e', marginBottom: 16 }}>
+                        ⏳ <strong>Trial Pro ativo</strong> — {trialDaysLeft} dia{trialDaysLeft !== 1 ? 's' : ''} restante{trialDaysLeft !== 1 ? 's' : ''}
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      {(planFeatures[plan] ?? []).map((f) => (
+                        <span key={f} style={{ background: '#f3f4f6', borderRadius: 6, padding: '4px 10px', fontSize: 12, color: '#374151' }}>✓ {f}</span>
+                      ))}
+                    </div>
+                    <div style={{ marginTop: 16, fontSize: 14, color: '#6b7280' }}>
+                      Valor: <strong style={{ color: '#18201d' }}>{planPrice[plan] ?? '—'}</strong>
+                    </div>
+                  </div>
+
+                  {/* Cards de planos */}
+                  {plan !== 'ENTERPRISE' && (
+                    <div>
+                      <h3 style={{ fontSize: 14, fontWeight: 700, color: '#374151', margin: '0 0 12px' }}>Planos disponíveis</h3>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
+                        {(['STARTER', 'PRO', 'ENTERPRISE'] as const).map((p) => {
+                          const isCurrent = p === plan;
+                          const isDowngrade = p === 'STARTER' && (plan === 'PRO' || plan === 'ENTERPRISE');
+                          return (
+                            <div key={p} style={{ background: '#fff', border: isCurrent ? '2px solid #18201d' : '1px solid #e5e7eb', borderRadius: 12, padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <strong style={{ fontSize: 16 }}>{planLabel[p]}</strong>
+                                {isCurrent && <span style={{ background: '#18201d', color: '#fff', borderRadius: 10, padding: '2px 10px', fontSize: 11 }}>Atual</span>}
+                              </div>
+                              <div style={{ fontSize: 20, fontWeight: 800, color: '#18201d' }}>{planPrice[p]}</div>
+                              <ul style={{ margin: 0, padding: '0 0 0 16px', fontSize: 12, color: '#6b7280', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                {planFeatures[p].map((f) => <li key={f}>{f}</li>)}
+                              </ul>
+                              {!isCurrent && !isDowngrade && (
+                                <a
+                                  href={whatsappUpgradeUrl(planLabel[p])}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  style={{ display: 'block', textAlign: 'center', background: '#18201d', color: '#fff', borderRadius: 8, padding: '10px 0', fontWeight: 700, fontSize: 13, textDecoration: 'none', marginTop: 'auto' }}
+                                >
+                                  Fazer upgrade →
+                                </a>
+                              )}
+                              {isDowngrade && (
+                                <span style={{ fontSize: 11, color: '#9ca3af', textAlign: 'center', marginTop: 'auto' }}>Plano inferior ao atual</span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Contato suporte */}
+                  <div className="panel" style={{ padding: 20, background: '#f8fafc' }}>
+                    <h3 style={{ margin: '0 0 4px', fontSize: 14 }}>Dúvidas sobre sua assinatura?</h3>
+                    <p style={{ margin: '0 0 12px', fontSize: 13, color: '#6b7280' }}>Entre em contato com nosso suporte via WhatsApp.</p>
+                    <a
+                      href={`https://wa.me/5587996469350?text=${encodeURIComponent('Olá! Preciso de ajuda com minha assinatura do Integra360.')}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: '#25d366', color: '#fff', borderRadius: 8, padding: '9px 16px', fontWeight: 700, fontSize: 13, textDecoration: 'none' }}
+                    >
+                      💬 Falar com suporte
+                    </a>
+                  </div>
+                </div>
+              );
+            })()}
 
           </section>
         )}
