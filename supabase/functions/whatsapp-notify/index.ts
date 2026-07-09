@@ -40,7 +40,9 @@ function normalizePhone(phone: string): string | null {
 
 const PAYMENT_LABELS: Record<string, string> = {
   PIX: 'Pix (Mercado Pago)',
+  PIX_ONLINE: 'Pix (Mercado Pago)',
   CARTAO: 'Cartão (Mercado Pago)',
+  CARTAO_ONLINE: 'Cartão (Mercado Pago)',
   DINHEIRO: 'Dinheiro',
   ONLINE: 'Pagamento online',
 };
