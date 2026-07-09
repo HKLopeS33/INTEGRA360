@@ -419,7 +419,7 @@ export function App() {
   const [editAddress, setEditAddress] = useState('');
   const [editMonthlyFee, setEditMonthlyFee] = useState('0.00');
   const [editDeliveryFeePercent, setEditDeliveryFeePercent] = useState('0');
-  const [editPlan, setEditPlan] = useState<'STARTER' | 'PRO' | 'ENTERPRISE'>('STARTER');
+  const [editPlan, setEditPlan] = useState<'STARTER' | 'TRIAL' | 'PRO' | 'ENTERPRISE'>('STARTER');
   const [editPlanMonthlyPrice, setEditPlanMonthlyPrice] = useState('');
   const [editTrialDays, setEditTrialDays] = useState('');
   const [showUsersModal, setShowUsersModal] = useState(false);
@@ -528,7 +528,7 @@ export function App() {
   const isPro = useMemo(() => {
     if (!currentCompany) return false;
     const plan = currentCompany.plan ?? 'STARTER';
-    if (plan === 'PRO' || plan === 'ENTERPRISE') return true;
+    if (plan === 'PRO' || plan === 'ENTERPRISE' || plan === 'TRIAL') return true;
     const trialEnd = currentCompany.trialEndsAt ? new Date(currentCompany.trialEndsAt).getTime() : 0;
     return trialEnd > Date.now();
   }, [currentCompany]);
@@ -1258,7 +1258,7 @@ export function App() {
     setEditAddress(company.address ?? '');
     setEditMonthlyFee(String(company.monthlyFee ?? '0.00'));
     setEditDeliveryFeePercent(String(company.deliveryFeePercent ?? '0'));
-    setEditPlan((company.plan ?? 'STARTER') as 'STARTER' | 'PRO' | 'ENTERPRISE');
+    setEditPlan((company.plan ?? 'STARTER') as 'STARTER' | 'TRIAL' | 'PRO' | 'ENTERPRISE');
     setEditPlanMonthlyPrice(String(company.planMonthlyPrice ?? ''));
     setEditTrialDays('');
     setShowEditModal(true);
@@ -1273,7 +1273,7 @@ export function App() {
     setEditAddress(company.address ?? '');
     setEditMonthlyFee(String(company.monthlyFee ?? '0.00'));
     setEditDeliveryFeePercent(String(company.deliveryFeePercent ?? '0'));
-    setEditPlan((company.plan ?? 'STARTER') as 'STARTER' | 'PRO' | 'ENTERPRISE');
+    setEditPlan((company.plan ?? 'STARTER') as 'STARTER' | 'TRIAL' | 'PRO' | 'ENTERPRISE');
     setEditPlanMonthlyPrice(String(company.planMonthlyPrice ?? ''));
     setEditTrialDays('');
     // load users and find ADMIN for this company
@@ -5704,6 +5704,7 @@ export function App() {
                               const inTrial = trialEnd > Date.now();
                               const planColors: Record<string, { bg: string; color: string }> = {
                                 STARTER: { bg: '#f3f4f6', color: '#374151' },
+                                TRIAL:   { bg: '#f0fdf4', color: '#166534' },
                                 PRO: { bg: '#fffbeb', color: '#92400e' },
                                 ENTERPRISE: { bg: '#eff6ff', color: '#1d4ed8' },
                               };
@@ -6797,7 +6798,7 @@ export function App() {
                   <select
                     value={editPlan}
                     onChange={(e) => {
-                      const p = e.target.value as 'STARTER' | 'PRO' | 'ENTERPRISE';
+                      const p = e.target.value as 'STARTER' | 'TRIAL' | 'PRO' | 'ENTERPRISE';
                       setEditPlan(p);
                       if (!editPlanMonthlyPrice) {
                         setEditPlanMonthlyPrice(p === 'STARTER' ? '79' : p === 'PRO' ? '149' : '0');
@@ -6806,6 +6807,7 @@ export function App() {
                     style={{ display: 'block', width: '100%', marginTop: 4, padding: '6px 8px', borderRadius: 6, border: '1px solid #d1d5db' }}
                   >
                     <option value="STARTER">Starter (até 10 mesas)</option>
+                    <option value="TRIAL">Trial (acesso Pro por tempo limitado)</option>
                     <option value="PRO">Pro (mesas ilimitadas + KDS + Carteira)</option>
                     <option value="ENTERPRISE">Enterprise (personalizado)</option>
                   </select>

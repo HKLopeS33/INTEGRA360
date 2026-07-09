@@ -63,7 +63,7 @@ const normalizeCompany = (company: any) => ({
   deliveryFeeAmount: Number(company.deliveryFeeAmount ?? 0),
   openingTime: company.openingTime ?? '18:00',
   closingTime: company.closingTime ?? '00:00',
-  plan: (company.plan ?? 'STARTER') as 'STARTER' | 'PRO' | 'ENTERPRISE',
+  plan: (company.plan ?? 'STARTER') as 'STARTER' | 'TRIAL' | 'PRO' | 'ENTERPRISE',
   planMonthlyPrice: Number(company.planMonthlyPrice ?? 0),
   trialEndsAt: company.trialEndsAt ?? null,
 });
@@ -2020,14 +2020,14 @@ export const api = {
         walletBalance: wallet ? Number(wallet.balance) : 0,
         deliveryFeePercent: wallet ? Number(wallet.deliveryFeePercent) : 0,
         menuOpenCount: Number(company.menuOpenCount ?? 0),
-        plan: (company.plan ?? 'STARTER') as 'STARTER' | 'PRO' | 'ENTERPRISE',
+        plan: (company.plan ?? 'STARTER') as 'STARTER' | 'TRIAL' | 'PRO' | 'ENTERPRISE',
         planMonthlyPrice: Number(company.planMonthlyPrice ?? 0),
         trialEndsAt: company.trialEndsAt ?? null,
       };
     });
   },
 
-  setCompanyPlan: async (companyId: string, plan: 'STARTER' | 'PRO' | 'ENTERPRISE', trialDays?: number, monthlyPrice?: number) => {
+  setCompanyPlan: async (companyId: string, plan: 'STARTER' | 'TRIAL' | 'PRO' | 'ENTERPRISE', trialDays?: number, monthlyPrice?: number) => {
     await requireSuperUser();
     const { data, error } = await supabase.rpc('set_company_plan', {
       p_company_id:    companyId,
