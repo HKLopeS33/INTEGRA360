@@ -4337,15 +4337,19 @@ export function App() {
           })}
         </nav>
 
-        {/* Banner de plano na sidebar */}
+        {/* Banner de plano na sidebar — clicável, leva para Ajustes > Assinatura */}
         {currentCompany && currentUser?.role !== 'SUPER' && (
-          <div style={{ margin: '8px 10px', borderRadius: 8, padding: '8px 10px', fontSize: 11, background: isPro ? (trialDaysLeft > 0 ? '#fffbeb' : '#f0fdf4') : '#fef2f2', border: `1px solid ${isPro ? (trialDaysLeft > 0 ? '#fde68a' : '#bbf7d0') : '#fecaca'}`, color: isPro ? (trialDaysLeft > 0 ? '#92400e' : '#15803d') : '#991b1b', lineHeight: 1.4 }}>
+          <button
+            type="button"
+            onClick={() => { setActiveModule('ajustes'); setAjustesSubTab('assinatura'); }}
+            style={{ margin: '8px 10px', borderRadius: 8, padding: '8px 10px', fontSize: 11, background: isPro ? (trialDaysLeft > 0 ? '#fffbeb' : '#f0fdf4') : '#fef2f2', border: `1px solid ${isPro ? (trialDaysLeft > 0 ? '#fde68a' : '#bbf7d0') : '#fecaca'}`, color: isPro ? (trialDaysLeft > 0 ? '#92400e' : '#15803d') : '#991b1b', lineHeight: 1.4, cursor: 'pointer', textAlign: 'left', width: 'calc(100% - 20px)' }}
+          >
             {trialDaysLeft > 0 ? (
               <>⏳ <strong>Trial Pro</strong> — {trialDaysLeft} dia{trialDaysLeft !== 1 ? 's' : ''} restante{trialDaysLeft !== 1 ? 's' : ''}</>
             ) : (
-              <><strong>{currentCompany.plan ?? 'STARTER'}</strong> — {isPro ? 'Plano ativo' : 'Upgrade disponível'}</>
+              <><strong>{currentCompany.plan ?? 'STARTER'}</strong> — {isPro ? 'Plano ativo' : '👆 Ver planos'}</>
             )}
-          </div>
+          </button>
         )}
 
         <button className="logout-button" type="button" onClick={handleLogout}><LogOut size={18} /><span>Sair</span></button>
