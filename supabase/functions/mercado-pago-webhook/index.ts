@@ -32,6 +32,134 @@ Deno.serve(async (req) => {
     // companyId injected in the notification_url by mercado-pago-checkout function
     const urlCompanyId = url.searchParams.get('companyId') ?? null;
 
+    // ── Eventos de assinatura recorrente ──────────────────────────────────
+    if (topic === 'subscription_authorized_payment' || topic === 'subscription_preapproval') {
+      if (!paymentId) return new Response('ignored', { status: 200, headers: corsHeaders });
+
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+      const serviceKey  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+      const adminClient = createClient(supabaseUrl, serviceKey);
+      const masterAccessToken = await getMasterAccessToken(adminClient);
+      if (!masterAccessToken) return new Response('master token missing', { status: 200, headers: corsHeaders });
+
+      if (topic === 'subscription_authorized_payment') {
+        // Buscar pagamento autorizado no MP
+        const mpRes = await fetch(`https://api.mercadopago.com/authorized_payments/${paymentId}`, {
+          headers: { Authorization: `Bearer ${masterAccessToken}` },
+        });
+        const mpData = await mpRes.json().catch(() => ({}));
+        if (!mpRes.ok) {
+          console.error('Failed to fetch authorized_payment', paymentId, mpData);
+          return new Response('mp fetch failed', { status: 200, headers: corsHeaders });
+        }
+
+        const status = String(mpData.status ?? '');
+        const preapprovalId = String(mpData.preapproval_id ?? '');
+        const amount = Number(mpData.transaction_amount ?? 0);
+
+        if (status !== 'processed' && status !== 'authorized') {
+          console.log('Subscription payment not yet processed:', status);
+          return new Response('not processed', { status: 200, headers: corsHeaders });
+        }
+
+        // Encontrar empresa pela assinatura MP
+        const { data: sub } = await adminClient
+          .from('Subscription')
+          .select('companyId, monthlyFee, expiresAt')
+          .eq('mpSubscriptionId', preapprovalId)
+          .maybeSingle();
+
+        if (!sub) {
+          console.warn('Subscription not found for preapproval', preapprovalId);
+          return new Response('subscription not found', { status: 200, headers: corsHeaders });
+        }
+
+        const now = new Date();
+        const currentExpiry = sub.expiresAt ? new Date(sub.expiresAt) : now;
+        const baseDate = currentExpiry > now ? currentExpiry : now;
+        const newExpiry = new Date(baseDate);
+        newExpiry.setMonth(newExpiry.getMonth() + 1);
+
+        // Determinar plano a partir do external_reference do preapproval
+        const preapRes = await fetch(`https://api.mercadopago.com/preapproval/${preapprovalId}`, {
+          headers: { Authorization: `Bearer ${masterAccessToken}` },
+        });
+        const preapData = await preapRes.json().catch(() => ({}));
+        const extRef = String(preapData.external_reference ?? '');
+        const planMatch = extRef.match(/plan:(\w+)/);
+        const plan = planMatch ? planMatch[1] : 'PRO';
+
+        // Atualizar subscription e plano da empresa
+        await adminClient.from('Subscription').update({
+          status: 'ATIVO',
+          expiresAt: newExpiry.toISOString(),
+          lastRenewed: now.toISOString(),
+          monthlyFee: amount || sub.monthlyFee,
+        }).eq('companyId', sub.companyId);
+
+        await adminClient.from('Company').update({
+          plan,
+          updatedAt: now.toISOString(),
+        }).eq('id', sub.companyId);
+
+        // Registrar pagamento
+        await adminClient.from('PaymentRecord').insert([{
+          companyId: sub.companyId,
+          amount: amount || sub.monthlyFee,
+          status: 'PAGO',
+          dueDate: now.toISOString(),
+          paidAt: now.toISOString(),
+          renewalDate: newExpiry.toISOString(),
+        }]);
+
+        console.log('Subscription renewed for company', sub.companyId, 'until', newExpiry.toISOString());
+      } else {
+        // subscription_preapproval: atualizar status da assinatura
+        const mpRes = await fetch(`https://api.mercadopago.com/preapproval/${paymentId}`, {
+          headers: { Authorization: `Bearer ${masterAccessToken}` },
+        });
+        const mpData = await mpRes.json().catch(() => ({}));
+        if (!mpRes.ok) return new Response('mp fetch failed', { status: 200, headers: corsHeaders });
+
+        const mpStatus = String(mpData.status ?? '');
+        const extRef   = String(mpData.external_reference ?? '');
+        const companyMatch = extRef.match(/company:([^:]+)/);
+        const planMatch    = extRef.match(/plan:(\w+)/);
+        if (!companyMatch) return new Response('no company ref', { status: 200, headers: corsHeaders });
+
+        const companyId = companyMatch[1];
+        const plan      = planMatch ? planMatch[1] : 'PRO';
+
+        if (mpStatus === 'authorized') {
+          // Assinatura ativada pelo cliente
+          const now = new Date();
+          const newExpiry = new Date(now);
+          newExpiry.setMonth(newExpiry.getMonth() + 1);
+
+          await adminClient.from('Subscription').update({
+            status: 'ATIVO',
+            expiresAt: newExpiry.toISOString(),
+            lastRenewed: now.toISOString(),
+          }).eq('companyId', companyId);
+
+          await adminClient.from('Company').update({
+            plan,
+            updatedAt: now.toISOString(),
+          }).eq('id', companyId);
+
+          console.log('Subscription authorized for company', companyId, 'plan', plan);
+        } else if (mpStatus === 'cancelled' || mpStatus === 'paused') {
+          await adminClient.from('Subscription').update({
+            status: mpStatus === 'cancelled' ? 'CANCELADO' : 'PAUSADO',
+            mpSubscriptionId: mpStatus === 'cancelled' ? null : undefined,
+          }).eq('companyId', companyId);
+          console.log('Subscription', mpStatus, 'for company', companyId);
+        }
+      }
+
+      return new Response('ok', { status: 200, headers: corsHeaders });
+    }
+
     if (!paymentId || (topic && topic !== 'payment')) {
       return new Response('ignored', { status: 200, headers: corsHeaders });
     }

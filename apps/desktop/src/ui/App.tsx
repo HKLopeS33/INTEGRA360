@@ -8021,19 +8021,47 @@ export function App() {
             {/* ── ABA: ASSINATURA ── */}
             {ajustesSubTab === 'assinatura' && (() => {
               const plan = currentCompany?.plan ?? 'STARTER';
-              const planLabel: Record<string, string> = { STARTER: 'Starter', PRO: 'Pro', ENTERPRISE: 'Enterprise' };
-              const planPrice: Record<string, string> = { STARTER: 'R$ 79/mês', PRO: 'R$ 149/mês', ENTERPRISE: 'Sob consulta' };
+              const planLabel: Record<string, string> = { STARTER: 'Starter', TRIAL: 'Trial', PRO: 'Pro', ENTERPRISE: 'Enterprise' };
+              const planPrice: Record<string, string> = { STARTER: 'R$ 79/mês', TRIAL: 'Gratuito', PRO: 'R$ 149/mês', ENTERPRISE: 'Sob consulta' };
               const planFeatures: Record<string, string[]> = {
                 STARTER: ['Até 10 mesas', 'Delivery básico', 'Cardápio digital', 'Impressão de recibos', 'Relatórios básicos'],
+                TRIAL:   ['Acesso completo ao Plano Pro por tempo limitado'],
                 PRO: ['Mesas ilimitadas', 'Delivery completo', 'Pagamentos online (Pix + Cartão)', 'Carteira e saques', 'KDS (Cozinha)', 'Relatórios avançados', 'WhatsApp automático'],
                 ENTERPRISE: ['Tudo do Pro', 'Múltiplas unidades', 'SLA prioritário', 'Onboarding dedicado'],
               };
-              const whatsappUpgradeUrl = (targetPlan: string) => {
-                const msg = encodeURIComponent(
-                  `Olá! Sou cliente do Integra360 (${currentCompany?.name ?? ''}) e gostaria de fazer upgrade para o plano ${targetPlan}. Poderia me ajudar?`
-                );
-                return `https://wa.me/5587996469350?text=${msg}`;
+
+              const [subscribing, setSubscribing] = React.useState<string | null>(null);
+
+              const handleSubscribe = async (targetPlan: 'STARTER' | 'PRO') => {
+                if (!currentCompany) return;
+                setSubscribing(targetPlan);
+                try {
+                  const result = await api.createMpSubscription(
+                    currentCompany.id,
+                    targetPlan,
+                    window.location.href.split('?')[0]
+                  );
+                  window.open(result.initPoint, '_blank');
+                } catch (e: any) {
+                  showToast(e?.message || 'Falha ao iniciar assinatura.', 'error');
+                } finally {
+                  setSubscribing(null);
+                }
               };
+
+              const handleCancel = async () => {
+                if (!currentCompany) return;
+                if (!window.confirm('Deseja cancelar sua assinatura recorrente? O acesso continuará até o fim do período pago.')) return;
+                try {
+                  await api.cancelMpSubscription(currentCompany.id);
+                  showToast('Assinatura cancelada. Seu acesso continua até o vencimento.', 'success');
+                } catch (e: any) {
+                  showToast(e?.message || 'Falha ao cancelar assinatura.', 'error');
+                }
+              };
+
+              const canSubscribePlan = (p: string) => p === 'STARTER' || p === 'PRO';
+
               return (
                 <div style={{ flex: 1, overflowY: 'auto', padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
                   {/* Plano atual */}
@@ -8049,7 +8077,7 @@ export function App() {
                     </div>
                     {trialDaysLeft > 0 && (
                       <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#92400e', marginBottom: 16 }}>
-                        ⏳ <strong>Trial Pro ativo</strong> — {trialDaysLeft} dia{trialDaysLeft !== 1 ? 's' : ''} restante{trialDaysLeft !== 1 ? 's' : ''}
+                        ⏳ <strong>Trial Pro ativo</strong> — {trialDaysLeft} dia{trialDaysLeft !== 1 ? 's' : ''} restante{trialDaysLeft !== 1 ? 's' : ''}. Assine o plano Pro para continuar com acesso completo.
                       </div>
                     )}
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -8060,6 +8088,14 @@ export function App() {
                     <div style={{ marginTop: 16, fontSize: 14, color: '#6b7280' }}>
                       Valor: <strong style={{ color: '#18201d' }}>{planPrice[plan] ?? '—'}</strong>
                     </div>
+                    {(plan === 'PRO' || plan === 'ENTERPRISE') && (
+                      <button
+                        onClick={handleCancel}
+                        style={{ marginTop: 16, background: 'none', border: '1px solid #e5e7eb', borderRadius: 8, padding: '7px 14px', fontSize: 12, color: '#6b7280', cursor: 'pointer' }}
+                      >
+                        Cancelar assinatura recorrente
+                      </button>
+                    )}
                   </div>
 
                   {/* Cards de planos */}
@@ -8068,8 +8104,9 @@ export function App() {
                       <h3 style={{ fontSize: 14, fontWeight: 700, color: '#374151', margin: '0 0 12px' }}>Planos disponíveis</h3>
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
                         {(['STARTER', 'PRO', 'ENTERPRISE'] as const).map((p) => {
-                          const isCurrent = p === plan;
+                          const isCurrent = p === plan || (p === 'PRO' && plan === 'TRIAL');
                           const isDowngrade = p === 'STARTER' && (plan === 'PRO' || plan === 'ENTERPRISE');
+                          const isLoading = subscribing === p;
                           return (
                             <div key={p} style={{ background: '#fff', border: isCurrent ? '2px solid #18201d' : '1px solid #e5e7eb', borderRadius: 12, padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
                               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -8080,14 +8117,23 @@ export function App() {
                               <ul style={{ margin: 0, padding: '0 0 0 16px', fontSize: 12, color: '#6b7280', display: 'flex', flexDirection: 'column', gap: 4 }}>
                                 {planFeatures[p].map((f) => <li key={f}>{f}</li>)}
                               </ul>
-                              {!isCurrent && !isDowngrade && (
+                              {!isCurrent && !isDowngrade && canSubscribePlan(p) && (
+                                <button
+                                  onClick={() => handleSubscribe(p as 'STARTER' | 'PRO')}
+                                  disabled={isLoading}
+                                  style={{ display: 'block', width: '100%', textAlign: 'center', background: '#18201d', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 0', fontWeight: 700, fontSize: 13, cursor: isLoading ? 'wait' : 'pointer', marginTop: 'auto', opacity: isLoading ? 0.7 : 1 }}
+                                >
+                                  {isLoading ? 'Aguarde...' : 'Assinar agora →'}
+                                </button>
+                              )}
+                              {!isCurrent && !isDowngrade && !canSubscribePlan(p) && (
                                 <a
-                                  href={whatsappUpgradeUrl(planLabel[p])}
+                                  href={`https://wa.me/5587996469350?text=${encodeURIComponent(`Olá! Sou cliente do Integra360 (${currentCompany?.name ?? ''}) e gostaria de contratar o plano Enterprise.`)}`}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   style={{ display: 'block', textAlign: 'center', background: '#18201d', color: '#fff', borderRadius: 8, padding: '10px 0', fontWeight: 700, fontSize: 13, textDecoration: 'none', marginTop: 'auto' }}
                                 >
-                                  Fazer upgrade →
+                                  Falar com suporte →
                                 </a>
                               )}
                               {isDowngrade && (

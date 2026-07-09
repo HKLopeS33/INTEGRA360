@@ -2040,6 +2040,34 @@ export const api = {
     return data as { ok: boolean; plan: string };
   },
 
+  createMpSubscription: async (companyId: string, plan: 'STARTER' | 'PRO', backUrl: string) => {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/mercado-pago-subscription`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ companyId, plan, backUrl }),
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error || 'Falha ao criar assinatura.');
+    return data as { initPoint: string; subscriptionId: string; existing?: boolean };
+  },
+
+  cancelMpSubscription: async (companyId: string) => {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/mercado-pago-subscription`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ companyId }),
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error || 'Falha ao cancelar assinatura.');
+    return data as { ok: boolean };
+  },
+
   updateCompanyAsSuperAdmin: async (companyId: string, payload: { name?: string; email?: string; phone?: string; address?: string; monthlyFee?: number; deliveryFeePercent?: number }) => {
     await requireSuperUser();
     const updates: any = {};
