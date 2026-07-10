@@ -106,7 +106,7 @@ Deno.serve(async (req) => {
             to: SUPORTE_PHONE,
             type: 'template',
             template: {
-              name: 'saque_carteira_solicit',
+              name: 'saque_carteira_solicitado',
               language: { code: 'pt_BR' },
               components: [{
                 type: 'body',
