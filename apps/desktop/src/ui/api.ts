@@ -3147,6 +3147,14 @@ export const api = {
       await requireCompanyUserWithRoles(['ADMIN', 'GERENTE']);
       const { data, error } = await supabase.rpc('request_wallet_withdrawal', { p_amount: amount });
       if (error) throwSupabaseError(error, 'Falha ao solicitar saque.');
+
+      // Notifica o suporte via WhatsApp
+      fetch(`${SUPABASE_URL}/functions/v1/whatsapp-notify`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'SAQUE_SOLICITADO', withdrawalId: data, amount }),
+      }).catch(() => {});
+
       return { success: true, withdrawalId: data as string };
     }
   },

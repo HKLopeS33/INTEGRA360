@@ -60,18 +60,79 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json().catch(() => ({}));
-    const { orderId, status } = body as { orderId?: string; status?: string };
+    const { orderId, status, type, withdrawalId, amount } = body as {
+      orderId?: string; status?: string;
+      type?: string; withdrawalId?: string; amount?: number;
+    };
 
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const serviceKey  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const admin       = createClient(supabaseUrl, serviceKey);
+
+    // ── Notificação de saque solicitado (vai para o suporte Integra360) ──
+    if (type === 'SAQUE_SOLICITADO') {
+      if (!withdrawalId) return json({ error: 'withdrawalId obrigatório.' }, 400);
+
+      const SUPORTE_PHONE = '5587999710850';
+
+      // Buscar dados do saque + empresa
+      const { data: withdrawal } = await admin
+        .from('WalletWithdrawal')
+        .select('id, companyId, amount, pixKey, requestedAt')
+        .eq('id', withdrawalId)
+        .maybeSingle();
+
+      const companyId = withdrawal?.companyId ?? '';
+      const { data: company } = await admin
+        .from('Company')
+        .select('name')
+        .eq('id', companyId)
+        .maybeSingle();
+
+      const companyName   = company?.name ?? 'Estabelecimento';
+      const saqueAmount   = formatCurrency(Number(withdrawal?.amount ?? amount ?? 0));
+      const pixKey        = String(withdrawal?.pixKey ?? 'Não informado');
+      const requestedAt   = withdrawal?.requestedAt
+        ? new Date(withdrawal.requestedAt).toLocaleString('pt-BR')
+        : new Date().toLocaleString('pt-BR');
+
+      const metaRes = await fetch(
+        `https://graph.facebook.com/v20.0/${waPhoneNumberId}/messages`,
+        {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${waAccessToken}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messaging_product: 'whatsapp',
+            to: SUPORTE_PHONE,
+            type: 'template',
+            template: {
+              name: 'saque_carteira_solicit',
+              language: { code: 'pt_BR' },
+              components: [{
+                type: 'body',
+                parameters: [
+                  { type: 'text', text: companyName },
+                  { type: 'text', text: saqueAmount },
+                ],
+              }],
+            },
+          }),
+        },
+      );
+
+      const metaData = await metaRes.json();
+      console.log('Saque notify Meta response:', metaRes.status, JSON.stringify(metaData));
+      if (!metaRes.ok) return json({ ok: false, reason: 'meta_api_error', detail: metaData });
+      return json({ ok: true, messageId: metaData?.messages?.[0]?.id });
+    }
+
+    // ── Notificação de novo pedido ────────────────────────────────────────
     if (!orderId || !status) return json({ error: 'orderId e status são obrigatórios.' }, 400);
 
     // Apenas notifica o estabelecimento quando um novo pedido chega
     if (status !== 'RECEBIDO') {
       return json({ ok: false, reason: 'status_sem_notificacao' });
     }
-
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const serviceKey  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const admin       = createClient(supabaseUrl, serviceKey);
 
     // Buscar dados do pedido
     const { data: order, error: orderErr } = await admin
