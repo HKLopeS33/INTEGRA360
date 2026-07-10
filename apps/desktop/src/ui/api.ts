@@ -2396,6 +2396,9 @@ export const api = {
       throwSupabaseError(updateError, 'Falha ao renovar assinatura.');
     }
 
+    // Reativa a empresa caso esteja suspensa por vencimento
+    await supabase.from('Company').update({ active: true }).eq('id', companyId);
+
     const { error: paymentError } = await supabase.from('PaymentRecord').insert([{
       companyId,
       amount: Number(payload.amount ?? 0).toString(),
