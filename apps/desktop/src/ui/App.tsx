@@ -448,6 +448,10 @@ export function App() {
   const [profilePhoto, setProfilePhoto] = useState('');
   const [storeName, setStoreName] = useState('Integra360');
   const [ajustesSubTab, setAjustesSubTab] = useState<'loja' | 'tecnico' | 'pagamentos' | 'assinatura'>('loja');
+  const [caixaSubTab, setCaixaSubTab] = useState<'operacao' | 'relatorios' | 'carteira'>('operacao');
+  const [dailyChartData, setDailyChartData] = useState<{ day: number; value: number }[]>([]);
+  const [loadingChart, setLoadingChart] = useState(false);
+  const [prevMonthTotal, setPrevMonthTotal] = useState<number | null>(null);
   const [storeTableCount, setStoreTableCount] = useState('10');
   const [storeTableCountOriginal, setStoreTableCountOriginal] = useState(10);
   const [savingTableCount, setSavingTableCount] = useState(false);
@@ -862,6 +866,25 @@ export function App() {
     const interval = setInterval(() => { void loadWallet(); }, 15000);
     return () => clearInterval(interval);
   }, [activeModule]);
+
+  // Carrega gráfico diário ao entrar na aba Relatórios
+  useEffect(() => {
+    if (activeModule !== 'caixa' || caixaSubTab !== 'relatorios') return;
+    const loadChart = async () => {
+      setLoadingChart(true);
+      try {
+        const ref = reportRefDate ? new Date(reportRefDate) : new Date();
+        const [chart, prev] = await Promise.all([
+          api.reportDailyBreakdown(ref.getFullYear(), ref.getMonth() + 1),
+          api.reportSummary('monthly', new Date(ref.getFullYear(), ref.getMonth() - 1, 1).toISOString().slice(0, 10)),
+        ]);
+        setDailyChartData(chart);
+        setPrevMonthTotal(prev?.totalValue ?? null);
+      } catch { /* silencioso */ }
+      finally { setLoadingChart(false); }
+    };
+    void loadChart();
+  }, [activeModule, caixaSubTab, reportRefDate]);
 
   // Atualiza o saldo das carteiras automaticamente enquanto a aba estiver aberta
   useEffect(() => {
@@ -7151,181 +7174,163 @@ export function App() {
         })()}
 
         {activeModule === 'caixa' && (
-          <section className="module-grid two-columns">
-            <div className="panel metric-panel">
-              <span className="eyebrow">Pedidos ativos</span>
-              <strong>{formatCurrency(totalOpenOrders)}</strong>
-              <p>valor em comandas abertas</p>
-            </div>
-            <div className="panel">
-              <div className="panel-header">
-                <div>
-                  <span className="eyebrow">Operacao</span>
-                  <h2>Controle de caixa</h2>
-                </div>
-                <Banknote size={22} />
-              </div>
-              <div style={{ display: 'grid', gap: 16 }}>
-                {cashRegister ? (
-                  <div style={{ display: 'grid', gap: 12 }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                      <div>
-                        <strong>Caixa aberto</strong>
-                        <p>Aberto em {new Date(cashRegister.openedAt).toLocaleString()}</p>
-                      </div>
-                      <div>
-                        <strong>Status</strong>
-                        <p>{cashRegister.status}</p>
-                      </div>
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                      <div>
-                        <strong>Saldo inicial</strong>
-                        <p>{formatCurrency(cashRegister.initialAmount)}</p>
-                      </div>
-                      <div>
-                        <strong>Pagamentos</strong>
-                        <p>{formatCurrency(cashRegister.totalPayments)} ({cashRegister.paymentsCount})</p>
-                      </div>
-                    </div>
-                    <label>
-                      Valor de fechamento
-                      <input
-                        inputMode="decimal"
-                        placeholder="0.00"
-                        value={currentCashClosingAmount}
-                        onChange={(event) => setCurrentCashClosingAmount(event.target.value)}
-                      />
-                    </label>
-                    <button
-                      className="primary-button"
-                      type="button"
-                      onClick={async () => {
-                        const value = Number(currentCashClosingAmount.replace(',', '.'));
-                        if (Number.isNaN(value)) {
-                          return showToast('Informe um valor de fechamento válido.', 'warning');
-                        }
-                        try {
-                          await api.closeCashRegister(value);
-                          await loadData();
-                          setCurrentCashClosingAmount('');
-                          showToast('Caixa fechado com sucesso!', 'success');
-                        } catch (error) {
-                          console.error(error);
-                          showToast('Erro ao fechar o caixa.', 'error');
-                        }
-                      }}
-                    >
-                      Fechar caixa
-                    </button>
-                  </div>
-                ) : (
-                  <div style={{ display: 'grid', gap: 12 }}>
-                    <label>
-                      Saldo inicial
-                      <input
-                        inputMode="decimal"
-                        placeholder="100.00"
-                        value={initialCashAmount}
-                        onChange={(event) => setInitialCashAmount(event.target.value)}
-                      />
-                    </label>
-                    <button
-                      className="primary-button"
-                      type="button"
-                      onClick={async () => {
-                        const value = Number(initialCashAmount.replace(',', '.'));
-                        if (Number.isNaN(value)) {
-                          return showToast('Informe um valor inicial válido.', 'warning');
-                        }
-                        try {
-                          await api.openCashRegister(value);
-                          await loadData();
-                          showToast('Caixa aberto com sucesso!', 'success');
-                        } catch (error) {
-                          console.error(error);
-                          showToast('Erro ao abrir o caixa.', 'error');
-                        }
-                      }}
-                    >
-                      Abrir caixa
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
+          <section style={{ display: 'flex', flexDirection: 'column', gap: 0, height: '100%' }}>
 
-            {(role === 'ADMIN' || role === 'GERENTE' || role === 'CAIXA' || role === 'FINANCEIRO') && (
-              <div className="panel">
-                <div className="panel-header">
-                  <div>
-                    <span className="eyebrow">Saldo</span>
-                    <h2>Carteira</h2>
-                  </div>
-                </div>
-                <div style={{ display: 'grid', gap: 14 }}>
-                  {!isPro && (
-                    <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#92400e' }}>
-                      🔒 <strong>Plano Pro</strong> — Pagamentos online via Pix e Cartão, e saldo na Carteira, estão disponíveis no plano Pro. Entre em contato com o suporte para fazer upgrade.
-                    </div>
-                  )}
-                  <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '14px 16px' }}>
-                    <div style={{ fontSize: 12, color: '#15803d', fontWeight: 700, textTransform: 'uppercase' }}>Saldo disponível</div>
-                    <div style={{ fontSize: 28, fontWeight: 800, color: '#15803d' }}>{formatCurrency(walletInfo?.balance ?? 0)}</div>
-                    {walletInfo && walletInfo.deliveryFeePercent > 0 && (
-                      <div style={{ fontSize: 12, color: '#4ade80', marginTop: 2 }}>Taxa da plataforma: {walletInfo.deliveryFeePercent}%</div>
-                    )}
-                  </div>
-
-                  <label>
-                    Chave Pix de repasse <span style={{ fontSize: 11, fontWeight: 400 }}>(usada pelo AdminSuper para transferir seus saques)</span>
-                    <input
-                      value={walletPixKeyInput}
-                      onChange={(e) => setWalletPixKeyInput(e.target.value)}
-                      placeholder="Ex: +5511999999999 ou email@exemplo.com"
-                      autoComplete="off"
-                    />
-                  </label>
-                  <button className="secondary-button" type="button" style={{ width: 'fit-content' }} disabled={walletSavingPixKey} onClick={() => void saveWalletPixKey()}>
-                    {walletSavingPixKey ? 'Salvando...' : 'Salvar chave Pix'}
+            {/* Sub-abas de Caixa */}
+            <div style={{ background: '#fff', flexShrink: 0, borderBottom: '2px solid #eef2ef' }}>
+              <div style={{ display: 'flex', gap: 0, padding: '0 8px', overflowX: 'auto' }}>
+                {([
+                  { key: 'operacao',   label: '🏧 Operação' },
+                  { key: 'relatorios', label: '📊 Relatórios' },
+                  { key: 'recibos',    label: '🧾 Recibos' },
+                  { key: 'carteira',   label: '💰 Carteira' },
+                ] as const).map((tab) => (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    onClick={() => setCaixaSubTab(tab.key)}
+                    style={{
+                      background: 'none', border: 'none',
+                      borderBottom: caixaSubTab === tab.key ? '3px solid #18201d' : '3px solid transparent',
+                      marginBottom: -2, padding: '14px 20px 13px',
+                      fontWeight: caixaSubTab === tab.key ? 700 : 500,
+                      fontSize: 14,
+                      color: caixaSubTab === tab.key ? '#18201d' : '#789088',
+                      cursor: 'pointer', whiteSpace: 'nowrap',
+                      transition: 'color 0.15s, border-color 0.15s',
+                    }}
+                  >
+                    {tab.label}
                   </button>
+                ))}
+              </div>
+            </div>
 
-                  {walletWithdrawals.some((w) => w.status === 'SOLICITADO') ? (
-                    <p style={{ margin: 0, fontSize: 13, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 14px' }}>
-                      ⏳ Saque de {formatCurrency(walletWithdrawals.find((w) => w.status === 'SOLICITADO')?.amount ?? 0)} solicitado — aguardando transferência do AdminSuper.
-                    </p>
-                  ) : (
-                    <button
-                      className="primary-button"
-                      type="button"
-                      style={{ width: 'fit-content' }}
-                      disabled={walletRequestingWithdrawal || !walletInfo || walletInfo.balance <= 0 || !walletInfo.payoutPixKey}
-                      onClick={() => void requestWalletWithdrawal()}
-                    >
-                      {walletRequestingWithdrawal ? 'Solicitando...' : '💸 Solicitar saque'}
-                    </button>
+            {/* ── ABA: OPERAÇÃO ── */}
+            {caixaSubTab === 'operacao' && (
+              <div style={{ flex: 1, overflowY: 'auto', padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
+                {/* Métricas rápidas */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
+                  <div className="panel metric-panel" style={{ margin: 0 }}>
+                    <span className="eyebrow">Pedidos ativos</span>
+                    <strong>{formatCurrency(totalOpenOrders)}</strong>
+                    <p>valor em comandas abertas</p>
+                  </div>
+                  {cashRegister && (
+                    <>
+                      <div className="panel metric-panel" style={{ margin: 0 }}>
+                        <span className="eyebrow">Pagamentos no caixa</span>
+                        <strong>{formatCurrency(cashRegister.totalPayments)}</strong>
+                        <p>{cashRegister.paymentsCount} transações</p>
+                      </div>
+                      <div className="panel metric-panel" style={{ margin: 0, background: cashRegister.totalPayments + cashRegister.initialAmount > 0 ? '#f0fdf4' : undefined }}>
+                        <span className="eyebrow">Saldo esperado</span>
+                        <strong>{formatCurrency(cashRegister.initialAmount + cashRegister.totalPayments)}</strong>
+                        <p>inicial + pagamentos</p>
+                      </div>
+                    </>
                   )}
-                  {walletInfo && walletInfo.balance > 0 && !walletInfo.payoutPixKey && (
-                    <p style={{ margin: 0, fontSize: 12, color: '#9ca3af' }}>Cadastre a chave Pix de repasse acima para poder solicitar saque.</p>
-                  )}
+                </div>
 
-                  <div>
-                    <h3 style={{ margin: '4px 0 8px', fontSize: 13 }}>Últimos lançamentos</h3>
-                    {walletTransactions.length === 0 ? (
-                      <p style={{ margin: 0, fontSize: 13, color: '#9ca3af' }}>Nenhum lançamento ainda.</p>
-                    ) : (
-                      <div style={{ display: 'grid', gap: 6, maxHeight: 240, overflowY: 'auto' }}>
-                        {walletTransactions.map((t) => (
-                          <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 13, borderBottom: '1px solid #eef2ef', paddingBottom: 6 }}>
-                            <div>
-                              <div>{t.description ?? t.type}</div>
-                              <div style={{ fontSize: 11, color: '#9ca3af' }}>{new Date(t.createdAt).toLocaleString()}</div>
-                            </div>
-                            <strong style={{ color: t.amount >= 0 ? '#15803d' : '#b91c1c', whiteSpace: 'nowrap' }}>
-                              {t.amount >= 0 ? '+' : ''}{formatCurrency(t.amount)}
-                            </strong>
+                {/* Controle de caixa */}
+                <div className="panel">
+                  <div className="panel-header">
+                    <div>
+                      <span className="eyebrow">Operacao</span>
+                      <h2>Controle de caixa</h2>
+                    </div>
+                    <Banknote size={22} />
+                  </div>
+                  <div style={{ display: 'grid', gap: 16 }}>
+                    {cashRegister ? (
+                      <div style={{ display: 'grid', gap: 12 }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                          <div>
+                            <strong>Caixa aberto</strong>
+                            <p>Aberto em {new Date(cashRegister.openedAt).toLocaleString()}</p>
                           </div>
-                        ))}
+                          <div>
+                            <strong>Status</strong>
+                            <p>{cashRegister.status}</p>
+                          </div>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                          <div>
+                            <strong>Saldo inicial</strong>
+                            <p>{formatCurrency(cashRegister.initialAmount)}</p>
+                          </div>
+                          <div>
+                            <strong>Pagamentos</strong>
+                            <p>{formatCurrency(cashRegister.totalPayments)} ({cashRegister.paymentsCount})</p>
+                          </div>
+                        </div>
+                        <label>
+                          Valor de fechamento
+                          <input
+                            inputMode="decimal"
+                            placeholder="0.00"
+                            value={currentCashClosingAmount}
+                            onChange={(event) => setCurrentCashClosingAmount(event.target.value)}
+                          />
+                        </label>
+                        {/* Alerta de diferença no fechamento */}
+                        {(() => {
+                          const closing = Number(currentCashClosingAmount.replace(',', '.'));
+                          const expected = cashRegister.initialAmount + cashRegister.totalPayments;
+                          const diff = closing - expected;
+                          if (!currentCashClosingAmount || isNaN(closing) || Math.abs(diff) < 0.01) return null;
+                          const isShort = diff < 0;
+                          return (
+                            <div style={{ background: isShort ? '#fef2f2' : '#f0fdf4', border: `1px solid ${isShort ? '#fca5a5' : '#86efac'}`, borderRadius: 8, padding: '10px 14px', fontSize: 13, color: isShort ? '#b91c1c' : '#15803d' }}>
+                              {isShort ? '⚠️' : '✅'} Diferença de <strong>{formatCurrency(Math.abs(diff))}</strong> em relação ao esperado ({formatCurrency(expected)}).
+                              {isShort ? ' Verifique se há troco ou pagamentos não registrados.' : ' Caixa com sobra.'}
+                            </div>
+                          );
+                        })()}
+                        <button
+                          className="primary-button"
+                          type="button"
+                          onClick={async () => {
+                            const value = Number(currentCashClosingAmount.replace(',', '.'));
+                            if (Number.isNaN(value)) return showToast('Informe um valor de fechamento válido.', 'warning');
+                            try {
+                              await api.closeCashRegister(value);
+                              await loadData();
+                              setCurrentCashClosingAmount('');
+                              showToast('Caixa fechado com sucesso!', 'success');
+                            } catch (error) {
+                              console.error(error);
+                              showToast('Erro ao fechar o caixa.', 'error');
+                            }
+                          }}
+                        >
+                          Fechar caixa
+                        </button>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'grid', gap: 12 }}>
+                        <label>
+                          Saldo inicial
+                          <input inputMode="decimal" placeholder="100.00" value={initialCashAmount} onChange={(event) => setInitialCashAmount(event.target.value)} />
+                        </label>
+                        <button
+                          className="primary-button"
+                          type="button"
+                          onClick={async () => {
+                            const value = Number(initialCashAmount.replace(',', '.'));
+                            if (Number.isNaN(value)) return showToast('Informe um valor inicial válido.', 'warning');
+                            try {
+                              await api.openCashRegister(value);
+                              await loadData();
+                              showToast('Caixa aberto com sucesso!', 'success');
+                            } catch (error) {
+                              console.error(error);
+                              showToast('Erro ao abrir o caixa.', 'error');
+                            }
+                          }}
+                        >
+                          Abrir caixa
+                        </button>
                       </div>
                     )}
                   </div>
@@ -7333,297 +7338,274 @@ export function App() {
               </div>
             )}
 
-            <div className="panel">
-              <div className="panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-                <div>
-                  <span className="eyebrow">Relatório</span>
-                  <h2>Resumo {reportSummary?.periodLabel ?? 'diário'}</h2>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 10 }}>
-                  {/* Toggle de período */}
-                  <div style={{ display: 'flex', background: '#f0f2f0', borderRadius: 10, padding: 3, gap: 2 }}>
-                    {reportPeriods.map((option) => (
-                      <button
-                        key={option.value}
-                        type="button"
-                        onClick={() => setReportPeriod(option.value)}
-                        style={{
-                          border: 'none', borderRadius: 8, padding: '6px 14px', fontSize: 13,
-                          fontWeight: reportPeriod === option.value ? 700 : 500, cursor: 'pointer',
-                          background: reportPeriod === option.value ? '#18201d' : 'transparent',
-                          color: reportPeriod === option.value ? '#f1c44e' : '#6b7a6b',
-                          transition: 'background 0.15s, color 0.15s', minHeight: 'unset',
-                        }}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
-                  </div>
-                  {/* Seletor de data conforme período */}
-                  {reportPeriod === 'daily' && (
-                    <input
-                      type="date"
-                      value={reportRefDate}
-                      max={new Date().toISOString().slice(0, 10)}
-                      onChange={(e) => setReportRefDate(e.target.value)}
-                      style={{ fontSize: 13, padding: '5px 10px', borderRadius: 8, border: '1px solid #dbe3de', height: 34 }}
-                    />
-                  )}
-                  {reportPeriod === 'weekly' && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#6b7a6b' }}>
-                      <span>Semana de</span>
-                      <input
-                        type="date"
-                        value={reportRefDate}
-                        max={new Date().toISOString().slice(0, 10)}
-                        onChange={(e) => setReportRefDate(e.target.value)}
-                        style={{ fontSize: 13, padding: '5px 10px', borderRadius: 8, border: '1px solid #dbe3de', height: 34 }}
-                      />
+            {/* ── ABA: RELATÓRIOS ── */}
+            {caixaSubTab === 'relatorios' && (
+              <div style={{ flex: 1, overflowY: 'auto', padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
+                {/* Métricas com comparativo */}
+                {reportSummary && (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 16 }}>
+                    <div style={{ background: '#18201d', borderRadius: 12, padding: '16px 18px' }}>
+                      <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.8px', textTransform: 'uppercase', color: '#9ab09f', display: 'block', marginBottom: 6 }}>Faturamento</span>
+                      <strong style={{ fontSize: 22, color: '#f1c44e' }}>{formatCurrency(reportSummary.totalValue)}</strong>
+                      {prevMonthTotal !== null && reportPeriod === 'monthly' && (
+                        <div style={{ fontSize: 11, marginTop: 4, color: reportSummary.totalValue >= prevMonthTotal ? '#4ade80' : '#f87171' }}>
+                          {reportSummary.totalValue >= prevMonthTotal ? '↑' : '↓'} {prevMonthTotal > 0 ? `${Math.abs(Math.round((reportSummary.totalValue - prevMonthTotal) / prevMonthTotal * 100))}% vs mês anterior` : 'sem dados anteriores'}
+                        </div>
+                      )}
                     </div>
-                  )}
-                  {reportPeriod === 'monthly' && (
-                    <input
-                      type="month"
-                      value={reportRefDate.slice(0, 7)}
-                      max={new Date().toISOString().slice(0, 7)}
-                      onChange={(e) => setReportRefDate(`${e.target.value}-01`)}
-                      style={{ fontSize: 13, padding: '5px 10px', borderRadius: 8, border: '1px solid #dbe3de', height: 34 }}
-                    />
-                  )}
-                  {reportPeriod === 'yearly' && (
-                    <select
-                      value={reportRefDate.slice(0, 4)}
-                      onChange={(e) => setReportRefDate(`${e.target.value}-01-01`)}
-                      style={{ fontSize: 13, padding: '5px 10px', borderRadius: 8, border: '1px solid #dbe3de', height: 34 }}
-                    >
-                      {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map((y) => (
-                        <option key={y} value={y}>{y}</option>
-                      ))}
-                    </select>
-                  )}
-                  {/* Botões de exportação */}
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <button
-                      type="button"
-                      className="secondary-button"
-                      style={{ height: 34, display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}
-                      onClick={() => void previewReportPdf()}
-                    >
-                      <ReceiptText size={15} />
-                      Visualizar
-                    </button>
-                    <button
-                      type="button"
-                      className="primary-button"
-                      style={{ height: 34, display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}
-                      onClick={() => void exportReportPdf()}
-                    >
-                      Exportar PDF
-                    </button>
-                  </div>
-                </div>
-              </div>
-              {reportSummary ? (
-                <div style={{ display: 'grid', gap: 16, marginTop: 4 }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-                    <div style={{ background: '#f8faf8', border: '1px solid #dbe3de', borderRadius: 10, padding: '14px 16px' }}>
+                    <div style={{ background: '#f8faf8', border: '1px solid #dbe3de', borderRadius: 12, padding: '16px 18px' }}>
                       <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.8px', textTransform: 'uppercase', color: '#7a8a7a', display: 'block', marginBottom: 6 }}>Pedidos</span>
                       <strong style={{ fontSize: 22, color: '#18201d' }}>{reportSummary.totalOrders}</strong>
                     </div>
-                    <div style={{ background: '#f8faf8', border: '1px solid #dbe3de', borderRadius: 10, padding: '14px 16px' }}>
-                      <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.8px', textTransform: 'uppercase', color: '#7a8a7a', display: 'block', marginBottom: 6 }}>Itens</span>
+                    <div style={{ background: '#f8faf8', border: '1px solid #dbe3de', borderRadius: 12, padding: '16px 18px' }}>
+                      <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.8px', textTransform: 'uppercase', color: '#7a8a7a', display: 'block', marginBottom: 6 }}>Ticket médio</span>
+                      <strong style={{ fontSize: 22, color: '#18201d' }}>{reportSummary.totalOrders > 0 ? formatCurrency(reportSummary.totalValue / reportSummary.totalOrders) : '—'}</strong>
+                    </div>
+                    <div style={{ background: '#f8faf8', border: '1px solid #dbe3de', borderRadius: 12, padding: '16px 18px' }}>
+                      <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.8px', textTransform: 'uppercase', color: '#7a8a7a', display: 'block', marginBottom: 6 }}>Itens vendidos</span>
                       <strong style={{ fontSize: 22, color: '#18201d' }}>{reportSummary.totalItems}</strong>
                     </div>
-                    <div style={{ background: '#18201d', border: '1px solid #18201d', borderRadius: 10, padding: '14px 16px' }}>
-                      <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.8px', textTransform: 'uppercase', color: '#9ab09f', display: 'block', marginBottom: 6 }}>Faturamento</span>
-                      <strong style={{ fontSize: 18, color: '#f1c44e' }}>{formatCurrency(reportSummary.totalValue)}</strong>
-                    </div>
-                  </div>
-                  <div>
-                    <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: '#7a8a7a', display: 'block', marginBottom: 10 }}>Por origem</span>
-                    <div style={{ maxHeight: '220px', overflowY: 'auto', display: 'grid', gap: 6 }}>
-                      {[...reportSummary.tables].filter((t) => t.tableId !== '__delivery__').sort((a, b) => b.totalValue - a.totalValue).map((table) => (
-                        <div key={table.tableId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: '#f8faf8', border: '1px solid #dbe3de', borderRadius: 8 }}>
-                          <div>
-                            <span style={{ fontWeight: 600, fontSize: 13 }}>{table.tableName}</span>
-                            <span style={{ color: '#7a8a7a', fontSize: 12, marginLeft: 8 }}>{table.totalItems} itens</span>
-                          </div>
-                          <strong style={{ fontSize: 14, color: '#18201d' }}>{formatCurrency(table.totalValue)}</strong>
-                        </div>
-                      ))}
-                      {reportSummary.tables.find((t) => t.tableId === '__delivery__') && (() => {
-                        const d = reportSummary.tables.find((t) => t.tableId === '__delivery__')!;
-                        return (
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8 }}>
-                            <div>
-                              <span style={{ fontWeight: 600, fontSize: 13 }}>🚲 Delivery</span>
-                              <span style={{ color: '#7a8a7a', fontSize: 12, marginLeft: 8 }}>{d.totalItems} pedidos</span>
-                            </div>
-                            <strong style={{ fontSize: 14, color: '#92400e' }}>{formatCurrency(d.totalValue)}</strong>
-                          </div>
-                        );
-                      })()}
-                    </div>
-                  </div>
-                </div>
-              ) : hasReportAccess ? (
-                <p style={{ color: '#7a8a7a', marginTop: 8 }}>Carregando relatório...</p>
-              ) : (
-                <p style={{ color: '#7a8a7a', marginTop: 8 }}>Seu perfil não tem acesso ao relatório financeiro.</p>
-              )}
-            </div>
-
-            <div className="panel">
-              <div className="panel-header">
-                <div>
-                  <span className="eyebrow">Histórico</span>
-                  <h2>Recibos</h2>
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gap: 12 }}>
-                {/* Seletor de data */}
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <input
-                    type="date"
-                    value={receiptsDate}
-                    max={new Date().toISOString().slice(0, 10)}
-                    onChange={(e) => {
-                      setReceiptsDate(e.target.value);
-                      setDailyReceipts([]);
-                      setSelectedReceipt(null);
-                    }}
-                    style={{ flex: 1, fontSize: 13, padding: '6px 10px', borderRadius: 8, border: '1px solid #dbe3de' }}
-                  />
-                  <button
-                    className="primary-button"
-                    type="button"
-                    onClick={() => void loadDailyReceipts()}
-                    disabled={loadingReceipts}
-                    style={{ whiteSpace: 'nowrap' }}
-                  >
-                    Carregar
-                  </button>
-                </div>
-                {/* Busca por número */}
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <input
-                    type="text"
-                    placeholder="Nº do recibo (mesa)"
-                    value={searchReceiptNumber}
-                    onChange={(e) => setSearchReceiptNumber(e.target.value)}
-                    inputMode="numeric"
-                  />
-                  <button
-                    className="secondary-button"
-                    type="button"
-                    onClick={() => void searchReceiptByNumber()}
-                    disabled={loadingReceipts}
-                  >
-                    Buscar
-                  </button>
-                </div>
-
-                {selectedReceipt && (
-                  <div style={{ padding: 12, background: '#f9fafb', borderRadius: 8, border: '1px solid #e5e7eb' }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-                      <div>
-                        <strong>Recibo Nº</strong>
-                        <p style={{ margin: 0 }}>{selectedReceipt.receiptNumber ? String(selectedReceipt.receiptNumber).padStart(6, '0') : '—'}</p>
-                      </div>
-                      <div>
-                        <strong>Mesa</strong>
-                        <p style={{ margin: 0 }}>{selectedReceipt.tableName}</p>
-                      </div>
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-                      <div>
-                        <strong>Subtotal</strong>
-                        <p style={{ margin: 0 }}>{formatCurrency(selectedReceipt.subtotal)}</p>
-                      </div>
-                      <div>
-                        <strong>Total</strong>
-                        <p style={{ margin: 0, fontWeight: 700 }}>{formatCurrency(selectedReceipt.total)}</p>
-                      </div>
-                    </div>
-                    {selectedReceipt.orders && selectedReceipt.orders.length > 0 && (
-                      <div style={{ maxHeight: 180, overflowY: 'auto' }}>
-                        <strong style={{ display: 'block', marginBottom: 8 }}>Itens</strong>
-                        <div style={{ display: 'grid', gap: 6 }}>
-                          {selectedReceipt.orders.flatMap((order: any) =>
-                            order.items.map((item: any) => (
-                              <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-                                <span>{item.productName} x{item.quantity}</span>
-                                <span>{formatCurrency(item.total)}</span>
-                              </div>
-                            ))
-                          )}
-                        </div>
-                      </div>
-                    )}
-                    <button
-                      className="secondary-button"
-                      type="button"
-                      onClick={() => setSelectedReceipt(null)}
-                      style={{ marginTop: 12, width: '100%' }}
-                    >
-                      Fechar
-                    </button>
                   </div>
                 )}
 
-                {!selectedReceipt && (
-                  <div style={{ overflowY: 'auto', maxHeight: 300 }}>
-                    {loadingReceipts ? (
-                      <p>Carregando recibos...</p>
-                    ) : dailyReceipts.length === 0 ? (
-                      <p>Nenhum recibo encontrado.</p>
-                    ) : (
-                      <div style={{ display: 'grid', gap: 6 }}>
-                        {dailyReceipts.map((receipt) => (
-                          <button
-                            key={receipt.id}
-                            type="button"
-                            className="secondary-button"
-                            onClick={() => setSelectedReceipt(receipt)}
-                            style={{
-                              textAlign: 'left', padding: '8px 12px',
-                              background: receipt.type === 'delivery'
-                                ? (receipt.paymentStatus === 'ESTORNADO' ? '#fef2f2' : receipt.status === 'CANCELADO' ? '#f9fafb' : '#fffbeb')
-                                : undefined,
-                              borderColor: receipt.type === 'delivery'
-                                ? (receipt.paymentStatus === 'ESTORNADO' ? '#fca5a5' : receipt.status === 'CANCELADO' ? '#e5e7eb' : '#fde68a')
-                                : undefined,
-                            }}
-                          >
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <span>
-                                {receipt.type === 'delivery'
-                                  ? <><strong>🚲 {receipt.receiptNumber ? `Nº ${String(receipt.receiptNumber).padStart(6, '0')} – ` : ''}{receipt.tableName}</strong></>
-                                  : <><strong>Nº {String(receipt.receiptNumber).padStart(6, '0')}</strong> - {receipt.tableName}</>
-                                }
-                              </span>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                {receipt.type === 'delivery' && receipt.paymentStatus === 'ESTORNADO' && (
-                                  <span style={{ fontSize: 10, fontWeight: 700, background: '#fee2e2', color: '#b91c1c', border: '1px solid #fca5a5', borderRadius: 4, padding: '2px 6px' }}>ESTORNADO</span>
-                                )}
-                                {receipt.type === 'delivery' && receipt.status === 'CANCELADO' && receipt.paymentStatus !== 'ESTORNADO' && (
-                                  <span style={{ fontSize: 10, fontWeight: 700, background: '#f3f4f6', color: '#6b7280', border: '1px solid #d1d5db', borderRadius: 4, padding: '2px 6px' }}>CANCELADO</span>
-                                )}
-                                <span style={{ fontWeight: 700, color: receipt.paymentStatus === 'ESTORNADO' || receipt.status === 'CANCELADO' ? '#9ca3af' : undefined, textDecoration: receipt.paymentStatus === 'ESTORNADO' ? 'line-through' : undefined }}>{formatCurrency(receipt.total)}</span>
-                              </div>
-                            </div>
-                            {receipt.type === 'delivery' && receipt.status && (
-                              <div style={{ fontSize: 11, color: '#92400e', marginTop: 2 }}>{receipt.status} · {receipt.paymentMethod}</div>
-                            )}
+                {/* Gráfico de barras diário */}
+                {reportPeriod === 'monthly' && (
+                  <div className="panel" style={{ padding: 20 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                      <div>
+                        <span className="eyebrow">Evolução</span>
+                        <h3 style={{ margin: 0 }}>Faturamento por dia</h3>
+                      </div>
+                      {loadingChart && <span style={{ fontSize: 12, color: '#9ca3af' }}>Carregando...</span>}
+                    </div>
+                    {dailyChartData.length > 0 ? (() => {
+                      const maxVal = Math.max(...dailyChartData.map((d) => d.value), 1);
+                      const chartH = 120;
+                      const barW = Math.max(6, Math.floor(560 / dailyChartData.length) - 2);
+                      const gap = 2;
+                      const totalW = dailyChartData.length * (barW + gap);
+                      return (
+                        <div style={{ overflowX: 'auto' }}>
+                          <svg width={Math.max(totalW, 400)} height={chartH + 32} style={{ display: 'block' }}>
+                            {dailyChartData.map((d, i) => {
+                              const barH = Math.max(d.value > 0 ? 4 : 0, Math.round((d.value / maxVal) * chartH));
+                              const x = i * (barW + gap);
+                              const y = chartH - barH;
+                              const isToday = d.day === new Date().getDate() && reportRefDate.slice(0, 7) === new Date().toISOString().slice(0, 7);
+                              return (
+                                <g key={d.day}>
+                                  <title>{`Dia ${d.day}: ${formatCurrency(d.value)}`}</title>
+                                  <rect x={x} y={y} width={barW} height={barH} rx={2} fill={isToday ? '#f1c44e' : d.value > 0 ? '#18201d' : '#e5e7eb'} />
+                                  {(dailyChartData.length <= 15 || d.day % 5 === 0 || d.day === 1) && (
+                                    <text x={x + barW / 2} y={chartH + 16} textAnchor="middle" fontSize={9} fill="#9ca3af">{d.day}</text>
+                                  )}
+                                </g>
+                              );
+                            })}
+                          </svg>
+                          <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>
+                            Passe o mouse sobre as barras para ver o valor. <span style={{ background: '#f1c44e', padding: '1px 6px', borderRadius: 3, color: '#18201d', fontWeight: 700 }}>Hoje</span>
+                          </div>
+                        </div>
+                      );
+                    })() : !loadingChart && (
+                      <p style={{ color: '#9ca3af', fontSize: 13 }}>Nenhum dado para o período.</p>
+                    )}
+                  </div>
+                )}
+
+                {/* Seletor de período + exportação */}
+                <div className="panel">
+                  <div className="panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+                    <div>
+                      <span className="eyebrow">Relatório</span>
+                      <h2>Resumo {reportSummary?.periodLabel ?? 'diário'}</h2>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 10 }}>
+                      <div style={{ display: 'flex', background: '#f0f2f0', borderRadius: 10, padding: 3, gap: 2 }}>
+                        {reportPeriods.map((option) => (
+                          <button key={option.value} type="button" onClick={() => setReportPeriod(option.value)}
+                            style={{ border: 'none', borderRadius: 8, padding: '6px 14px', fontSize: 13, fontWeight: reportPeriod === option.value ? 700 : 500, cursor: 'pointer', background: reportPeriod === option.value ? '#18201d' : 'transparent', color: reportPeriod === option.value ? '#f1c44e' : '#6b7a6b', transition: 'background 0.15s, color 0.15s', minHeight: 'unset' }}>
+                            {option.label}
                           </button>
                         ))}
                       </div>
+                      {reportPeriod === 'daily' && <input type="date" value={reportRefDate} max={new Date().toISOString().slice(0, 10)} onChange={(e) => setReportRefDate(e.target.value)} style={{ fontSize: 13, padding: '5px 10px', borderRadius: 8, border: '1px solid #dbe3de', height: 34 }} />}
+                      {reportPeriod === 'weekly' && <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#6b7a6b' }}><span>Semana de</span><input type="date" value={reportRefDate} max={new Date().toISOString().slice(0, 10)} onChange={(e) => setReportRefDate(e.target.value)} style={{ fontSize: 13, padding: '5px 10px', borderRadius: 8, border: '1px solid #dbe3de', height: 34 }} /></div>}
+                      {reportPeriod === 'monthly' && <input type="month" value={reportRefDate.slice(0, 7)} max={new Date().toISOString().slice(0, 7)} onChange={(e) => setReportRefDate(`${e.target.value}-01`)} style={{ fontSize: 13, padding: '5px 10px', borderRadius: 8, border: '1px solid #dbe3de', height: 34 }} />}
+                      {reportPeriod === 'yearly' && <select value={reportRefDate.slice(0, 4)} onChange={(e) => setReportRefDate(`${e.target.value}-01-01`)} style={{ fontSize: 13, padding: '5px 10px', borderRadius: 8, border: '1px solid #dbe3de', height: 34 }}>{Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map((y) => <option key={y} value={y}>{y}</option>)}</select>}
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button type="button" className="secondary-button" style={{ height: 34, display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }} onClick={() => void previewReportPdf()}><ReceiptText size={15} />Visualizar</button>
+                        <button type="button" className="primary-button" style={{ height: 34, display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }} onClick={() => void exportReportPdf()}>Exportar PDF</button>
+                      </div>
+                    </div>
+                  </div>
+                  {reportSummary ? (
+                    <div style={{ display: 'grid', gap: 16, marginTop: 4 }}>
+                      <div>
+                        <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: '#7a8a7a', display: 'block', marginBottom: 10 }}>Por origem</span>
+                        <div style={{ maxHeight: '220px', overflowY: 'auto', display: 'grid', gap: 6 }}>
+                          {[...reportSummary.tables].filter((t) => t.tableId !== '__delivery__').sort((a, b) => b.totalValue - a.totalValue).map((table) => (
+                            <div key={table.tableId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: '#f8faf8', border: '1px solid #dbe3de', borderRadius: 8 }}>
+                              <div><span style={{ fontWeight: 600, fontSize: 13 }}>{table.tableName}</span><span style={{ color: '#7a8a7a', fontSize: 12, marginLeft: 8 }}>{table.totalItems} itens</span></div>
+                              <strong style={{ fontSize: 14, color: '#18201d' }}>{formatCurrency(table.totalValue)}</strong>
+                            </div>
+                          ))}
+                          {reportSummary.tables.find((t) => t.tableId === '__delivery__') && (() => {
+                            const d = reportSummary.tables.find((t) => t.tableId === '__delivery__')!;
+                            return (
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8 }}>
+                                <div><span style={{ fontWeight: 600, fontSize: 13 }}>🚲 Delivery</span><span style={{ color: '#7a8a7a', fontSize: 12, marginLeft: 8 }}>{d.totalItems} pedidos</span></div>
+                                <strong style={{ fontSize: 14, color: '#92400e' }}>{formatCurrency(d.totalValue)}</strong>
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      </div>
+                    </div>
+                  ) : hasReportAccess ? (
+                    <p style={{ color: '#7a8a7a', marginTop: 8 }}>Carregando relatório...</p>
+                  ) : (
+                    <p style={{ color: '#7a8a7a', marginTop: 8 }}>Seu perfil não tem acesso ao relatório financeiro.</p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ── ABA: RECIBOS ── */}
+            {caixaSubTab === 'recibos' && (
+              <div style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
+                <div className="panel">
+                  <div className="panel-header">
+                    <div><span className="eyebrow">Histórico</span><h2>Recibos</h2></div>
+                  </div>
+                  <div style={{ display: 'grid', gap: 12 }}>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <input type="date" value={receiptsDate} max={new Date().toISOString().slice(0, 10)} onChange={(e) => { setReceiptsDate(e.target.value); setDailyReceipts([]); setSelectedReceipt(null); }} style={{ flex: 1, fontSize: 13, padding: '6px 10px', borderRadius: 8, border: '1px solid #dbe3de' }} />
+                      <button className="primary-button" type="button" onClick={() => void loadDailyReceipts()} disabled={loadingReceipts} style={{ whiteSpace: 'nowrap' }}>Carregar</button>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <input type="text" placeholder="Nº do recibo (mesa)" value={searchReceiptNumber} onChange={(e) => setSearchReceiptNumber(e.target.value)} inputMode="numeric" />
+                      <button className="secondary-button" type="button" onClick={() => void searchReceiptByNumber()} disabled={loadingReceipts}>Buscar</button>
+                    </div>
+                    {selectedReceipt && (
+                      <div style={{ padding: 12, background: '#f9fafb', borderRadius: 8, border: '1px solid #e5e7eb' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+                          <div><strong>Recibo Nº</strong><p style={{ margin: 0 }}>{selectedReceipt.receiptNumber ? String(selectedReceipt.receiptNumber).padStart(6, '0') : '—'}</p></div>
+                          <div><strong>Mesa</strong><p style={{ margin: 0 }}>{selectedReceipt.tableName}</p></div>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+                          <div><strong>Subtotal</strong><p style={{ margin: 0 }}>{formatCurrency(selectedReceipt.subtotal)}</p></div>
+                          <div><strong>Total</strong><p style={{ margin: 0, fontWeight: 700 }}>{formatCurrency(selectedReceipt.total)}</p></div>
+                        </div>
+                        {selectedReceipt.orders && selectedReceipt.orders.length > 0 && (
+                          <div style={{ maxHeight: 180, overflowY: 'auto' }}>
+                            <strong style={{ display: 'block', marginBottom: 8 }}>Itens</strong>
+                            <div style={{ display: 'grid', gap: 6 }}>
+                              {selectedReceipt.orders.flatMap((order: any) => order.items.map((item: any) => (
+                                <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                                  <span>{item.productName} x{item.quantity}</span>
+                                  <span>{formatCurrency(item.total)}</span>
+                                </div>
+                              )))}
+                            </div>
+                          </div>
+                        )}
+                        <button className="secondary-button" type="button" onClick={() => setSelectedReceipt(null)} style={{ marginTop: 12, width: '100%' }}>Fechar</button>
+                      </div>
                     )}
+                    {!selectedReceipt && (
+                      <div style={{ overflowY: 'auto', maxHeight: 400 }}>
+                        {loadingReceipts ? <p>Carregando recibos...</p> : dailyReceipts.length === 0 ? <p>Nenhum recibo encontrado.</p> : (
+                          <div style={{ display: 'grid', gap: 6 }}>
+                            {dailyReceipts.map((receipt) => (
+                              <button key={receipt.id} type="button" className="secondary-button" onClick={() => setSelectedReceipt(receipt)}
+                                style={{ textAlign: 'left', padding: '8px 12px', background: receipt.type === 'delivery' ? (receipt.paymentStatus === 'ESTORNADO' ? '#fef2f2' : receipt.status === 'CANCELADO' ? '#f9fafb' : '#fffbeb') : undefined, borderColor: receipt.type === 'delivery' ? (receipt.paymentStatus === 'ESTORNADO' ? '#fca5a5' : receipt.status === 'CANCELADO' ? '#e5e7eb' : '#fde68a') : undefined }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <span>{receipt.type === 'delivery' ? <><strong>🚲 {receipt.receiptNumber ? `Nº ${String(receipt.receiptNumber).padStart(6, '0')} – ` : ''}{receipt.tableName}</strong></> : <><strong>Nº {String(receipt.receiptNumber).padStart(6, '0')}</strong> - {receipt.tableName}</>}</span>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                    {receipt.type === 'delivery' && receipt.paymentStatus === 'ESTORNADO' && <span style={{ fontSize: 10, fontWeight: 700, background: '#fee2e2', color: '#b91c1c', border: '1px solid #fca5a5', borderRadius: 4, padding: '2px 6px' }}>ESTORNADO</span>}
+                                    {receipt.type === 'delivery' && receipt.status === 'CANCELADO' && receipt.paymentStatus !== 'ESTORNADO' && <span style={{ fontSize: 10, fontWeight: 700, background: '#f3f4f6', color: '#6b7280', border: '1px solid #d1d5db', borderRadius: 4, padding: '2px 6px' }}>CANCELADO</span>}
+                                    <span style={{ fontWeight: 700, color: receipt.paymentStatus === 'ESTORNADO' || receipt.status === 'CANCELADO' ? '#9ca3af' : undefined, textDecoration: receipt.paymentStatus === 'ESTORNADO' ? 'line-through' : undefined }}>{formatCurrency(receipt.total)}</span>
+                                  </div>
+                                </div>
+                                {receipt.type === 'delivery' && receipt.status && <div style={{ fontSize: 11, color: '#92400e', marginTop: 2 }}>{receipt.status} · {receipt.paymentMethod}</div>}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── ABA: CARTEIRA ── */}
+            {caixaSubTab === 'carteira' && (
+              <div style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
+                {(role === 'ADMIN' || role === 'GERENTE' || role === 'CAIXA' || role === 'FINANCEIRO') && (
+                  <div className="panel">
+                    <div className="panel-header">
+                      <div><span className="eyebrow">Saldo</span><h2>Carteira</h2></div>
+                    </div>
+                    <div style={{ display: 'grid', gap: 14 }}>
+                      {!isPro && (
+                        <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#92400e' }}>
+                          🔒 <strong>Plano Pro</strong> — Pagamentos online via Pix e Cartão, e saldo na Carteira, estão disponíveis no plano Pro. Entre em contato com o suporte para fazer upgrade.
+                        </div>
+                      )}
+                      <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '14px 16px' }}>
+                        <div style={{ fontSize: 12, color: '#15803d', fontWeight: 700, textTransform: 'uppercase' }}>Saldo disponível</div>
+                        <div style={{ fontSize: 28, fontWeight: 800, color: '#15803d' }}>{formatCurrency(walletInfo?.balance ?? 0)}</div>
+                        {walletInfo && walletInfo.deliveryFeePercent > 0 && (
+                          <div style={{ fontSize: 12, color: '#4ade80', marginTop: 2 }}>Taxa da plataforma: {walletInfo.deliveryFeePercent}%</div>
+                        )}
+                      </div>
+                      <label>
+                        Chave Pix de repasse <span style={{ fontSize: 11, fontWeight: 400 }}>(usada pelo AdminSuper para transferir seus saques)</span>
+                        <input value={walletPixKeyInput} onChange={(e) => setWalletPixKeyInput(e.target.value)} placeholder="Ex: +5511999999999 ou email@exemplo.com" autoComplete="off" />
+                      </label>
+                      <button className="secondary-button" type="button" style={{ width: 'fit-content' }} disabled={walletSavingPixKey} onClick={() => void saveWalletPixKey()}>
+                        {walletSavingPixKey ? 'Salvando...' : 'Salvar chave Pix'}
+                      </button>
+                      {walletWithdrawals.some((w) => w.status === 'SOLICITADO') ? (
+                        <p style={{ margin: 0, fontSize: 13, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 14px' }}>
+                          ⏳ Saque de {formatCurrency(walletWithdrawals.find((w) => w.status === 'SOLICITADO')?.amount ?? 0)} solicitado — aguardando transferência do AdminSuper.
+                        </p>
+                      ) : (
+                        <button className="primary-button" type="button" style={{ width: 'fit-content' }} disabled={walletRequestingWithdrawal || !walletInfo || walletInfo.balance <= 0 || !walletInfo.payoutPixKey} onClick={() => void requestWalletWithdrawal()}>
+                          {walletRequestingWithdrawal ? 'Solicitando...' : '💸 Solicitar saque'}
+                        </button>
+                      )}
+                      {walletInfo && walletInfo.balance > 0 && !walletInfo.payoutPixKey && (
+                        <p style={{ margin: 0, fontSize: 12, color: '#9ca3af' }}>Cadastre a chave Pix de repasse acima para poder solicitar saque.</p>
+                      )}
+                      <div>
+                        <h3 style={{ margin: '4px 0 8px', fontSize: 13 }}>Últimos lançamentos</h3>
+                        {walletTransactions.length === 0 ? (
+                          <p style={{ margin: 0, fontSize: 13, color: '#9ca3af' }}>Nenhum lançamento ainda.</p>
+                        ) : (
+                          <div style={{ display: 'grid', gap: 6, maxHeight: 240, overflowY: 'auto' }}>
+                            {walletTransactions.map((t) => (
+                              <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 13, borderBottom: '1px solid #eef2ef', paddingBottom: 6 }}>
+                                <div>
+                                  <div>{t.description ?? t.type}</div>
+                                  <div style={{ fontSize: 11, color: '#9ca3af' }}>{new Date(t.createdAt).toLocaleString()}</div>
+                                </div>
+                                <strong style={{ color: t.amount >= 0 ? '#15803d' : '#b91c1c', whiteSpace: 'nowrap' }}>
+                                  {t.amount >= 0 ? '+' : ''}{formatCurrency(t.amount)}
+                                </strong>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
-            </div>
+            )}
           </section>
         )}
 
