@@ -8158,7 +8158,7 @@ export function App() {
                               )}
                               {!isCurrent && !isDowngrade && !canSubscribePlan(p) && (
                                 <a
-                                  href={`https://wa.me/5587996469350?text=${encodeURIComponent(`Olá! Sou cliente do Integra360 (${currentCompany?.name ?? ''}) e gostaria de contratar o plano Enterprise.`)}`}
+                                  href={`https://wa.me/5587999710850?text=${encodeURIComponent(`Olá! Sou cliente do Integra360 (${currentCompany?.name ?? ''}) e gostaria de contratar o plano Enterprise.`)}`}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   style={{ display: 'block', textAlign: 'center', background: '#18201d', color: '#fff', borderRadius: 8, padding: '10px 0', fontWeight: 700, fontSize: 13, textDecoration: 'none', marginTop: 'auto' }}
@@ -8181,7 +8181,7 @@ export function App() {
                     <h3 style={{ margin: '0 0 4px', fontSize: 14 }}>Dúvidas sobre sua assinatura?</h3>
                     <p style={{ margin: '0 0 12px', fontSize: 13, color: '#6b7280' }}>Entre em contato com nosso suporte via WhatsApp.</p>
                     <a
-                      href={`https://wa.me/5587996469350?text=${encodeURIComponent('Olá! Preciso de ajuda com minha assinatura do Integra360.')}`}
+                      href={`https://wa.me/5587999710850?text=${encodeURIComponent('Olá! Preciso de ajuda com minha assinatura do Integra360.')}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: '#25d366', color: '#fff', borderRadius: 8, padding: '9px 16px', fontWeight: 700, fontSize: 13, textDecoration: 'none' }}
