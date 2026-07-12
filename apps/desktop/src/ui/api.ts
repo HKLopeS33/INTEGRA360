@@ -856,23 +856,18 @@ export const api = {
     await requireCompanyUserWithRoles(['ADMIN', 'GERENTE', 'CAIXA', 'GARCOM', 'COZINHA']);
 
     if (status === 'CANCELADO') {
-      // Tenta via Edge Function (estorna MP se pago online). Se falhar (função não deployada), cancela direto no DB.
-      try {
-        const { data, error } = await supabase.functions.invoke('mercado-pago-refund', {
-          body: { deliveryOrderId: orderId, action: 'direct_cancel' },
-        });
-        if (error) throw error;
-        if (data?.error) throw new Error(data.error);
-      } catch {
-        // Fallback: atualiza diretamente no banco
-        const now = new Date().toISOString();
-        const { error: dbError } = await supabase
-          .from('DeliveryOrder')
-          .update({ status: 'CANCELADO', updatedAt: now, closedAt: now })
-          .eq('id', orderId);
-        if (dbError) throwSupabaseError(dbError, 'Falha ao cancelar pedido.');
-      }
-      fetch(`${SUPABASE_URL}/functions/v1/whatsapp-notify`, { method: 'POST', headers: { 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ orderId, status }) }).catch(() => {});
+      // Cancela diretamente no banco (sempre funciona). Se o pedido foi pago online,
+      // tenta o estorno via Edge Function em background (não bloqueia o cancel).
+      const now = new Date().toISOString();
+      const { error: dbError } = await supabase
+        .from('DeliveryOrder')
+        .update({ status: 'CANCELADO', updatedAt: now, closedAt: now })
+        .eq('id', orderId);
+      if (dbError) throwSupabaseError(dbError, 'Falha ao cancelar pedido.');
+      // Tenta estorno MP em background (não bloqueia)
+      supabase.functions.invoke('mercado-pago-refund', {
+        body: { deliveryOrderId: orderId, action: 'direct_cancel' },
+      }).catch(() => {});
       return { success: true };
     }
 

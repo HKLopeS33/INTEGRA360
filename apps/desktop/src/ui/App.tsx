@@ -2971,9 +2971,13 @@ export function App() {
 
   const cancelDeliveryOrder = async (order: DeliveryOrder) => {
     confirmAction(`Cancelar pedido de ${order.customerName}?`, async () => {
-      await api.updateDeliveryStatus(order.id, 'CANCELADO');
-      await loadDeliveryOrders();
-      showToast('Pedido cancelado.', 'info');
+      try {
+        await api.updateDeliveryStatus(order.id, 'CANCELADO');
+        await loadDeliveryOrders();
+        showToast('Pedido cancelado.', 'info');
+      } catch (e: any) {
+        showToast(e?.message || 'Erro ao cancelar pedido.', 'error');
+      }
     });
   };
 
