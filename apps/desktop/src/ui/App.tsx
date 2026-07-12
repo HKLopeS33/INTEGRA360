@@ -7168,11 +7168,12 @@ export function App() {
                       type="button"
                       onClick={async () => {
                         const next = !(currentCompany.isOpen !== false);
+                        setCurrentCompany((prev: any) => prev ? { ...prev, isOpen: next } : prev);
                         try {
                           await api.setStoreIsOpen(next);
-                          await loadData();
                           showToast(next ? 'Cardápio marcado como aberto.' : 'Cardápio marcado como fechado.', 'info');
                         } catch (e: any) {
+                          setCurrentCompany((prev: any) => prev ? { ...prev, isOpen: !next } : prev);
                           showToast(e?.message || 'Falha ao atualizar status.', 'error');
                         }
                       }}
