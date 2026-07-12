@@ -448,6 +448,7 @@ export function App() {
   const [profilePhoto, setProfilePhoto] = useState('');
   const [storeName, setStoreName] = useState('Integra360');
   const [ajustesSubTab, setAjustesSubTab] = useState<'loja' | 'tecnico' | 'pagamentos' | 'assinatura'>('loja');
+  const [subscribing, setSubscribing] = useState<string | null>(null);
   const [caixaSubTab, setCaixaSubTab] = useState<'operacao' | 'relatorios' | 'recibos' | 'carteira'>('operacao');
   const [dailyChartData, setDailyChartData] = useState<{ day: number; value: number }[]>([]);
   const [loadingChart, setLoadingChart] = useState(false);
@@ -8060,8 +8061,6 @@ export function App() {
                 PRO: ['Mesas ilimitadas', 'Delivery completo', 'Pagamentos online (Pix + Cartão)', 'Carteira e saques', 'KDS (Cozinha)', 'Relatórios avançados', 'WhatsApp automático'],
                 ENTERPRISE: ['Tudo do Pro', 'Múltiplas unidades', 'SLA prioritário', 'Onboarding dedicado'],
               };
-
-              const [subscribing, setSubscribing] = React.useState<string | null>(null);
 
               const handleSubscribe = async (targetPlan: 'STARTER' | 'PRO') => {
                 if (!currentCompany) return;
