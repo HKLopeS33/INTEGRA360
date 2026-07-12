@@ -7187,7 +7187,7 @@ export function App() {
                         color: currentCompany.isOpen !== false ? '#15803d' : '#b91c1c',
                         border: `1.5px solid ${currentCompany.isOpen !== false ? '#86efac' : '#fca5a5'}`,
                         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                      } as React.CSSProperties}
+                      }}
                     >
                       {currentCompany.isOpen !== false ? '🟢 Estamos abertos' : '🔴 Estamos fechados'}
                     </button>
