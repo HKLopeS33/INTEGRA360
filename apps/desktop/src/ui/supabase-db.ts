@@ -123,7 +123,7 @@ export async function getUserRowById(userId: string): Promise<UserRow | null> {
 export async function getCompanyById(companyId: string): Promise<CompanyRow | null> {
   const { data, error } = await supabase
     .from<CompanyRow>(COMPANIES_TABLE)
-    .select('id,name,email,cnpj,phone,address,city,state,country,pixKey,kitchenPrinter,cashierPrinter,printingDisabled,active,plan,planMonthlyPrice,trialEndsAt,deliveryFeeAmount,openingTime,closingTime,menuBannerUrl,subscription:Subscription(id,status,monthlyFee,expiresAt,lastRenewed,lastLoginAt)')
+    .select('id,name,email,cnpj,phone,address,city,state,country,pixKey,kitchenPrinter,cashierPrinter,printingDisabled,active,plan,planMonthlyPrice,trialEndsAt,deliveryFeeAmount,openingTime,closingTime,isOpen,menuBannerUrl,subscription:Subscription(id,status,monthlyFee,expiresAt,lastRenewed,lastLoginAt)')
     .eq('id', companyId)
     .maybeSingle();
 

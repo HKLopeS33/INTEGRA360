@@ -63,6 +63,7 @@ const normalizeCompany = (company: any) => ({
   deliveryFeeAmount: Number(company.deliveryFeeAmount ?? 0),
   openingTime: company.openingTime ?? '18:00',
   closingTime: company.closingTime ?? '00:00',
+  isOpen: company.isOpen !== false, // default true
   plan: (company.plan ?? 'STARTER') as 'STARTER' | 'TRIAL' | 'PRO' | 'ENTERPRISE',
   planMonthlyPrice: Number(company.planMonthlyPrice ?? 0),
   trialEndsAt: company.trialEndsAt ?? null,
@@ -133,7 +134,7 @@ const anonFetch = async (path: string, options?: RequestInit) => {
 export const publicDeliveryApi = {
   getMenu: async (companyId: string) => {
     const [companyRes, categoriesRes, productsRes] = await Promise.all([
-      anonFetch(`/Company?id=eq.${encodeURIComponent(companyId)}&active=eq.true&select=id,name,menuBannerUrl,phone,deliveryFeeAmount,openingTime,closingTime&limit=1`),
+      anonFetch(`/Company?id=eq.${encodeURIComponent(companyId)}&active=eq.true&select=id,name,menuBannerUrl,phone,deliveryFeeAmount,openingTime,closingTime,isOpen&limit=1`),
       anonFetch(`/Category?companyId=eq.${encodeURIComponent(companyId)}&active=eq.true&select=id,name,sort,imageUrl&order=sort.asc`),
       anonFetch(`/Product?companyId=eq.${encodeURIComponent(companyId)}&active=eq.true&available=eq.true&select=id,categoryId,name,description,price,available,salesCount&order=name.asc`),
     ]);
@@ -143,7 +144,7 @@ export const publicDeliveryApi = {
     const categories: any[] = await categoriesRes.json();
     const products: any[] = await productsRes.json();
     return {
-      company: { ...companies[0], deliveryFeeAmount: Number(companies[0].deliveryFeeAmount ?? 0) } as { id: string; name: string; menuBannerUrl: string | null; phone: string | null; deliveryFeeAmount: number; openingTime: string; closingTime: string },
+      company: { ...companies[0], deliveryFeeAmount: Number(companies[0].deliveryFeeAmount ?? 0), isOpen: companies[0].isOpen !== false } as { id: string; name: string; menuBannerUrl: string | null; phone: string | null; deliveryFeeAmount: number; openingTime: string; closingTime: string; isOpen: boolean },
       categories: categories as Array<{ id: string; name: string; sort: number; imageUrl: string | null }>,
       products: products
         .map((p: any) => ({ ...p, price: Number(p.price), salesCount: Number(p.salesCount ?? 0) }))
@@ -389,7 +390,7 @@ export const api = {
         ...(payload.closingTime !== undefined && { closingTime: payload.closingTime }),
       })
       .eq('id', user.companyId)
-      .select('id,name,email,cnpj,phone,address,city,state,country,pixKey,kitchenPrinter,cashierPrinter,printingDisabled,menuBannerUrl,active,deliveryFeeAmount,openingTime,closingTime')
+      .select('id,name,email,cnpj,phone,address,city,state,country,pixKey,kitchenPrinter,cashierPrinter,printingDisabled,menuBannerUrl,active,deliveryFeeAmount,openingTime,closingTime,isOpen')
       .single();
 
     if (error) {
@@ -397,6 +398,16 @@ export const api = {
     }
 
     return { success: true, company: normalizeCompany(data) };
+  },
+
+  setStoreIsOpen: async (isOpen: boolean) => {
+    const user = await requireCompanyUserWithRoles(['ADMIN', 'GERENTE']);
+    const { error } = await supabase
+      .from('Company')
+      .update({ isOpen, updatedAt: new Date().toISOString() })
+      .eq('id', user.companyId);
+    if (error) throwSupabaseError(error, 'Falha ao atualizar status da loja.');
+    return { success: true };
   },
 
   logout: async () => {
@@ -845,12 +856,22 @@ export const api = {
     await requireCompanyUserWithRoles(['ADMIN', 'GERENTE', 'CAIXA', 'GARCOM', 'COZINHA']);
 
     if (status === 'CANCELADO') {
-      // Delega à Edge Function: estorna MP (se pago online) e debita carteira atomicamente
-      const { data, error } = await supabase.functions.invoke('mercado-pago-refund', {
-        body: { deliveryOrderId: orderId, action: 'direct_cancel' },
-      });
-      if (error) throwSupabaseError(error, 'Falha ao cancelar pedido.');
-      if (data?.error) throw new Error(data.error);
+      // Tenta via Edge Function (estorna MP se pago online). Se falhar (função não deployada), cancela direto no DB.
+      try {
+        const { data, error } = await supabase.functions.invoke('mercado-pago-refund', {
+          body: { deliveryOrderId: orderId, action: 'direct_cancel' },
+        });
+        if (error) throw error;
+        if (data?.error) throw new Error(data.error);
+      } catch {
+        // Fallback: atualiza diretamente no banco
+        const now = new Date().toISOString();
+        const { error: dbError } = await supabase
+          .from('DeliveryOrder')
+          .update({ status: 'CANCELADO', updatedAt: now, closedAt: now })
+          .eq('id', orderId);
+        if (dbError) throwSupabaseError(dbError, 'Falha ao cancelar pedido.');
+      }
       fetch(`${SUPABASE_URL}/functions/v1/whatsapp-notify`, { method: 'POST', headers: { 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ orderId, status }) }).catch(() => {});
       return { success: true };
     }
@@ -3098,6 +3119,44 @@ export const api = {
       totalValue: mesaValue + deliveryValue,
       tables: Object.values(tableGroups),
     };
+  },
+
+  // Retorna faturamento dia-a-dia para o mês/ano informado (para gráfico de barras)
+  reportDailyBreakdown: async (year: number, month: number) => {
+    const user = await requireCompanyUserWithRoles(['ADMIN', 'CAIXA', 'FINANCEIRO', 'GERENTE']);
+    const startDate = new Date(year, month - 1, 1);
+    const endDate   = new Date(year, month, 1);
+
+    const [ordersRes, deliveryRes] = await Promise.all([
+      supabase.from('OrderItem')
+        .select('quantity,unitPrice,order:Order!inner(createdAt,status,companyId)')
+        .eq('order.companyId', user.companyId)
+        .neq('order.status', 'CANCELADO')
+        .gte('order.createdAt', startDate.toISOString())
+        .lt('order.createdAt', endDate.toISOString()),
+      supabase.from('DeliveryOrder')
+        .select('total,createdAt')
+        .eq('companyId', user.companyId)
+        .neq('status', 'CANCELADO')
+        .eq('paymentStatus', 'PAGO')
+        .gte('createdAt', startDate.toISOString())
+        .lt('createdAt', endDate.toISOString()),
+    ]);
+
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const byDay: Record<number, number> = {};
+    for (let d = 1; d <= daysInMonth; d++) byDay[d] = 0;
+
+    for (const item of (ordersRes.data ?? [])) {
+      const day = new Date((item.order as any).createdAt).getDate();
+      byDay[day] = (byDay[day] ?? 0) + Number(item.unitPrice) * Number(item.quantity);
+    }
+    for (const order of (deliveryRes.data ?? [])) {
+      const day = new Date(order.createdAt).getDate();
+      byDay[day] = (byDay[day] ?? 0) + Number(order.total);
+    }
+
+    return Array.from({ length: daysInMonth }, (_, i) => ({ day: i + 1, value: byDay[i + 1] ?? 0 }));
   },
 
   // --- Carteira (wallet) — saldo da própria empresa ---

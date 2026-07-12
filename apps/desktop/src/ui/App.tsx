@@ -351,7 +351,7 @@ export function App() {
   const [menuTableId, setMenuTableId] = useState<string | null>(null);
   // Delivery público (link para cliente)
   const [publicDeliveryCompanyId, setPublicDeliveryCompanyId] = useState<string | null>(null);
-  const [publicDeliveryCompany, setPublicDeliveryCompany] = useState<{ id: string; name: string; menuBannerUrl?: string | null; phone?: string | null; deliveryFeeAmount?: number; openingTime?: string; closingTime?: string } | null>(null);
+  const [publicDeliveryCompany, setPublicDeliveryCompany] = useState<{ id: string; name: string; menuBannerUrl?: string | null; phone?: string | null; deliveryFeeAmount?: number; openingTime?: string; closingTime?: string; isOpen?: boolean } | null>(null);
   const [publicDeliveryCategories, setPublicDeliveryCategories] = useState<Array<{ id: string; name: string; sort: number; imageUrl?: string | null }>>([]);
   const [publicDeliveryProducts, setPublicDeliveryProducts] = useState<Array<{ id: string; categoryId: string; name: string; description: string | null; price: number; available: boolean }>>([]);
   const [publicDeliveryCart, setPublicDeliveryCart] = useState<Array<{ product: { id: string; name: string; price: number }; quantity: number; note: string }>>([]);
@@ -448,7 +448,7 @@ export function App() {
   const [profilePhoto, setProfilePhoto] = useState('');
   const [storeName, setStoreName] = useState('Integra360');
   const [ajustesSubTab, setAjustesSubTab] = useState<'loja' | 'tecnico' | 'pagamentos' | 'assinatura'>('loja');
-  const [caixaSubTab, setCaixaSubTab] = useState<'operacao' | 'relatorios' | 'carteira'>('operacao');
+  const [caixaSubTab, setCaixaSubTab] = useState<'operacao' | 'relatorios' | 'recibos' | 'carteira'>('operacao');
   const [dailyChartData, setDailyChartData] = useState<{ day: number; value: number }[]>([]);
   const [loadingChart, setLoadingChart] = useState(false);
   const [prevMonthTotal, setPrevMonthTotal] = useState<number | null>(null);
@@ -3617,17 +3617,18 @@ export function App() {
                   const fee = publicDeliveryCompany.deliveryFeeAmount ?? 0;
                   const opening = publicDeliveryCompany.openingTime ?? '18:00';
                   const closing = publicDeliveryCompany.closingTime ?? '00:00';
-                  // Verifica se está aberto agora
+                  // Verifica se está aberto agora (horário + flag manual)
                   const now = new Date();
                   const [oh, om] = opening.split(':').map(Number);
                   const [ch, cm] = closing.split(':').map(Number);
                   const nowMin = now.getHours() * 60 + now.getMinutes();
-                  const openMin = oh * 60 + om;
-                  const closeMin = ch * 60 + cm;
-                  // Suporta virada de meia-noite (ex: 18:00 até 00:30)
-                  const isOpen = closeMin <= openMin
+                  const openMin = (oh ?? 0) * 60 + (om ?? 0);
+                  const closeMin = (ch ?? 0) * 60 + (cm ?? 0);
+                  const isInHours = closeMin <= openMin
                     ? nowMin >= openMin || nowMin < closeMin
                     : nowMin >= openMin && nowMin < closeMin;
+                  const manualIsOpen = publicDeliveryCompany.isOpen !== false;
+                  const isOpen = manualIsOpen && isInHours;
                   return (
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                       {/* Frete */}
@@ -3654,6 +3655,17 @@ export function App() {
                     </div>
                   );
                 })())}
+
+                {/* Banner: fechado manualmente pelo estabelecimento */}
+                {publicDeliveryCompany && publicDeliveryCompany.isOpen === false && (
+                  <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 12, padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <span style={{ fontSize: 24 }}>🔴</span>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: 15, color: '#b91c1c' }}>Estamos fechados no momento</div>
+                      <div style={{ fontSize: 13, color: '#7f1d1d', marginTop: 2 }}>Voltamos em breve. Confira nosso horário de funcionamento.</div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Produtos da tab ativa */}
                 <div style={{ display: 'grid', gap: 10, paddingBottom: cartCount > 0 ? 96 : 16 }}>
@@ -7147,6 +7159,38 @@ export function App() {
                   <div><span className="eyebrow">Resumo</span><h2>Delivery de hoje</h2></div>
                   <Package size={22} />
                 </div>
+
+                {/* Toggle aberto / fechado */}
+                {(role === 'ADMIN' || role === 'GERENTE') && currentCompany && (
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#789088', marginBottom: 8 }}>Status do cardápio online</div>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const next = !(currentCompany.isOpen !== false);
+                        try {
+                          await api.setStoreIsOpen(next);
+                          await loadData();
+                          showToast(next ? 'Cardápio marcado como aberto.' : 'Cardápio marcado como fechado.', 'info');
+                        } catch (e: any) {
+                          showToast(e?.message || 'Falha ao atualizar status.', 'error');
+                        }
+                      }}
+                      style={{
+                        width: '100%', padding: '12px 16px', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 14,
+                        background: currentCompany.isOpen !== false ? '#f0fdf4' : '#fef2f2',
+                        color: currentCompany.isOpen !== false ? '#15803d' : '#b91c1c',
+                        border: `1.5px solid ${currentCompany.isOpen !== false ? '#86efac' : '#fca5a5'}`,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                      } as React.CSSProperties}
+                    >
+                      {currentCompany.isOpen !== false ? '🟢 Estamos abertos' : '🔴 Estamos fechados'}
+                    </button>
+                    <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 6, textAlign: 'center' }}>
+                      Clique para {currentCompany.isOpen !== false ? 'fechar' : 'abrir'} o cardápio online
+                    </div>
+                  </div>
+                )}
                 {(() => {
                   const today = new Date().toDateString();
                   const entregues = deliveryOrdersAll.filter((o) => o.status === 'ENTREGUE' && new Date(o.createdAt).toDateString() === today).length;
