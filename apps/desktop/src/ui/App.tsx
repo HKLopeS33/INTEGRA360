@@ -7166,37 +7166,58 @@ export function App() {
                 </div>
 
                 {/* Toggle aberto / fechado */}
-                {(role === 'ADMIN' || role === 'GERENTE') && currentCompany && (
-                  <div style={{ marginBottom: 16 }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#789088', marginBottom: 8 }}>Status do cardápio online</div>
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        const next = !(currentCompany.isOpen !== false);
-                        setCurrentCompany((prev: any) => prev ? { ...prev, isOpen: next } : prev);
-                        try {
-                          await api.setStoreIsOpen(next);
-                          showToast(next ? 'Cardápio marcado como aberto.' : 'Cardápio marcado como fechado.', 'info');
-                        } catch (e: any) {
-                          setCurrentCompany((prev: any) => prev ? { ...prev, isOpen: !next } : prev);
-                          showToast(e?.message || 'Falha ao atualizar status.', 'error');
-                        }
-                      }}
-                      style={{
-                        width: '100%', padding: '12px 16px', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 14,
-                        background: currentCompany.isOpen !== false ? '#f0fdf4' : '#fef2f2',
-                        color: currentCompany.isOpen !== false ? '#15803d' : '#b91c1c',
-                        border: `1.5px solid ${currentCompany.isOpen !== false ? '#86efac' : '#fca5a5'}`,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                      }}
-                    >
-                      {currentCompany.isOpen !== false ? '🟢 Estamos abertos' : '🔴 Estamos fechados'}
-                    </button>
-                    <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 6, textAlign: 'center' }}>
-                      Clique para {currentCompany.isOpen !== false ? 'fechar' : 'abrir'} o cardápio online
+                {(role === 'ADMIN' || role === 'GERENTE') && currentCompany && (() => {
+                  const manualOpen = currentCompany.isOpen !== false;
+                  const opening = currentCompany.openingTime ?? '18:00';
+                  const closing = currentCompany.closingTime ?? '00:00';
+                  const now = new Date();
+                  const [oh, om] = opening.split(':').map(Number);
+                  const [ch, cm] = closing.split(':').map(Number);
+                  const nowMin = now.getHours() * 60 + now.getMinutes();
+                  const openMin = (oh ?? 0) * 60 + (om ?? 0);
+                  const closeMin = (ch ?? 0) * 60 + (cm ?? 0);
+                  const inHours = closeMin <= openMin
+                    ? nowMin >= openMin || nowMin < closeMin
+                    : nowMin >= openMin && nowMin < closeMin;
+                  const effectivelyOpen = manualOpen && inHours;
+                  const statusColor = effectivelyOpen ? '#15803d' : '#b91c1c';
+                  const statusBg = effectivelyOpen ? '#f0fdf4' : '#fef2f2';
+                  const statusBorder = effectivelyOpen ? '#86efac' : '#fca5a5';
+                  const closedReason = !manualOpen ? 'fechado manualmente' : !inHours ? `fora do horário (${opening}–${closing})` : '';
+                  return (
+                    <div style={{ marginBottom: 16 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#789088', marginBottom: 8 }}>Status do cardápio online</div>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const next = !manualOpen;
+                          setCurrentCompany((prev: any) => prev ? { ...prev, isOpen: next } : prev);
+                          try {
+                            await api.setStoreIsOpen(next);
+                            showToast(next ? 'Loja marcada como aberta manualmente.' : 'Loja marcada como fechada manualmente.', 'info');
+                          } catch (e: any) {
+                            setCurrentCompany((prev: any) => prev ? { ...prev, isOpen: !next } : prev);
+                            showToast(e?.message || 'Falha ao atualizar status.', 'error');
+                          }
+                        }}
+                        style={{
+                          width: '100%', padding: '12px 16px', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 14,
+                          background: statusBg, color: statusColor, border: `1.5px solid ${statusBorder}`,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                        }}
+                      >
+                        {effectivelyOpen ? '🟢 Estamos abertos' : '🔴 Estamos fechados'}
+                      </button>
+                      <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 6, textAlign: 'center' }}>
+                        {effectivelyOpen
+                          ? `Horário: ${opening}–${closing} · Clique para fechar manualmente`
+                          : closedReason
+                            ? `Fechado: ${closedReason}${!manualOpen ? ' · Clique para abrir manualmente' : ''}`
+                            : 'Clique para abrir manualmente'}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
                 {(() => {
                   const today = new Date().toDateString();
                   const entregues = deliveryOrdersAll.filter((o) => o.status === 'ENTREGUE' && new Date(o.createdAt).toDateString() === today).length;
