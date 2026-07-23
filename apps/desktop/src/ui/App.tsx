@@ -1572,7 +1572,7 @@ export function App() {
       setSelectedReceipt(receipt);
     } catch (e) {
       console.error(e);
-      showToast('Falha ao buscar recibo.', 'error');
+      showToast(e instanceof Error ? e.message : 'Falha ao buscar recibo.', 'error');
     } finally {
       setLoadingReceipts(false);
     }
@@ -7444,135 +7444,209 @@ export function App() {
 
             {/* ── ABA: RELATÓRIOS ── */}
             {caixaSubTab === 'relatorios' && (
-              <div style={{ flex: 1, overflowY: 'auto', padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
-                {/* Métricas com comparativo */}
-                {reportSummary && (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 16 }}>
-                    <div style={{ background: '#18201d', borderRadius: 12, padding: '16px 18px' }}>
-                      <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.8px', textTransform: 'uppercase', color: '#9ab09f', display: 'block', marginBottom: 6 }}>Faturamento</span>
-                      <strong style={{ fontSize: 22, color: '#f1c44e' }}>{formatCurrency(reportSummary.totalValue)}</strong>
-                      {prevMonthTotal !== null && reportPeriod === 'monthly' && (
-                        <div style={{ fontSize: 11, marginTop: 4, color: reportSummary.totalValue >= prevMonthTotal ? '#4ade80' : '#f87171' }}>
-                          {reportSummary.totalValue >= prevMonthTotal ? '↑' : '↓'} {prevMonthTotal > 0 ? `${Math.abs(Math.round((reportSummary.totalValue - prevMonthTotal) / prevMonthTotal * 100))}% vs mês anterior` : 'sem dados anteriores'}
-                        </div>
-                      )}
-                    </div>
-                    <div style={{ background: '#f8faf8', border: '1px solid #dbe3de', borderRadius: 12, padding: '16px 18px' }}>
-                      <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.8px', textTransform: 'uppercase', color: '#7a8a7a', display: 'block', marginBottom: 6 }}>Pedidos</span>
-                      <strong style={{ fontSize: 22, color: '#18201d' }}>{reportSummary.totalOrders}</strong>
-                    </div>
-                    <div style={{ background: '#f8faf8', border: '1px solid #dbe3de', borderRadius: 12, padding: '16px 18px' }}>
-                      <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.8px', textTransform: 'uppercase', color: '#7a8a7a', display: 'block', marginBottom: 6 }}>Ticket médio</span>
-                      <strong style={{ fontSize: 22, color: '#18201d' }}>{reportSummary.totalOrders > 0 ? formatCurrency(reportSummary.totalValue / reportSummary.totalOrders) : '—'}</strong>
-                    </div>
-                    <div style={{ background: '#f8faf8', border: '1px solid #dbe3de', borderRadius: 12, padding: '16px 18px' }}>
-                      <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '.8px', textTransform: 'uppercase', color: '#7a8a7a', display: 'block', marginBottom: 6 }}>Itens vendidos</span>
-                      <strong style={{ fontSize: 22, color: '#18201d' }}>{reportSummary.totalItems}</strong>
-                    </div>
-                  </div>
-                )}
+              <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-                {/* Gráfico de barras diário */}
+                {/* ── Seletor de período ── */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', background: '#eef0ee', borderRadius: 10, padding: 3, gap: 2 }}>
+                    {reportPeriods.map((option) => (
+                      <button key={option.value} type="button" onClick={() => setReportPeriod(option.value)}
+                        style={{ border: 'none', borderRadius: 8, padding: '6px 16px', fontSize: 13, fontWeight: reportPeriod === option.value ? 700 : 500, cursor: 'pointer', background: reportPeriod === option.value ? '#18201d' : 'transparent', color: reportPeriod === option.value ? '#f1c44e' : '#6b7a6b', transition: 'background 0.15s, color 0.15s', minHeight: 'unset' }}>
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {reportPeriod === 'daily' && <input type="date" value={reportRefDate} max={new Date().toISOString().slice(0, 10)} onChange={(e) => setReportRefDate(e.target.value)} style={{ fontSize: 13, padding: '5px 10px', borderRadius: 8, border: '1px solid #dbe3de', height: 34 }} />}
+                    {reportPeriod === 'weekly' && <input type="date" value={reportRefDate} max={new Date().toISOString().slice(0, 10)} onChange={(e) => setReportRefDate(e.target.value)} style={{ fontSize: 13, padding: '5px 10px', borderRadius: 8, border: '1px solid #dbe3de', height: 34 }} />}
+                    {reportPeriod === 'monthly' && <input type="month" value={reportRefDate.slice(0, 7)} max={new Date().toISOString().slice(0, 7)} onChange={(e) => setReportRefDate(`${e.target.value}-01`)} style={{ fontSize: 13, padding: '5px 10px', borderRadius: 8, border: '1px solid #dbe3de', height: 34 }} />}
+                    {reportPeriod === 'yearly' && <select value={reportRefDate.slice(0, 4)} onChange={(e) => setReportRefDate(`${e.target.value}-01-01`)} style={{ fontSize: 13, padding: '5px 10px', borderRadius: 8, border: '1px solid #dbe3de', height: 34 }}>{Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map((y) => <option key={y} value={y}>{y}</option>)}</select>}
+                    <button type="button" className="secondary-button" style={{ height: 34, display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, padding: '0 14px' }} onClick={() => void previewReportPdf()}><ReceiptText size={15} />Visualizar</button>
+                    <button type="button" className="primary-button" style={{ height: 34, display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, padding: '0 14px' }} onClick={() => void exportReportPdf()}>↓ Exportar PDF</button>
+                  </div>
+                </div>
+
+                {/* ── KPI Cards ── */}
+                {reportSummary && (() => {
+                  const avgTicket = reportSummary.totalOrders > 0 ? reportSummary.totalValue / reportSummary.totalOrders : 0;
+                  const delta = prevMonthTotal !== null && prevMonthTotal > 0 && reportPeriod === 'monthly'
+                    ? Math.round((reportSummary.totalValue - prevMonthTotal) / prevMonthTotal * 100) : null;
+                  return (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
+                      {/* Faturamento — destaque */}
+                      <div style={{ background: '#18201d', borderRadius: 14, padding: '18px 20px', gridColumn: 'span 1' }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: '#6b8c75', display: 'block', marginBottom: 8 }}>Faturamento</span>
+                        <strong style={{ fontSize: 24, color: '#f1c44e', fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.5px', display: 'block' }}>{formatCurrency(reportSummary.totalValue)}</strong>
+                        {delta !== null && (
+                          <div style={{ fontSize: 11, marginTop: 6, display: 'flex', alignItems: 'center', gap: 4, color: delta >= 0 ? '#4ade80' : '#f87171', fontWeight: 600 }}>
+                            <span>{delta >= 0 ? '↑' : '↓'} {Math.abs(delta)}%</span>
+                            <span style={{ color: '#4a6b54', fontWeight: 400 }}>vs mês anterior</span>
+                          </div>
+                        )}
+                        {prevMonthTotal !== null && prevMonthTotal === 0 && reportPeriod === 'monthly' && (
+                          <div style={{ fontSize: 11, marginTop: 6, color: '#4a6b54' }}>sem dados anteriores</div>
+                        )}
+                      </div>
+                      {/* Pedidos */}
+                      <div style={{ background: '#f8faf8', border: '1px solid #dbe3de', borderRadius: 14, padding: '18px 20px' }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: '#7a8a7a', display: 'block', marginBottom: 8 }}>Pedidos</span>
+                        <strong style={{ fontSize: 24, color: '#18201d', fontVariantNumeric: 'tabular-nums', display: 'block' }}>{reportSummary.totalOrders}</strong>
+                        <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 6 }}>comandas + deliveries</div>
+                      </div>
+                      {/* Ticket Médio */}
+                      <div style={{ background: '#f8faf8', border: '1px solid #dbe3de', borderRadius: 14, padding: '18px 20px' }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: '#7a8a7a', display: 'block', marginBottom: 8 }}>Ticket Médio</span>
+                        <strong style={{ fontSize: 24, color: '#18201d', fontVariantNumeric: 'tabular-nums', display: 'block' }}>{avgTicket > 0 ? formatCurrency(avgTicket) : '—'}</strong>
+                        <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 6 }}>por pedido</div>
+                      </div>
+                      {/* Itens */}
+                      <div style={{ background: '#f8faf8', border: '1px solid #dbe3de', borderRadius: 14, padding: '18px 20px' }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: '#7a8a7a', display: 'block', marginBottom: 8 }}>Itens Vendidos</span>
+                        <strong style={{ fontSize: 24, color: '#18201d', fontVariantNumeric: 'tabular-nums', display: 'block' }}>{reportSummary.totalItems}</strong>
+                        <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 6 }}>unidades no período</div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* ── Gráfico de barras diário ── */}
                 {reportPeriod === 'monthly' && (
-                  <div className="panel" style={{ padding: 20 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                  <div className="panel" style={{ padding: '20px 22px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
                       <div>
                         <span className="eyebrow">Evolução</span>
-                        <h3 style={{ margin: 0 }}>Faturamento por dia</h3>
+                        <h3 style={{ margin: 0, fontSize: 15 }}>Faturamento por dia</h3>
                       </div>
-                      {loadingChart && <span style={{ fontSize: 12, color: '#9ca3af' }}>Carregando...</span>}
+                      {loadingChart
+                        ? <span style={{ fontSize: 12, color: '#9ca3af' }}>Carregando...</span>
+                        : <span style={{ fontSize: 11, color: '#9ca3af', display: 'flex', alignItems: 'center', gap: 6 }}>Hoje: <span style={{ background: '#f1c44e', padding: '2px 8px', borderRadius: 4, color: '#18201d', fontWeight: 700, fontSize: 11 }}>■</span></span>
+                      }
                     </div>
                     {dailyChartData.length > 0 ? (() => {
                       const maxVal = Math.max(...dailyChartData.map((d) => d.value), 1);
-                      const chartH = 120;
-                      const barW = Math.max(6, Math.floor(560 / dailyChartData.length) - 2);
-                      const gap = 2;
-                      const totalW = dailyChartData.length * (barW + gap);
+                      const chartH = 140;
+                      const padT = 8, padB = 24, padL = 48, padR = 8;
+                      const totalDays = dailyChartData.length;
+                      const svgW = Math.max(totalDays * 22, 480);
+                      const plotW = svgW - padL - padR;
+                      const plotH = chartH - padT - padB;
+                      const barW = Math.max(8, (plotW / totalDays) * 0.68);
+                      const gridVals = [0, 0.25, 0.5, 0.75, 1];
                       return (
                         <div style={{ overflowX: 'auto' }}>
-                          <svg width={Math.max(totalW, 400)} height={chartH + 32} style={{ display: 'block' }}>
+                          <svg width={svgW} height={chartH} style={{ display: 'block' }}>
+                            {/* Grid lines + y labels */}
+                            {gridVals.map((t) => {
+                              const y = padT + plotH * (1 - t);
+                              const label = maxVal * t;
+                              return (
+                                <g key={t}>
+                                  <line x1={padL} y1={y} x2={svgW - padR} y2={y} stroke="#dbe3de" strokeWidth={1} />
+                                  <text x={padL - 6} y={y + 4} textAnchor="end" fontSize={9} fill="#9ca3af">
+                                    {label >= 1000 ? `${(label / 1000).toFixed(1)}k` : Math.round(label)}
+                                  </text>
+                                </g>
+                              );
+                            })}
+                            {/* Bars */}
                             {dailyChartData.map((d, i) => {
-                              const barH = Math.max(d.value > 0 ? 4 : 0, Math.round((d.value / maxVal) * chartH));
-                              const x = i * (barW + gap);
-                              const y = chartH - barH;
+                              const barH = Math.max(d.value > 0 ? 4 : 0, Math.round((d.value / maxVal) * plotH));
+                              const x = padL + (i + 0.5) * (plotW / totalDays) - barW / 2;
+                              const y = padT + plotH - barH;
                               const isToday = d.day === new Date().getDate() && reportRefDate.slice(0, 7) === new Date().toISOString().slice(0, 7);
                               return (
                                 <g key={d.day}>
                                   <title>{`Dia ${d.day}: ${formatCurrency(d.value)}`}</title>
-                                  <rect x={x} y={y} width={barW} height={barH} rx={2} fill={isToday ? '#f1c44e' : d.value > 0 ? '#18201d' : '#e5e7eb'} />
-                                  {(dailyChartData.length <= 15 || d.day % 5 === 0 || d.day === 1) && (
-                                    <text x={x + barW / 2} y={chartH + 16} textAnchor="middle" fontSize={9} fill="#9ca3af">{d.day}</text>
+                                  <rect x={x} y={y} width={barW} height={barH} rx={3}
+                                    fill={isToday ? '#f1c44e' : d.value > 0 ? '#18201d' : '#e8ece9'}
+                                    style={{ cursor: 'default', transition: 'opacity .1s' }}
+                                    onMouseOver={(e) => { (e.target as SVGElement).style.opacity = '0.7'; }}
+                                    onMouseOut={(e) => { (e.target as SVGElement).style.opacity = '1'; }}
+                                  />
+                                  {(totalDays <= 15 || d.day % 5 === 0 || d.day === 1) && (
+                                    <text x={x + barW / 2} y={chartH - 6} textAnchor="middle" fontSize={9} fill="#9ca3af">{d.day}</text>
                                   )}
                                 </g>
                               );
                             })}
                           </svg>
-                          <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>
-                            Passe o mouse sobre as barras para ver o valor. <span style={{ background: '#f1c44e', padding: '1px 6px', borderRadius: 3, color: '#18201d', fontWeight: 700 }}>Hoje</span>
-                          </div>
                         </div>
                       );
                     })() : !loadingChart && (
-                      <p style={{ color: '#9ca3af', fontSize: 13 }}>Nenhum dado para o período.</p>
+                      <p style={{ color: '#9ca3af', fontSize: 13, padding: '20px 0' }}>Nenhum dado para o período selecionado.</p>
                     )}
                   </div>
                 )}
 
-                {/* Seletor de período + exportação */}
-                <div className="panel">
-                  <div className="panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-                    <div>
-                      <span className="eyebrow">Relatório</span>
-                      <h2>Resumo {reportSummary?.periodLabel ?? 'diário'}</h2>
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 10 }}>
-                      <div style={{ display: 'flex', background: '#f0f2f0', borderRadius: 10, padding: 3, gap: 2 }}>
-                        {reportPeriods.map((option) => (
-                          <button key={option.value} type="button" onClick={() => setReportPeriod(option.value)}
-                            style={{ border: 'none', borderRadius: 8, padding: '6px 14px', fontSize: 13, fontWeight: reportPeriod === option.value ? 700 : 500, cursor: 'pointer', background: reportPeriod === option.value ? '#18201d' : 'transparent', color: reportPeriod === option.value ? '#f1c44e' : '#6b7a6b', transition: 'background 0.15s, color 0.15s', minHeight: 'unset' }}>
-                            {option.label}
-                          </button>
-                        ))}
-                      </div>
-                      {reportPeriod === 'daily' && <input type="date" value={reportRefDate} max={new Date().toISOString().slice(0, 10)} onChange={(e) => setReportRefDate(e.target.value)} style={{ fontSize: 13, padding: '5px 10px', borderRadius: 8, border: '1px solid #dbe3de', height: 34 }} />}
-                      {reportPeriod === 'weekly' && <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#6b7a6b' }}><span>Semana de</span><input type="date" value={reportRefDate} max={new Date().toISOString().slice(0, 10)} onChange={(e) => setReportRefDate(e.target.value)} style={{ fontSize: 13, padding: '5px 10px', borderRadius: 8, border: '1px solid #dbe3de', height: 34 }} /></div>}
-                      {reportPeriod === 'monthly' && <input type="month" value={reportRefDate.slice(0, 7)} max={new Date().toISOString().slice(0, 7)} onChange={(e) => setReportRefDate(`${e.target.value}-01`)} style={{ fontSize: 13, padding: '5px 10px', borderRadius: 8, border: '1px solid #dbe3de', height: 34 }} />}
-                      {reportPeriod === 'yearly' && <select value={reportRefDate.slice(0, 4)} onChange={(e) => setReportRefDate(`${e.target.value}-01-01`)} style={{ fontSize: 13, padding: '5px 10px', borderRadius: 8, border: '1px solid #dbe3de', height: 34 }}>{Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map((y) => <option key={y} value={y}>{y}</option>)}</select>}
-                      <div style={{ display: 'flex', gap: 8 }}>
-                        <button type="button" className="secondary-button" style={{ height: 34, display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }} onClick={() => void previewReportPdf()}><ReceiptText size={15} />Visualizar</button>
-                        <button type="button" className="primary-button" style={{ height: 34, display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }} onClick={() => void exportReportPdf()}>Exportar PDF</button>
-                      </div>
-                    </div>
-                  </div>
-                  {reportSummary ? (
-                    <div style={{ display: 'grid', gap: 16, marginTop: 4 }}>
-                      <div>
-                        <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: '#7a8a7a', display: 'block', marginBottom: 10 }}>Por origem</span>
-                        <div style={{ maxHeight: '220px', overflowY: 'auto', display: 'grid', gap: 6 }}>
-                          {[...reportSummary.tables].filter((t) => t.tableId !== '__delivery__').sort((a, b) => b.totalValue - a.totalValue).map((table) => (
-                            <div key={table.tableId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: '#f8faf8', border: '1px solid #dbe3de', borderRadius: 8 }}>
-                              <div><span style={{ fontWeight: 600, fontSize: 13 }}>{table.tableName}</span><span style={{ color: '#7a8a7a', fontSize: 12, marginLeft: 8 }}>{table.totalItems} itens</span></div>
-                              <strong style={{ fontSize: 14, color: '#18201d' }}>{formatCurrency(table.totalValue)}</strong>
-                            </div>
-                          ))}
-                          {reportSummary.tables.find((t) => t.tableId === '__delivery__') && (() => {
-                            const d = reportSummary.tables.find((t) => t.tableId === '__delivery__')!;
-                            return (
-                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8 }}>
-                                <div><span style={{ fontWeight: 600, fontSize: 13 }}>🚲 Delivery</span><span style={{ color: '#7a8a7a', fontSize: 12, marginLeft: 8 }}>{d.totalItems} pedidos</span></div>
-                                <strong style={{ fontSize: 14, color: '#92400e' }}>{formatCurrency(d.totalValue)}</strong>
-                              </div>
-                            );
-                          })()}
+                {/* ── Por origem ── */}
+                {reportSummary ? (() => {
+                  const allTables = [...reportSummary.tables].filter((t) => t.tableId !== '__delivery__').sort((a, b) => b.totalValue - a.totalValue);
+                  const delivery = reportSummary.tables.find((t) => t.tableId === '__delivery__');
+                  const grandTotal = reportSummary.totalValue || 1;
+                  return (
+                    <div className="panel" style={{ padding: '20px 22px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                        <div>
+                          <span className="eyebrow">Relatório</span>
+                          <h3 style={{ margin: 0, fontSize: 15 }}>Resumo {reportSummary.periodLabel}</h3>
                         </div>
                       </div>
+                      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: '#7a8a7a', marginBottom: 10 }}>Por origem</div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 260, overflowY: 'auto' }}>
+                        {delivery && (() => {
+                          const pct = Math.round((delivery.totalValue / grandTotal) * 100);
+                          return (
+                            <div key="delivery" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10 }}>
+                              <span style={{ fontSize: 15 }}>🛵</span>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                                  <span style={{ fontWeight: 600, fontSize: 13, color: '#18201d' }}>Delivery</span>
+                                  <span style={{ fontSize: 12, color: '#92400e' }}>{delivery.totalItems} pedidos</span>
+                                </div>
+                                <div style={{ background: '#fde68a', borderRadius: 100, height: 4 }}>
+                                  <div style={{ background: '#f59e0b', borderRadius: 100, height: 4, width: `${pct}%` }} />
+                                </div>
+                              </div>
+                              <strong style={{ fontSize: 14, color: '#92400e', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{formatCurrency(delivery.totalValue)}</strong>
+                            </div>
+                          );
+                        })()}
+                        {allTables.map((table) => {
+                          const pct = Math.round((table.totalValue / grandTotal) * 100);
+                          return (
+                            <div key={table.tableId} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: '#f8faf8', border: '1px solid #dbe3de', borderRadius: 10 }}>
+                              <span style={{ fontSize: 15 }}>🍽️</span>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                                  <span style={{ fontWeight: 600, fontSize: 13, color: '#18201d' }}>{table.tableName}</span>
+                                  <span style={{ fontSize: 12, color: '#7a8a7a' }}>{table.totalItems} itens</span>
+                                </div>
+                                <div style={{ background: '#dbe3de', borderRadius: 100, height: 4 }}>
+                                  <div style={{ background: '#18201d', borderRadius: 100, height: 4, width: `${pct}%` }} />
+                                </div>
+                              </div>
+                              <strong style={{ fontSize: 14, color: '#18201d', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{formatCurrency(table.totalValue)}</strong>
+                            </div>
+                          );
+                        })}
+                        {allTables.length === 0 && !delivery && (
+                          <p style={{ color: '#9ca3af', fontSize: 13 }}>Nenhum dado no período.</p>
+                        )}
+                      </div>
+                      {/* Total row */}
+                      {(allTables.length > 0 || delivery) && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, paddingTop: 12, borderTop: '1px solid #dbe3de' }}>
+                          <span style={{ fontSize: 12, color: '#7a8a7a', fontWeight: 600 }}>Total do período</span>
+                          <strong style={{ fontSize: 16, color: '#18201d', fontVariantNumeric: 'tabular-nums' }}>{formatCurrency(reportSummary.totalValue)}</strong>
+                        </div>
+                      )}
                     </div>
-                  ) : hasReportAccess ? (
-                    <p style={{ color: '#7a8a7a', marginTop: 8 }}>Carregando relatório...</p>
-                  ) : (
-                    <p style={{ color: '#7a8a7a', marginTop: 8 }}>Seu perfil não tem acesso ao relatório financeiro.</p>
-                  )}
-                </div>
+                  );
+                })() : hasReportAccess ? (
+                  <div className="panel" style={{ padding: '28px 22px', textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>Carregando relatório...</div>
+                ) : (
+                  <div className="panel" style={{ padding: '28px 22px', textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>Seu perfil não tem acesso ao relatório financeiro.</div>
+                )}
               </div>
             )}
 

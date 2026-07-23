@@ -178,7 +178,8 @@ export async function loadCurrentUser(forceRefresh = false): Promise<AppUser> {
     if (!company || !company.active) {
       throw new Error('Empresa inativa.');
     }
-    if (company.subscription && ['SUSPENSO', 'EXPIRADO'].includes(company.subscription.status)) {
+    const trialActive = company.plan === 'TRIAL' && company.trialEndsAt && new Date(company.trialEndsAt) > new Date();
+    if (!trialActive && company.subscription && ['SUSPENSO', 'EXPIRADO'].includes(company.subscription.status)) {
       throw new Error('Assinatura inativa.');
     }
   }
