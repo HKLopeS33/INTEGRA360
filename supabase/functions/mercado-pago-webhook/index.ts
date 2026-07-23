@@ -341,6 +341,11 @@ async function processPayment(adminClient: any, paymentId: string, existing: any
 
       if (updatedRows && updatedRows.length > 0) {
         await creditDeliveryWallet(adminClient, existing.companyId, amount, existing.deliveryOrderId);
+        fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/whatsapp-notify`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orderId: existing.deliveryOrderId, status: 'RECEBIDO' }),
+        }).catch(() => {});
       }
     }
   }

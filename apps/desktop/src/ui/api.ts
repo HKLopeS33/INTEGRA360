@@ -390,7 +390,7 @@ export const api = {
         ...(payload.closingTime !== undefined && { closingTime: payload.closingTime }),
       })
       .eq('id', user.companyId)
-      .select('id,name,email,cnpj,phone,address,city,state,country,pixKey,kitchenPrinter,cashierPrinter,printingDisabled,menuBannerUrl,active,deliveryFeeAmount,openingTime,closingTime,isOpen')
+      .select('id,name,email,cnpj,phone,address,city,state,country,pixKey,kitchenPrinter,cashierPrinter,printingDisabled,menuBannerUrl,active,deliveryFeeAmount,openingTime,closingTime,isOpen,plan,planMonthlyPrice,trialEndsAt')
       .single();
 
     if (error) {
@@ -1576,72 +1576,69 @@ export const api = {
 
   getReceiptByNumber: async (receiptNumber: number) => {
     const user = await requireCompanyUserWithRoles(['ADMIN', 'CAIXA', 'GERENTE', 'FINANCEIRO']);
-    const { data: tab, error } = await supabase
+
+    // Busca em Tab (mesas) primeiro
+    const { data: tab } = await supabase
       .from('Tab')
       .select('id,receiptNumber,tableId,subtotal,total,closedAt,receiptGeneratedAt')
       .eq('companyId', user.companyId)
       .eq('receiptNumber', receiptNumber)
-      .single();
+      .maybeSingle();
 
-    if (error) {
-      throwSupabaseError(error, 'Falha ao carregar recibo.');
-    }
-    if (!tab) {
-      throw new Error('Recibo não encontrado.');
-    }
-
-    const { data: table, error: tableError } = await supabase.from('RestaurantTable').select('name').eq('id', tab.tableId).single();
-    if (tableError) {
-      throwSupabaseError(tableError, 'Falha ao carregar mesa do recibo.');
-    }
-
-    const { data: orders, error: ordersError } = await supabase.from('Order').select('id,status').eq('tabId', tab.id);
-    if (ordersError) {
-      throwSupabaseError(ordersError, 'Falha ao carregar pedidos do recibo.');
-    }
-
-    const orderIds = (orders || []).map((order) => order.id);
-    const { data: items, error: itemsError } = await supabase
-      .from('OrderItem')
-      .select('id,orderId,productId,quantity,unitPrice')
-      .in('orderId', orderIds);
-    if (itemsError) {
-      throwSupabaseError(itemsError, 'Falha ao carregar itens do recibo.');
-    }
-
-    const productIds = (items || []).map((item) => item.productId);
-    const { data: products, error: productsError } = await supabase.from('Product').select('id,name').in('id', productIds);
-    if (productsError) {
-      throwSupabaseError(productsError, 'Falha ao carregar produtos do recibo.');
+    if (tab) {
+      const { data: table } = await supabase.from('RestaurantTable').select('name').eq('id', tab.tableId).maybeSingle();
+      const { data: orders } = await supabase.from('Order').select('id,status').eq('tabId', tab.id);
+      const orderIds = (orders || []).map((o) => o.id);
+      const { data: items } = orderIds.length > 0
+        ? await supabase.from('OrderItem').select('id,orderId,productId,quantity,unitPrice').in('orderId', orderIds)
+        : { data: [] as any[] };
+      const productIds = (items || []).map((i) => i.productId);
+      const { data: products } = productIds.length > 0
+        ? await supabase.from('Product').select('id,name').in('id', productIds)
+        : { data: [] as any[] };
+      const productMap = (products || []).reduce((acc, p) => { acc[p.id] = p; return acc; }, {} as Record<string, any>);
+      const itemsByOrder = (items || []).reduce((acc, i) => { acc[i.orderId] = acc[i.orderId] || []; acc[i.orderId].push(i); return acc; }, {} as Record<string, any[]>);
+      return {
+        id: tab.id, receiptNumber: tab.receiptNumber, tableName: table?.name ?? '—',
+        subtotal: Number(tab.subtotal), total: Number(tab.total),
+        closedAt: formatDate(tab.closedAt), receiptGeneratedAt: formatDate(tab.receiptGeneratedAt),
+        orders: (orders || []).map((order) => ({
+          id: order.id, status: order.status,
+          items: (itemsByOrder[order.id] || []).map((item) => ({
+            id: item.id, productName: productMap[item.productId]?.name ?? '',
+            quantity: item.quantity, unitPrice: Number(item.unitPrice), total: Number(item.unitPrice) * item.quantity,
+          })),
+        })),
+      };
     }
 
-    const productMap = (products || []).reduce((acc, product) => { acc[product.id] = product; return acc; }, {} as Record<string, any>);
-    const itemsByOrder = (items || []).reduce((acc, item) => {
-      acc[item.orderId] = acc[item.orderId] || [];
-      acc[item.orderId].push(item);
-      return acc;
-    }, {} as Record<string, any[]>);
+    // Busca em DeliveryOrder se não encontrado em Tab
+    const { data: dlv } = await supabase
+      .from('DeliveryOrder')
+      .select('id,receiptNumber,customerName,total,status,paymentMethod,createdAt')
+      .eq('companyId', user.companyId)
+      .eq('receiptNumber', receiptNumber)
+      .maybeSingle();
 
-    return {
-      id: tab.id,
-      receiptNumber: tab.receiptNumber,
-      tableName: table.name,
-      subtotal: Number(tab.subtotal),
-      total: Number(tab.total),
-      closedAt: formatDate(tab.closedAt),
-      receiptGeneratedAt: formatDate(tab.receiptGeneratedAt),
-      orders: (orders || []).map((order) => ({
-        id: order.id,
-        status: order.status,
-        items: (itemsByOrder[order.id] || []).map((item) => ({
-          id: item.id,
-          productName: productMap[item.productId]?.name ?? '',
-          quantity: item.quantity,
-          unitPrice: Number(item.unitPrice),
-          total: Number(item.unitPrice) * item.quantity
-        }))
-      }))
-    };
+    if (dlv) {
+      const { data: dlvItems } = await supabase
+        .from('DeliveryOrderItem')
+        .select('id,productName,quantity,unitPrice')
+        .eq('deliveryOrderId', dlv.id);
+      const items = (dlvItems || []).map((i) => ({
+        id: i.id, productName: i.productName, quantity: i.quantity,
+        unitPrice: Number(i.unitPrice), total: Number(i.unitPrice) * i.quantity,
+      }));
+      return {
+        id: dlv.id, receiptNumber: dlv.receiptNumber,
+        tableName: `Delivery – ${dlv.customerName}`,
+        subtotal: Number(dlv.total), total: Number(dlv.total),
+        closedAt: null, receiptGeneratedAt: formatDate(dlv.createdAt),
+        orders: [{ id: dlv.id, status: dlv.status, items }],
+      };
+    }
+
+    throw new Error('Recibo não encontrado.');
   },
 
   kitchenQueue: async () => {

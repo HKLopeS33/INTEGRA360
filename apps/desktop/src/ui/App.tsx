@@ -335,6 +335,11 @@ export function App() {
   const [deliveryOrders, setDeliveryOrders] = useState<DeliveryOrder[]>([]);
   const [deliveryOrdersAll, setDeliveryOrdersAll] = useState<DeliveryOrder[]>([]);
   const [loadingDelivery, setLoadingDelivery] = useState(false);
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNowTick(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
   const [dlvCustomerName, setDlvCustomerName] = useState('');
   const [dlvCustomerPhone, setDlvCustomerPhone] = useState('');
   const [dlvCustomerAddress, setDlvCustomerAddress] = useState('');
@@ -7094,21 +7099,29 @@ export function App() {
                                   <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
                                     <button type="button" style={{ flex: 1, padding: '8px 0', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
                                       onClick={async () => {
-                                        if (!confirm(order.status === 'ENTREGUE' ? '⚠️ O pedido já foi entregue. Tem certeza que deseja aprovar o estorno?' : 'Confirmar aprovação do estorno?')) return;
+                                        if (!confirm(order.status === 'ENTREGUE' ? '⚠️ O pedido já foi entregue. Tem certeza que deseja aprovar o estorno?' : `Aprovar estorno de ${formatCurrency(order.total)} para ${order.customerName}?\n\nO valor será devolvido automaticamente via Mercado Pago.`)) return;
                                         try {
                                           const result = await api.approveRefund(order.id);
                                           await loadDeliveryOrders();
-                                          if (result.warning) alert(`⚠️ ${result.warning}`);
+                                          if (result.warning) {
+                                            showToast(`⚠️ ${result.warning}`, 'error');
+                                          } else if (result.action === 'refunded') {
+                                            showToast('Estorno aprovado. O valor foi devolvido via Mercado Pago.', 'success');
+                                          } else if (result.action === 'cancelled_no_refund') {
+                                            showToast('Pedido cancelado. Pagamento em dinheiro — sem estorno online.', 'info');
+                                          } else {
+                                            showToast('Pedido cancelado com sucesso.', 'success');
+                                          }
                                         }
-                                        catch (e: any) { alert(e.message ?? 'Falha ao aprovar estorno.'); }
+                                        catch (e: any) { showToast(e.message ?? 'Falha ao aprovar estorno.', 'error'); }
                                       }}>
                                       ✓ Aprovar estorno
                                     </button>
                                     <button type="button" style={{ flex: 1, padding: '8px 0', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
                                       onClick={async () => {
-                                        if (!confirm('Rejeitar solicitação de cancelamento?')) return;
-                                        try { await api.rejectRefund(order.id); void loadDeliveryOrders(); }
-                                        catch (e: any) { alert(e.message ?? 'Falha ao rejeitar.'); }
+                                        if (!confirm('Rejeitar solicitação de cancelamento? O pedido continuará ativo.')) return;
+                                        try { await api.rejectRefund(order.id); void loadDeliveryOrders(); showToast('Solicitação rejeitada. Pedido continua ativo.', 'info'); }
+                                        catch (e: any) { showToast(e.message ?? 'Falha ao rejeitar.', 'error'); }
                                       }}>
                                       ✗ Rejeitar
                                     </button>
@@ -7122,9 +7135,21 @@ export function App() {
                                 {order.customerPhone && <div style={{ fontSize: 12, color: '#789088', marginTop: 2 }}><Phone size={11} style={{ marginRight: 4, verticalAlign: 'middle' }} />{order.customerPhone}</div>}
                                 <div style={{ fontSize: 12, color: '#789088', marginTop: 2 }}><MapPin size={11} style={{ marginRight: 4, verticalAlign: 'middle' }} />{order.customerAddress}</div>
                               </div>
-                              <span style={{ background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.color}30`, borderRadius: 6, padding: '3px 10px', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>
-                                {cfg.label}
-                              </span>
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                                <span style={{ background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.color}30`, borderRadius: 6, padding: '3px 10px', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>
+                                  {cfg.label}
+                                </span>
+                                {order.status !== 'ENTREGUE' && order.status !== 'CANCELADO' && order.createdAt && (() => {
+                                  const mins = Math.floor((nowTick - new Date(order.createdAt).getTime()) / 60000);
+                                  const color = mins >= 30 ? '#b91c1c' : mins >= 15 ? '#92400e' : '#15803d';
+                                  const bg = mins >= 30 ? '#fef2f2' : mins >= 15 ? '#fffbeb' : '#f0fdf4';
+                                  return (
+                                    <span style={{ background: bg, color, border: `1px solid ${color}30`, borderRadius: 6, padding: '3px 8px', fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap' }}>
+                                      ⏱ {mins < 1 ? '<1 min' : `${mins} min`}
+                                    </span>
+                                  );
+                                })()}
+                              </div>
                             </div>
                             <div style={{ fontSize: 13, color: '#4b5563', marginBottom: 10 }}>
                               {order.items.map((item, i) => (

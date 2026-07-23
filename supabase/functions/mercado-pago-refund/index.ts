@@ -59,9 +59,7 @@ Deno.serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const deliveryOrderId = String(body.deliveryOrderId ?? '');
-    const action = String(body.action ?? ''); // 'approve' | 'reject' | 'approve_manual'
-    // approve_manual: cancela o pedido no sistema sem chamar a API do MP
-    // (o reembolso financeiro é feito manualmente pelo admin no painel do MP)
+    const action = String(body.action ?? ''); // 'approve' | 'reject' | 'approve_manual' | 'direct_cancel'
 
     if (!deliveryOrderId || !['approve', 'reject', 'approve_manual', 'direct_cancel'].includes(action)) {
       return json({ error: 'Parâmetros inválidos.' }, 400);
