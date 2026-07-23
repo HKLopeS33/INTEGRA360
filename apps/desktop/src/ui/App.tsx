@@ -7100,9 +7100,10 @@ export function App() {
                                     <button type="button" style={{ flex: 1, padding: '8px 0', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
                                       onClick={async () => {
                                         if (!confirm(order.status === 'ENTREGUE' ? '⚠️ O pedido já foi entregue. Tem certeza que deseja aprovar o estorno?' : `Aprovar estorno de ${formatCurrency(order.total)} para ${order.customerName}?\n\nO valor será devolvido automaticamente via Mercado Pago.`)) return;
+                                        // Remove imediatamente da lista (otimista)
+                                        setDeliveryOrders((prev: DeliveryOrder[]) => prev.filter((o) => o.id !== order.id));
                                         try {
                                           const result = await api.approveRefund(order.id);
-                                          await loadDeliveryOrders();
                                           if (result.warning) {
                                             showToast(`⚠️ ${result.warning}`, 'error');
                                           } else if (result.action === 'refunded') {
@@ -7112,16 +7113,23 @@ export function App() {
                                           } else {
                                             showToast('Pedido cancelado com sucesso.', 'success');
                                           }
+                                          void loadDeliveryOrders();
                                         }
-                                        catch (e: any) { showToast(e.message ?? 'Falha ao aprovar estorno.', 'error'); }
+                                        catch (e: any) {
+                                          // Reverte em caso de erro
+                                          void loadDeliveryOrders();
+                                          showToast(e.message ?? 'Falha ao aprovar estorno.', 'error');
+                                        }
                                       }}>
                                       ✓ Aprovar estorno
                                     </button>
                                     <button type="button" style={{ flex: 1, padding: '8px 0', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
                                       onClick={async () => {
                                         if (!confirm('Rejeitar solicitação de cancelamento? O pedido continuará ativo.')) return;
+                                        // Remove o banner de estorno otimisticamente
+                                        setDeliveryOrders((prev: DeliveryOrder[]) => prev.map((o) => o.id !== order.id ? o : { ...o, cancellationRequestedAt: null, cancellationReason: null } as any));
                                         try { await api.rejectRefund(order.id); void loadDeliveryOrders(); showToast('Solicitação rejeitada. Pedido continua ativo.', 'info'); }
-                                        catch (e: any) { showToast(e.message ?? 'Falha ao rejeitar.', 'error'); }
+                                        catch (e: any) { void loadDeliveryOrders(); showToast(e.message ?? 'Falha ao rejeitar.', 'error'); }
                                       }}>
                                       ✗ Rejeitar
                                     </button>
