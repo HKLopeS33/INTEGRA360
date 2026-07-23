@@ -68,7 +68,7 @@ Deno.serve(async (req) => {
     // Carregar o pedido
     const { data: order, error: orderError } = await adminClient
       .from('DeliveryOrder')
-      .select('id,companyId,total,status,paymentStatus,cancellationRequestedAt,cancellationReason')
+      .select('id,companyId,total,status,paymentStatus,cancellationRequestedAt,cancellationReason,receiptNumber')
       .eq('id', deliveryOrderId)
       .eq('companyId', companyUser.companyId)
       .maybeSingle();
@@ -95,10 +95,29 @@ Deno.serve(async (req) => {
 
     if (action === 'approve_manual') {
       // Cancela no sistema sem chamar MP — admin faz o reembolso manualmente no painel MP
+      const closedAtManual = new Date().toISOString();
       await adminClient
         .from('DeliveryOrder')
-        .update({ status: 'CANCELADO', paymentStatus: 'ESTORNADO', cancellationRequestedAt: null, closedAt: new Date().toISOString() })
+        .update({ status: 'CANCELADO', paymentStatus: 'ESTORNADO', cancellationRequestedAt: null, closedAt: closedAtManual })
         .eq('id', deliveryOrderId);
+
+      // Debitar carteira se o pedido estava pago via MP (wallet foi creditada no webhook)
+      if (order.paymentStatus === 'PAGO') {
+        const { data: walletManual } = await adminClient
+          .from('Wallet').select('deliveryFeePercent').eq('companyId', companyUser.companyId).maybeSingle();
+        const feeManual = Number(walletManual?.deliveryFeePercent ?? 0);
+        const netManual = Number(order.total) * (1 - feeManual / 100);
+        const { error: walletErrManual } = await adminClient.rpc('credit_wallet', {
+          p_company_id:        companyUser.companyId,
+          p_amount:            -netManual,
+          p_type:              'ESTORNO_DELIVERY',
+          p_description:       `Estorno pedido #${order.receiptNumber ?? deliveryOrderId.slice(0,8)}`,
+          p_delivery_order_id: deliveryOrderId,
+          p_tab_id:            null,
+        });
+        if (walletErrManual) console.error('Erro ao debitar wallet (approve_manual):', walletErrManual);
+      }
+
       return json({ ok: true, action: 'cancelled_manual_refund' });
     }
 
@@ -167,6 +186,22 @@ Deno.serve(async (req) => {
         .from('DeliveryOrder')
         .update({ status: 'CANCELADO', paymentStatus: 'ESTORNADO', cancellationRequestedAt: null, closedAt })
         .eq('id', deliveryOrderId);
+
+      // Pedido estava PAGO — carteira foi creditada no webhook, debitar agora
+      const { data: walletErr } = await adminClient
+        .from('Wallet').select('deliveryFeePercent').eq('companyId', companyUser.companyId).maybeSingle();
+      const feeErr = Number((walletErr as any)?.deliveryFeePercent ?? 0);
+      const netErr = Number(order.total) * (1 - feeErr / 100);
+      const { error: wErr } = await adminClient.rpc('credit_wallet', {
+        p_company_id:        companyUser.companyId,
+        p_amount:            -netErr,
+        p_type:              'ESTORNO_DELIVERY',
+        p_description:       `Estorno pedido #${order.receiptNumber ?? deliveryOrderId.slice(0,8)}`,
+        p_delivery_order_id: deliveryOrderId,
+        p_tab_id:            null,
+      });
+      if (wErr) console.error('Erro ao debitar wallet (mp_error):', wErr);
+
       return json({
         ok: true,
         action: 'cancelled_mp_error',
@@ -202,7 +237,7 @@ Deno.serve(async (req) => {
       p_company_id:        companyUser.companyId,
       p_amount:            -netAmount,
       p_type:              'ESTORNO_DELIVERY',
-      p_description:       `Estorno pedido delivery ${deliveryOrderId}`,
+      p_description:       `Estorno pedido #${order.receiptNumber ?? deliveryOrderId.slice(0,8)}`,
       p_delivery_order_id: deliveryOrderId,
       p_tab_id:            null,
     });
