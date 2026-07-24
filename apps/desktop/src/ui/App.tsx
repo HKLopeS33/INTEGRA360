@@ -7125,46 +7125,45 @@ export function App() {
                                     <button type="button"
                                       disabled={approvingRefundId === order.id}
                                       style={{ flex: 1, padding: '8px 0', background: approvingRefundId === order.id ? '#86efac' : '#16a34a', color: '#fff', border: 'none', borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: approvingRefundId === order.id ? 'not-allowed' : 'pointer', transition: 'background .15s' }}
-                                      onClick={async () => {
+                                      onClick={() => {
                                         if (approvingRefundLock.current) return;
-                                        approvingRefundLock.current = true;
-                                        if (!confirm(order.status === 'ENTREGUE' ? '⚠️ O pedido já foi entregue. Tem certeza que deseja aprovar o estorno?' : `Aprovar estorno de ${formatCurrency(order.total)} para ${order.customerName}?\n\nO valor será devolvido automaticamente via Mercado Pago.`)) {
-                                          approvingRefundLock.current = false;
-                                          return;
-                                        }
-                                        setApprovingRefundId(order.id);
-                                        // Remove imediatamente da lista (otimista)
-                                        setDeliveryOrders((prev: DeliveryOrder[]) => prev.filter((o) => o.id !== order.id));
-                                        try {
-                                          const result = await api.approveRefund(order.id);
-                                          if (result.warning) {
-                                            showToast(`⚠️ ${result.warning}`, 'warning');
-                                          } else if (result.action === 'refunded') {
-                                            showToast('Estorno aprovado. O valor foi devolvido via Mercado Pago.', 'success');
-                                          } else if (result.action === 'cancelled_no_refund') {
-                                            showToast('Pedido cancelado. Pagamento em dinheiro — sem estorno online.', 'info');
-                                          } else {
-                                            showToast('Pedido cancelado com sucesso.', 'success');
+                                        const msg = order.status === 'ENTREGUE'
+                                          ? `⚠️ O pedido já foi entregue.\n\nAprovar estorno de ${formatCurrency(order.total)} para ${order.customerName}?`
+                                          : `Aprovar estorno de ${formatCurrency(order.total)} para ${order.customerName}?\n\nO valor será devolvido automaticamente via Mercado Pago.`;
+                                        confirmAction(msg, async () => {
+                                          if (approvingRefundLock.current) return;
+                                          approvingRefundLock.current = true;
+                                          setApprovingRefundId(order.id);
+                                          setDeliveryOrders((prev: DeliveryOrder[]) => prev.filter((o) => o.id !== order.id));
+                                          try {
+                                            const result = await api.approveRefund(order.id);
+                                            if (result.warning) {
+                                              showToast(`⚠️ ${result.warning}`, 'warning');
+                                            } else if (result.action === 'refunded') {
+                                              showToast('Estorno aprovado. O valor foi devolvido via Mercado Pago.', 'success');
+                                            } else if (result.action === 'cancelled_no_refund') {
+                                              showToast('Pedido cancelado. Pagamento em dinheiro — sem estorno online.', 'info');
+                                            } else {
+                                              showToast('Pedido cancelado com sucesso.', 'success');
+                                            }
+                                          } catch (e: any) {
+                                            void loadDeliveryOrders();
+                                            showToast(e.message ?? 'Falha ao aprovar estorno.', 'error');
+                                          } finally {
+                                            setApprovingRefundId(null);
+                                            approvingRefundLock.current = false;
                                           }
-                                          // Não recarregar aqui — o update otimista já removeu o pedido.
-                                          // O reload no catch reverte caso haja erro.
-                                        } catch (e: any) {
-                                          void loadDeliveryOrders();
-                                          showToast(e.message ?? 'Falha ao aprovar estorno.', 'error');
-                                        } finally {
-                                          setApprovingRefundId(null);
-                                          approvingRefundLock.current = false;
-                                        }
+                                        });
                                       }}>
                                       {approvingRefundId === order.id ? 'Processando...' : '✓ Aprovar estorno'}
                                     </button>
                                     <button type="button" style={{ flex: 1, padding: '8px 0', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
-                                      onClick={async () => {
-                                        if (!confirm('Rejeitar solicitação de cancelamento? O pedido continuará ativo.')) return;
-                                        // Remove o banner de estorno otimisticamente
-                                        setDeliveryOrders((prev: DeliveryOrder[]) => prev.map((o) => o.id !== order.id ? o : { ...o, cancellationRequestedAt: null, cancellationReason: null } as any));
-                                        try { await api.rejectRefund(order.id); void loadDeliveryOrders(); showToast('Solicitação rejeitada. Pedido continua ativo.', 'info'); }
-                                        catch (e: any) { void loadDeliveryOrders(); showToast(e.message ?? 'Falha ao rejeitar.', 'error'); }
+                                      onClick={() => {
+                                        confirmAction('Rejeitar solicitação de cancelamento? O pedido continuará ativo.', async () => {
+                                          setDeliveryOrders((prev: DeliveryOrder[]) => prev.map((o) => o.id !== order.id ? o : { ...o, cancellationRequestedAt: null, cancellationReason: null } as any));
+                                          try { await api.rejectRefund(order.id); void loadDeliveryOrders(); showToast('Solicitação rejeitada. Pedido continua ativo.', 'info'); }
+                                          catch (e: any) { void loadDeliveryOrders(); showToast(e.message ?? 'Falha ao rejeitar.', 'error'); }
+                                        });
                                       }}>
                                       ✗ Rejeitar
                                     </button>
