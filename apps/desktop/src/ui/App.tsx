@@ -20,6 +20,24 @@ const reportPeriods: Array<{ value: ReportPeriod; label: string }> = [
   { value: 'yearly', label: 'Ano' }
 ];
 
+const TZ = 'America/Sao_Paulo';
+
+// Retorna a data local de Brasília no formato YYYY-MM-DD
+const getBrazilDateStr = (d = new Date()) =>
+  d.toLocaleDateString('pt-BR', { timeZone: TZ }).split('/').reverse().join('-');
+
+// Formata data/hora completa no padrão pt-BR com fuso de Brasília
+const fmtDateTime = (iso: string | Date) =>
+  new Date(iso).toLocaleString('pt-BR', { timeZone: TZ });
+
+// Formata apenas hora HH:MM no padrão pt-BR com fuso de Brasília
+const fmtTime = (iso: string | Date) =>
+  new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: TZ });
+
+// Formata apenas data DD/MM/AAAA no padrão pt-BR com fuso de Brasília
+const fmtDate = (iso: string | Date, opts?: Intl.DateTimeFormatOptions) =>
+  new Date(iso).toLocaleDateString('pt-BR', { timeZone: TZ, ...opts });
+
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('pt-BR', {
     style: 'currency',
@@ -479,7 +497,7 @@ export function App() {
   const [loadingReceipts, setLoadingReceipts] = useState(false);
   const [searchReceiptNumber, setSearchReceiptNumber] = useState('');
   const [selectedReceipt, setSelectedReceipt] = useState<any | null>(null);
-  const [receiptsDate, setReceiptsDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [receiptsDate, setReceiptsDate] = useState(() => getBrazilDateStr());
   // New company / admin creation state
   const [newCompanyName, setNewCompanyName] = useState('');
   const [newCompanyCnpj, setNewCompanyCnpj] = useState('');
@@ -498,10 +516,7 @@ export function App() {
   // Super user reports state
   const [reportsTab, setReportsTab] = useState<'revenue' | 'products' | 'payments' | 'users' | 'audit' | 'health'>('revenue');
   const [reportPeriod, setReportPeriod] = useState<'daily' | 'weekly' | 'monthly' | 'yearly'>('monthly');
-  const [reportRefDate, setReportRefDate] = useState(() => {
-    const now = new Date();
-    return now.toISOString().slice(0, 10); // YYYY-MM-DD
-  });
+  const [reportRefDate, setReportRefDate] = useState(() => getBrazilDateStr());
   const [revenueReport, setRevenueReport] = useState<any>(null);
   const [ticketAverageReport, setTicketAverageReport] = useState<any>(null);
   const [topProductsReport, setTopProductsReport] = useState<any>(null);
@@ -530,7 +545,7 @@ export function App() {
 
   // Company individual reports state
   const [companyReportDateType, setCompanyReportDateType] = useState<'day' | 'week'>('day');
-  const [companyReportSelectedDate, setCompanyReportSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [companyReportSelectedDate, setCompanyReportSelectedDate] = useState(() => getBrazilDateStr());
   const [companyReportSelectedWeek, setCompanyReportSelectedWeek] = useState(getWeekNumber(new Date()));
   const [companyTopProducts, setCompanyTopProducts] = useState<any>(null);
   const [companyLowProducts, setCompanyLowProducts] = useState<any>(null);
@@ -1065,7 +1080,7 @@ export function App() {
 
   const formatExpiryDate = (expiresAt: string | null) => {
     if (!expiresAt) return '—';
-    return new Date(expiresAt).toLocaleDateString('pt-BR');
+    return fmtDate(expiresAt);
   };
 
   const loadCurrentCompany = async () => {
@@ -2280,8 +2295,8 @@ export function App() {
   const buildReportHtml = () => {
     if (!reportSummary) return null;
     const dateRange = reportSummary.startDate === reportSummary.endDate
-      ? new Date(reportSummary.startDate).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
-      : `${new Date(reportSummary.startDate).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })} – ${new Date(reportSummary.endDate).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}`;
+      ? fmtDate(reportSummary.startDate, { day: '2-digit', month: 'long', year: 'numeric' })
+      : `${fmtDate(reportSummary.startDate, { day: '2-digit', month: 'short' })} – ${fmtDate(reportSummary.endDate, { day: '2-digit', month: 'short', year: 'numeric' })}`;
     const mesaTables = reportSummary.tables.filter((t) => t.tableId !== '__delivery__').sort((a, b) => b.totalValue - a.totalValue);
     const deliveryGroup = reportSummary.tables.find((t) => t.tableId === '__delivery__');
     const tableRows = mesaTables.map((t, i) => `
@@ -2375,7 +2390,7 @@ export function App() {
     </table>
     <div class="footer">
       <span>Sistema Shawarma – Relatório gerado automaticamente</span>
-      <span>Gerado em ${new Date().toLocaleString('pt-BR')}</span>
+      <span>Gerado em ${fmtDateTime(new Date())}</span>
     </div>
   </div>
 </div>
@@ -2794,7 +2809,7 @@ export function App() {
       type: 'MESA',
       tableName,
       items: cartItems.map((ci) => ({ name: ci.productName, quantity: ci.quantity, note: ci.note || undefined })),
-      time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      time: fmtTime(new Date()),
     });
 
     void reloadTablesAndOrders();
@@ -2919,7 +2934,7 @@ export function App() {
         paymentMethod: dlvPaymentMethod,
         items: dlvItems.map((i) => ({ name: i.productName, quantity: i.quantity, note: i.note })),
         notes: dlvNotes,
-        time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+        time: fmtTime(new Date())
       });
 
       setDlvCustomerName(''); setDlvCustomerPhone(''); setDlvCustomerAddress('');
@@ -5123,7 +5138,7 @@ export function App() {
                             </div>
                           </div>
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
-                            <span style={{ fontSize: 11, color: '#789088' }}>{new Date(order.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+                            <span style={{ fontSize: 11, color: '#789088' }}>{fmtTime(order.createdAt)}</span>
                             <button type="button" className="primary-button" style={{ fontSize: 12, padding: '5px 12px' }} onClick={() => void advanceOrder(order)}>
                               {orderStatusLabel[order.status]} →
                             </button>
@@ -5173,7 +5188,7 @@ export function App() {
                             </div>
                           </div>
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
-                            <span style={{ fontSize: 11, color: '#789088' }}>{new Date(order.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+                            <span style={{ fontSize: 11, color: '#789088' }}>{fmtTime(order.createdAt)}</span>
                             <button type="button" className="primary-button" style={{ fontSize: 12, padding: '5px 12px' }}
                               onClick={() => void advanceDeliveryStatus(order)}>
                               Saiu p/ entrega
@@ -6304,7 +6319,7 @@ export function App() {
                                   <tr key={payment.id} style={{ borderBottom: '1px solid #f3f4f6', backgroundColor: payment.daysOverdue > 0 ? '#fef2f2' : (idx % 2 === 0 ? '#ffffff' : '#f9fafb') }}>
                                     <td style={{ padding: 16, color: '#1f2937', fontWeight: 500 }}>{payment.companyName}</td>
                                     <td style={{ padding: 16, textAlign: 'right', fontWeight: 700, color: '#1f2937', fontSize: 15 }}>{formatCurrency(payment.amount)}</td>
-                                    <td style={{ padding: 16, color: '#6b7280' }}>{new Date(payment.dueDate).toLocaleDateString('pt-BR')}</td>
+                                    <td style={{ padding: 16, color: '#6b7280' }}>{fmtDate(payment.dueDate)}</td>
                                     <td style={{ padding: 16, textAlign: 'right' }}>
                                       {payment.daysOverdue > 0 ? (
                                         <span style={{ backgroundColor: '#fee2e2', color: '#991b1b', padding: '6px 12px', borderRadius: 6, fontSize: 13, fontWeight: 600 }}>
@@ -6435,7 +6450,7 @@ export function App() {
                             : { bg: '#dbeafe', color: '#1e40af' };
                           return (
                             <tr key={log.id} style={{ borderBottom: '1px solid #f3f4f6', backgroundColor: idx % 2 === 0 ? '#fff' : '#f9fafb' }}>
-                              <td style={{ padding: '11px 16px', fontSize: 12, color: '#6b7280', whiteSpace: 'nowrap' }}>{new Date(log.createdAt).toLocaleString('pt-BR')}</td>
+                              <td style={{ padding: '11px 16px', fontSize: 12, color: '#6b7280', whiteSpace: 'nowrap' }}>{fmtDateTime(log.createdAt)}</td>
                               <td style={{ padding: '11px 16px', fontWeight: 600, color: '#1f2937', fontSize: 13 }}>{log.userName}</td>
                               <td style={{ padding: '11px 16px', textAlign: 'center' }}>
                                 <span style={{ background: actionStyle.bg, color: actionStyle.color, padding: '3px 10px', borderRadius: 6, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{log.action}</span>
@@ -6534,7 +6549,7 @@ export function App() {
                     <h3 style={{ margin: '0 0 2px', fontSize: 14, fontWeight: 700 }}>Mercado Pago — conta master da plataforma</h3>
                     <p style={{ margin: 0, fontSize: 12, color: platformMpStatus?.connected ? '#15803d' : '#92400e' }}>
                       {platformMpStatus?.connected
-                        ? `✅ Configurado${platformMpStatus.connectedAt ? ' em ' + new Date(platformMpStatus.connectedAt).toLocaleString('pt-BR') : ''}`
+                        ? `✅ Configurado${platformMpStatus.connectedAt ? ' em ' + fmtDateTime(platformMpStatus.connectedAt) : ''}`
                         : '⚠️ Não configurado — pagamentos online ficarão indisponíveis até configurar o Access Token.'}
                     </p>
                   </div>
@@ -6601,7 +6616,7 @@ export function App() {
                           <td style={{ padding: 12, textAlign: 'right', fontWeight: 700 }}>{formatCurrency(w.amount)}</td>
                           <td style={{ padding: 12 }}>{w.pixKeyUsed ?? '—'}</td>
                           <td style={{ padding: 12 }}>{w.isAutomatic ? 'Automático (domingo)' : 'Manual'}</td>
-                          <td style={{ padding: 12 }}>{new Date(w.requestedAt).toLocaleString('pt-BR')}</td>
+                          <td style={{ padding: 12 }}>{fmtDateTime(w.requestedAt)}</td>
                           <td style={{ padding: 12, textAlign: 'right', display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
                             <button className="primary-button" type="button" disabled={resolvingWithdrawalId === w.id}
                               onClick={() => confirmAction(`Confirmar que o repasse de ${formatCurrency(w.amount)} para ${w.companyName} foi pago via Pix?`, () => handleResolveWithdrawal(w.id, true))}>
@@ -6657,7 +6672,7 @@ export function App() {
                           </div>
                         </td>
                         <td style={{ padding: 12 }}>{w.payoutPixKey ?? '—'}</td>
-                        <td style={{ padding: 12 }}>{new Date(w.updatedAt).toLocaleString('pt-BR')}</td>
+                        <td style={{ padding: 12 }}>{fmtDateTime(w.updatedAt)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -6933,7 +6948,7 @@ export function App() {
                       <tr key={p.id} style={{ borderTop: '1px solid #eee', background: isOverdue ? '#fff6f6' : undefined }}>
                         <td style={{ padding: 8 }}>{p.id}</td>
                         <td style={{ padding: 8 }}>{formatCurrency(Number(p.amount || 0))}</td>
-                        <td style={{ padding: 8 }}>{p.dueDate ? new Date(p.dueDate).toLocaleDateString() : '—'}</td>
+                        <td style={{ padding: 8 }}>{p.dueDate ? fmtDate(p.dueDate) : '—'}</td>
                         <td style={{ padding: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
                           {isPaid ? <CheckCircle size={16} color="#15803d" /> : isOverdue ? <AlertTriangle size={16} color="#b91c1c" /> : isPending ? <Clock size={16} color="#b45309" /> : null}
                           <span>{p.status}</span>
@@ -7385,7 +7400,7 @@ export function App() {
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                           <div>
                             <strong>Caixa aberto</strong>
-                            <p>Aberto em {new Date(cashRegister.openedAt).toLocaleString()}</p>
+                            <p>Aberto em {fmtDateTime(cashRegister.openedAt)}</p>
                           </div>
                           <div>
                             <strong>Status</strong>
@@ -7491,8 +7506,8 @@ export function App() {
                     ))}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    {reportPeriod === 'daily' && <input type="date" value={reportRefDate} max={new Date().toISOString().slice(0, 10)} onChange={(e) => setReportRefDate(e.target.value)} style={{ fontSize: 13, padding: '5px 10px', borderRadius: 8, border: '1px solid #dbe3de', height: 34 }} />}
-                    {reportPeriod === 'weekly' && <input type="date" value={reportRefDate} max={new Date().toISOString().slice(0, 10)} onChange={(e) => setReportRefDate(e.target.value)} style={{ fontSize: 13, padding: '5px 10px', borderRadius: 8, border: '1px solid #dbe3de', height: 34 }} />}
+                    {reportPeriod === 'daily' && <input type="date" value={reportRefDate} max={getBrazilDateStr()} onChange={(e) => setReportRefDate(e.target.value)} style={{ fontSize: 13, padding: '5px 10px', borderRadius: 8, border: '1px solid #dbe3de', height: 34 }} />}
+                    {reportPeriod === 'weekly' && <input type="date" value={reportRefDate} max={getBrazilDateStr()} onChange={(e) => setReportRefDate(e.target.value)} style={{ fontSize: 13, padding: '5px 10px', borderRadius: 8, border: '1px solid #dbe3de', height: 34 }} />}
                     {reportPeriod === 'monthly' && <input type="month" value={reportRefDate.slice(0, 7)} max={new Date().toISOString().slice(0, 7)} onChange={(e) => setReportRefDate(`${e.target.value}-01`)} style={{ fontSize: 13, padding: '5px 10px', borderRadius: 8, border: '1px solid #dbe3de', height: 34 }} />}
                     {reportPeriod === 'yearly' && <select value={reportRefDate.slice(0, 4)} onChange={(e) => setReportRefDate(`${e.target.value}-01-01`)} style={{ fontSize: 13, padding: '5px 10px', borderRadius: 8, border: '1px solid #dbe3de', height: 34 }}>{Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map((y) => <option key={y} value={y}>{y}</option>)}</select>}
                     <button type="button" className="secondary-button" style={{ height: 34, display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, padding: '0 14px' }} onClick={() => void previewReportPdf()}><ReceiptText size={15} />Visualizar</button>
@@ -7693,7 +7708,7 @@ export function App() {
                   </div>
                   <div style={{ display: 'grid', gap: 12 }}>
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                      <input type="date" value={receiptsDate} max={new Date().toISOString().slice(0, 10)} onChange={(e) => { setReceiptsDate(e.target.value); setDailyReceipts([]); setSelectedReceipt(null); }} style={{ flex: 1, fontSize: 13, padding: '6px 10px', borderRadius: 8, border: '1px solid #dbe3de' }} />
+                      <input type="date" value={receiptsDate} max={getBrazilDateStr()} onChange={(e) => { setReceiptsDate(e.target.value); setDailyReceipts([]); setSelectedReceipt(null); }} style={{ flex: 1, fontSize: 13, padding: '6px 10px', borderRadius: 8, border: '1px solid #dbe3de' }} />
                       <button className="primary-button" type="button" onClick={() => void loadDailyReceipts()} disabled={loadingReceipts} style={{ whiteSpace: 'nowrap' }}>Carregar</button>
                     </div>
                     <div style={{ display: 'flex', gap: 8 }}>
@@ -7803,7 +7818,7 @@ export function App() {
                               <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 13, borderBottom: '1px solid #eef2ef', paddingBottom: 6 }}>
                                 <div>
                                   <div>{t.description ?? t.type}</div>
-                                  <div style={{ fontSize: 11, color: '#9ca3af' }}>{new Date(t.createdAt).toLocaleString()}</div>
+                                  <div style={{ fontSize: 11, color: '#9ca3af' }}>{fmtDateTime(t.createdAt)}</div>
                                 </div>
                                 <strong style={{ color: t.amount >= 0 ? '#15803d' : '#b91c1c', whiteSpace: 'nowrap' }}>
                                   {t.amount >= 0 ? '+' : ''}{formatCurrency(t.amount)}
