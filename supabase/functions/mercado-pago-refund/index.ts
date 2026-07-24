@@ -23,6 +23,18 @@ function json(body: unknown, status = 200) {
   });
 }
 
+// Verifica se já existe um lançamento de estorno para este pedido — evita débito duplo
+async function walletAlreadyDebited(adminClient: ReturnType<typeof createClient>, deliveryOrderId: string): Promise<boolean> {
+  const { data } = await adminClient
+    .from('WalletTransaction')
+    .select('id')
+    .eq('deliveryOrderId', deliveryOrderId)
+    .eq('type', 'ESTORNO_DELIVERY')
+    .limit(1)
+    .maybeSingle();
+  return !!data;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -102,7 +114,7 @@ Deno.serve(async (req) => {
         .eq('id', deliveryOrderId);
 
       // Debitar carteira se o pedido estava pago via MP (wallet foi creditada no webhook)
-      if (order.paymentStatus === 'PAGO') {
+      if (order.paymentStatus === 'PAGO' && !(await walletAlreadyDebited(adminClient, deliveryOrderId))) {
         const { data: walletManual } = await adminClient
           .from('Wallet').select('deliveryFeePercent').eq('companyId', companyUser.companyId).maybeSingle();
         const feeManual = Number(walletManual?.deliveryFeePercent ?? 0);
@@ -187,20 +199,22 @@ Deno.serve(async (req) => {
         .update({ status: 'CANCELADO', paymentStatus: 'ESTORNADO', cancellationRequestedAt: null, closedAt })
         .eq('id', deliveryOrderId);
 
-      // Pedido estava PAGO — carteira foi creditada no webhook, debitar agora
-      const { data: walletErr } = await adminClient
-        .from('Wallet').select('deliveryFeePercent').eq('companyId', companyUser.companyId).maybeSingle();
-      const feeErr = Number((walletErr as any)?.deliveryFeePercent ?? 0);
-      const netErr = Number(order.total) * (1 - feeErr / 100);
-      const { error: wErr } = await adminClient.rpc('credit_wallet', {
-        p_company_id:        companyUser.companyId,
-        p_amount:            -netErr,
-        p_type:              'ESTORNO_DELIVERY',
-        p_description:       `Estorno pedido #${order.receiptNumber ?? deliveryOrderId.slice(0,8)}`,
-        p_delivery_order_id: deliveryOrderId,
-        p_tab_id:            null,
-      });
-      if (wErr) console.error('Erro ao debitar wallet (mp_error):', wErr);
+      // Pedido estava PAGO — carteira foi creditada no webhook, debitar agora (se ainda não debitou)
+      if (!(await walletAlreadyDebited(adminClient, deliveryOrderId))) {
+        const { data: walletErr } = await adminClient
+          .from('Wallet').select('deliveryFeePercent').eq('companyId', companyUser.companyId).maybeSingle();
+        const feeErr = Number((walletErr as any)?.deliveryFeePercent ?? 0);
+        const netErr = Number(order.total) * (1 - feeErr / 100);
+        const { error: wErr } = await adminClient.rpc('credit_wallet', {
+          p_company_id:        companyUser.companyId,
+          p_amount:            -netErr,
+          p_type:              'ESTORNO_DELIVERY',
+          p_description:       `Estorno pedido #${order.receiptNumber ?? deliveryOrderId.slice(0,8)}`,
+          p_delivery_order_id: deliveryOrderId,
+          p_tab_id:            null,
+        });
+        if (wErr) console.error('Erro ao debitar wallet (mp_error):', wErr);
+      }
 
       return json({
         ok: true,
@@ -223,25 +237,27 @@ Deno.serve(async (req) => {
       .eq('id', deliveryOrderId);
     if (updateError) console.error('Erro ao atualizar DeliveryOrder:', updateError);
 
-    // Debitar da wallet apenas o valor líquido que havia sido creditado
-    const { data: wallet } = await adminClient
-      .from('Wallet')
-      .select('deliveryFeePercent, balance')
-      .eq('companyId', companyUser.companyId)
-      .maybeSingle();
+    // Debitar da wallet apenas o valor líquido que havia sido creditado (idempotente)
+    if (!(await walletAlreadyDebited(adminClient, deliveryOrderId))) {
+      const { data: wallet } = await adminClient
+        .from('Wallet')
+        .select('deliveryFeePercent, balance')
+        .eq('companyId', companyUser.companyId)
+        .maybeSingle();
 
-    const feePercent = Number(wallet?.deliveryFeePercent ?? 0);
-    const netAmount  = Number(order.total) * (1 - feePercent / 100);
+      const feePercent = Number(wallet?.deliveryFeePercent ?? 0);
+      const netAmount  = Number(order.total) * (1 - feePercent / 100);
 
-    const { error: walletError } = await adminClient.rpc('credit_wallet', {
-      p_company_id:        companyUser.companyId,
-      p_amount:            -netAmount,
-      p_type:              'ESTORNO_DELIVERY',
-      p_description:       `Estorno pedido #${order.receiptNumber ?? deliveryOrderId.slice(0,8)}`,
-      p_delivery_order_id: deliveryOrderId,
-      p_tab_id:            null,
-    });
-    if (walletError) console.error('Erro ao debitar wallet:', walletError);
+      const { error: walletError } = await adminClient.rpc('credit_wallet', {
+        p_company_id:        companyUser.companyId,
+        p_amount:            -netAmount,
+        p_type:              'ESTORNO_DELIVERY',
+        p_description:       `Estorno pedido #${order.receiptNumber ?? deliveryOrderId.slice(0,8)}`,
+        p_delivery_order_id: deliveryOrderId,
+        p_tab_id:            null,
+      });
+      if (walletError) console.error('Erro ao debitar wallet:', walletError);
+    }
 
     return json({ ok: true, action: 'refunded', refundMpId });
   } catch (err) {

@@ -335,6 +335,7 @@ export function App() {
   const [deliveryOrders, setDeliveryOrders] = useState<DeliveryOrder[]>([]);
   const [deliveryOrdersAll, setDeliveryOrdersAll] = useState<DeliveryOrder[]>([]);
   const [loadingDelivery, setLoadingDelivery] = useState(false);
+  const [approvingRefundId, setApprovingRefundId] = useState<string | null>(null);
   const [nowTick, setNowTick] = useState(() => Date.now());
   useEffect(() => {
     const id = setInterval(() => setNowTick(Date.now()), 30_000);
@@ -7097,15 +7098,19 @@ export function App() {
                                   {order.status === 'ENTREGUE' && <div style={{ fontSize: 12, color: '#9a3412', fontWeight: 600, marginTop: 2 }}>⚠️ Atenção: pedido já foi entregue. Possível má fé.</div>}
                                   {(order as any).cancellationReason && <div style={{ fontSize: 12, color: '#7c2d12', marginTop: 4 }}>Motivo: {(order as any).cancellationReason}</div>}
                                   <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                                    <button type="button" style={{ flex: 1, padding: '8px 0', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
+                                    <button type="button"
+                                      disabled={approvingRefundId === order.id}
+                                      style={{ flex: 1, padding: '8px 0', background: approvingRefundId === order.id ? '#86efac' : '#16a34a', color: '#fff', border: 'none', borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: approvingRefundId === order.id ? 'not-allowed' : 'pointer', transition: 'background .15s' }}
                                       onClick={async () => {
+                                        if (approvingRefundId) return;
                                         if (!confirm(order.status === 'ENTREGUE' ? '⚠️ O pedido já foi entregue. Tem certeza que deseja aprovar o estorno?' : `Aprovar estorno de ${formatCurrency(order.total)} para ${order.customerName}?\n\nO valor será devolvido automaticamente via Mercado Pago.`)) return;
+                                        setApprovingRefundId(order.id);
                                         // Remove imediatamente da lista (otimista)
                                         setDeliveryOrders((prev: DeliveryOrder[]) => prev.filter((o) => o.id !== order.id));
                                         try {
                                           const result = await api.approveRefund(order.id);
                                           if (result.warning) {
-                                            showToast(`⚠️ ${result.warning}`, 'error');
+                                            showToast(`⚠️ ${result.warning}`, 'warning');
                                           } else if (result.action === 'refunded') {
                                             showToast('Estorno aprovado. O valor foi devolvido via Mercado Pago.', 'success');
                                           } else if (result.action === 'cancelled_no_refund') {
@@ -7114,14 +7119,14 @@ export function App() {
                                             showToast('Pedido cancelado com sucesso.', 'success');
                                           }
                                           void loadDeliveryOrders();
-                                        }
-                                        catch (e: any) {
-                                          // Reverte em caso de erro
+                                        } catch (e: any) {
                                           void loadDeliveryOrders();
                                           showToast(e.message ?? 'Falha ao aprovar estorno.', 'error');
+                                        } finally {
+                                          setApprovingRefundId(null);
                                         }
                                       }}>
-                                      ✓ Aprovar estorno
+                                      {approvingRefundId === order.id ? 'Processando...' : '✓ Aprovar estorno'}
                                     </button>
                                     <button type="button" style={{ flex: 1, padding: '8px 0', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
                                       onClick={async () => {
