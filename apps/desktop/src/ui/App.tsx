@@ -336,6 +336,7 @@ export function App() {
   const [deliveryOrdersAll, setDeliveryOrdersAll] = useState<DeliveryOrder[]>([]);
   const [loadingDelivery, setLoadingDelivery] = useState(false);
   const [approvingRefundId, setApprovingRefundId] = useState<string | null>(null);
+  const approvingRefundLock = useRef(false); // guard síncrono contra double-click com stale closure
   const [nowTick, setNowTick] = useState(() => Date.now());
   useEffect(() => {
     const id = setInterval(() => setNowTick(Date.now()), 30_000);
@@ -7125,8 +7126,12 @@ export function App() {
                                       disabled={approvingRefundId === order.id}
                                       style={{ flex: 1, padding: '8px 0', background: approvingRefundId === order.id ? '#86efac' : '#16a34a', color: '#fff', border: 'none', borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: approvingRefundId === order.id ? 'not-allowed' : 'pointer', transition: 'background .15s' }}
                                       onClick={async () => {
-                                        if (approvingRefundId) return;
-                                        if (!confirm(order.status === 'ENTREGUE' ? '⚠️ O pedido já foi entregue. Tem certeza que deseja aprovar o estorno?' : `Aprovar estorno de ${formatCurrency(order.total)} para ${order.customerName}?\n\nO valor será devolvido automaticamente via Mercado Pago.`)) return;
+                                        if (approvingRefundLock.current) return;
+                                        approvingRefundLock.current = true;
+                                        if (!confirm(order.status === 'ENTREGUE' ? '⚠️ O pedido já foi entregue. Tem certeza que deseja aprovar o estorno?' : `Aprovar estorno de ${formatCurrency(order.total)} para ${order.customerName}?\n\nO valor será devolvido automaticamente via Mercado Pago.`)) {
+                                          approvingRefundLock.current = false;
+                                          return;
+                                        }
                                         setApprovingRefundId(order.id);
                                         // Remove imediatamente da lista (otimista)
                                         setDeliveryOrders((prev: DeliveryOrder[]) => prev.filter((o) => o.id !== order.id));
@@ -7148,6 +7153,7 @@ export function App() {
                                           showToast(e.message ?? 'Falha ao aprovar estorno.', 'error');
                                         } finally {
                                           setApprovingRefundId(null);
+                                          approvingRefundLock.current = false;
                                         }
                                       }}>
                                       {approvingRefundId === order.id ? 'Processando...' : '✓ Aprovar estorno'}
