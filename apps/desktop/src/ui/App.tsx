@@ -721,12 +721,19 @@ export function App() {
 
     const FINAL = ['ENTREGUE', 'CANCELADO'];
 
+    // Reseta estado de cancelamento ao abrir novo pedido
+    setPublicCancellationRequested(false);
+    setPublicCancellationReason('');
+    setPublicCancellationError(null);
+
     // Busca inicial do status atual
     publicDeliveryApi.getOrderStatus(publicDeliveryOrderId).then((result) => {
       if (result) {
         setPublicDeliveryTrackingStatus(result.status);
         setPublicDeliveryTrackingPaymentStatus(result.paymentStatus ?? '');
         if (result.receiptNumber != null) setPublicDeliveryReceiptNumber(result.receiptNumber);
+        // Sincroniza com DB: se já há solicitação pendente, reflete na UI
+        setPublicCancellationRequested(!!result.cancellationRequestedAt);
       }
     }).catch(() => {});
 
