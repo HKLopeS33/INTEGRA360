@@ -355,6 +355,7 @@ export function App() {
   const [loadingDelivery, setLoadingDelivery] = useState(false);
   const [approvingRefundId, setApprovingRefundId] = useState<string | null>(null);
   const approvingRefundLock = useRef(false); // guard síncrono contra double-click com stale closure
+  const approvedOrderIds = useRef<Set<string>>(new Set()); // IDs aprovados — filtrados em qualquer reload
   const [nowTick, setNowTick] = useState(() => Date.now());
   useEffect(() => {
     const id = setInterval(() => setNowTick(Date.now()), 30_000);
@@ -2886,7 +2887,8 @@ export function App() {
         api.listDeliveryOrders(),
         api.listDeliveryOrders('all')
       ]);
-      setDeliveryOrders(active as DeliveryOrder[]);
+      const excluded = approvedOrderIds.current;
+      setDeliveryOrders((active as DeliveryOrder[]).filter((o) => !excluded.has(o.id)));
       setDeliveryOrdersAll(all as DeliveryOrder[]);
     } catch (e) {
       showToast('Falha ao carregar pedidos de delivery.', 'error');
@@ -7148,6 +7150,9 @@ export function App() {
                                         confirmAction(msg, async () => {
                                           if (approvingRefundLock.current) return;
                                           approvingRefundLock.current = true;
+                                          // Registra ID para que qualquer reload futuro ignore este pedido
+                                          approvedOrderIds.current.add(order.id);
+                                          setTimeout(() => approvedOrderIds.current.delete(order.id), 60_000);
                                           setApprovingRefundId(order.id);
                                           setDeliveryOrders((prev: DeliveryOrder[]) => prev.filter((o) => o.id !== order.id));
                                           try {
