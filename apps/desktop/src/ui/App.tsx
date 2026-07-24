@@ -7134,8 +7134,8 @@ export function App() {
                                           } else {
                                             showToast('Pedido cancelado com sucesso.', 'success');
                                           }
-                                          // Aguarda 1.5s para o DB confirmar antes de re-buscar (evita race condition)
-                                          setTimeout(() => void loadDeliveryOrders(), 1500);
+                                          // Não recarregar aqui — o update otimista já removeu o pedido.
+                                          // O reload no catch reverte caso haja erro.
                                         } catch (e: any) {
                                           void loadDeliveryOrders();
                                           showToast(e.message ?? 'Falha ao aprovar estorno.', 'error');
