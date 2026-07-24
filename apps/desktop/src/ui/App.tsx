@@ -363,6 +363,7 @@ export function App() {
   const [publicDeliveryCart, setPublicDeliveryCart] = useState<Array<{ product: { id: string; name: string; price: number }; quantity: number; note: string }>>([]);
   const [publicDeliveryStep, setPublicDeliveryStep] = useState<'menu' | 'checkout' | 'payment' | 'card_payment' | 'payment_return' | 'success' | 'tracking'>('menu');
   const [publicDeliveryTrackingStatus, setPublicDeliveryTrackingStatus] = useState<string>('RECEBIDO');
+  const [publicDeliveryTrackingPaymentStatus, setPublicDeliveryTrackingPaymentStatus] = useState<string>('');
   const [publicDeliveryTrackingBar, setPublicDeliveryTrackingBar] = useState(0); // 0-100
   const [publicDeliveryName, setPublicDeliveryName] = useState('');
   const [publicDeliveryPhone, setPublicDeliveryPhone] = useState('');
@@ -724,6 +725,7 @@ export function App() {
     publicDeliveryApi.getOrderStatus(publicDeliveryOrderId).then((result) => {
       if (result) {
         setPublicDeliveryTrackingStatus(result.status);
+        setPublicDeliveryTrackingPaymentStatus(result.paymentStatus ?? '');
         if (result.receiptNumber != null) setPublicDeliveryReceiptNumber(result.receiptNumber);
       }
     }).catch(() => {});
@@ -742,6 +744,7 @@ export function App() {
         (payload) => {
           const row = payload.new as any;
           if (row.status) setPublicDeliveryTrackingStatus(row.status);
+          if (row.paymentStatus) setPublicDeliveryTrackingPaymentStatus(row.paymentStatus);
           if (row.receiptNumber != null) setPublicDeliveryReceiptNumber(row.receiptNumber);
           // Para de escutar quando pedido finalizado
           if (FINAL.includes(row.status)) supabaseAnon.removeChannel(channel);
@@ -755,6 +758,7 @@ export function App() {
       publicDeliveryApi.getOrderStatus(publicDeliveryOrderId).then((result) => {
         if (result) {
           setPublicDeliveryTrackingStatus(result.status);
+          setPublicDeliveryTrackingPaymentStatus(result.paymentStatus ?? '');
           if (result.receiptNumber != null) setPublicDeliveryReceiptNumber(result.receiptNumber);
         }
       }).catch(() => {});
@@ -3253,6 +3257,7 @@ export function App() {
               { key: 'ENTREGUE',           label: 'Entregue',             icon: '🎉', desc: 'Pedido entregue. Bom apetite!' },
             ];
             const isCancelled = publicDeliveryTrackingStatus === 'CANCELADO';
+            const isRefunded = isCancelled && publicDeliveryTrackingPaymentStatus === 'ESTORNADO';
             const currentIdx = isCancelled ? -1 : STAGES.findIndex((s) => s.key === publicDeliveryTrackingStatus);
             const currentStage = isCancelled ? null : STAGES[currentIdx];
             const isFinished = publicDeliveryTrackingStatus === 'ENTREGUE';
@@ -3273,13 +3278,24 @@ export function App() {
               <div style={{ padding: '32px 0 40px' }}>
                 {/* Header */}
                 <div style={{ textAlign: 'center', marginBottom: 32 }}>
-                  <div style={{ fontSize: 52 }}>{isCancelled ? '❌' : isFinished ? '🎉' : currentStage?.icon ?? '⏳'}</div>
+                  <div style={{ fontSize: 52 }}>{isRefunded ? '💸' : isCancelled ? '❌' : isFinished ? '🎉' : currentStage?.icon ?? '⏳'}</div>
                   <h2 style={{ margin: '12px 0 6px', fontSize: 20, fontWeight: 800 }}>
-                    {isCancelled ? 'Pedido cancelado' : isFinished ? 'Entregue!' : currentStage?.label ?? 'Aguardando...'}
+                    {isRefunded ? 'Estorno aprovado' : isCancelled ? 'Pedido cancelado' : isFinished ? 'Entregue!' : currentStage?.label ?? 'Aguardando...'}
                   </h2>
                   <p style={{ color: '#6b7280', fontSize: 14, margin: 0 }}>
-                    {isCancelled ? 'Seu pedido foi cancelado pelo restaurante.' : isFinished ? 'Obrigado pela preferência!' : currentStage?.desc ?? ''}
+                    {isRefunded
+                      ? 'Seu pedido foi cancelado e o valor será devolvido em até 5 dias úteis.'
+                      : isCancelled
+                      ? 'Seu pedido foi cancelado pelo restaurante.'
+                      : isFinished
+                      ? 'Obrigado pela preferência!'
+                      : currentStage?.desc ?? ''}
                   </p>
+                  {isRefunded && (
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '6px 14px', marginTop: 10, fontSize: 13, color: '#15803d', fontWeight: 600 }}>
+                      ✓ Reembolso em processamento
+                    </div>
+                  )}
                   {publicDeliveryReceiptNumber != null && (
                     <div style={{ display: 'inline-block', background: '#f3f4f6', borderRadius: 8, padding: '4px 14px', marginTop: 10, fontSize: 13, color: '#374151', fontWeight: 600 }}>
                       Pedido #{publicDeliveryReceiptNumber}
