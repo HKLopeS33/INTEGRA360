@@ -3052,6 +3052,14 @@ export function App() {
       // Remove cabeçalho se existir
       const dataLines = lines[0]?.toLowerCase().includes('categoria') ? lines.slice(1) : lines;
       let ok = 0; let fail = 0;
+      // Cache local de categorias para evitar buscas repetidas ao banco
+      const normalize = (s: string) =>
+        s.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+      const catCache = new Map<string, string>(); // nome normalizado → id
+      // Pré-popula com categorias já existentes
+      const currentCats = await api.categories();
+      for (const c of currentCats) catCache.set(normalize(c.name), c.id);
+
       for (const line of dataLines) {
         // Suporta ; e , como separadores
         const sep = line.includes(';') ? ';' : ',';
@@ -3061,14 +3069,30 @@ export function App() {
         const preco = Number(precoStr.replace(',', '.').replace(/[^0-9.]/g, ''));
         if (!nome || Number.isNaN(preco) || preco <= 0) { fail++; continue; }
         try {
-          // Busca categoria por nome ou cria — api.createProduct já faz fallback, mas passamos o nome
-          // Se categoria informada, tenta encontrar pelo nome na lista carregada
-          const cat = categoria ? categories.find((c) => c.name.toLowerCase() === categoria.toLowerCase()) : null;
+          let categoryId: string | undefined;
+          if (categoria) {
+            const key = normalize(categoria);
+            if (catCache.has(key)) {
+              categoryId = catCache.get(key);
+            } else {
+              // Categoria não existe — cria e adiciona ao cache
+              try {
+                const newCat = await api.createCategory(categoria.trim());
+                catCache.set(key, newCat.id);
+                categoryId = newCat.id;
+              } catch {
+                // Pode ter sido criada por outra linha — tenta buscar novamente
+                const cats2 = await api.categories();
+                const found = cats2.find((c) => normalize(c.name) === key);
+                if (found) { catCache.set(key, found.id); categoryId = found.id; }
+              }
+            }
+          }
           await api.createProduct({
             name: nome,
             description: descricao || undefined,
             price: preco,
-            categoryId: cat?.id || undefined,
+            categoryId,
           });
           ok++;
         } catch { fail++; }
