@@ -2969,6 +2969,7 @@ export function App() {
         subtotal,
         total: order.total,
         paymentMethod: order.paymentMethod,
+        date: order.createdAt,
         nota: order.deliveryFee > 0 ? `Taxa entrega: ${formatCurrency(order.deliveryFee)}` : undefined,
       });
     } catch (e) {
