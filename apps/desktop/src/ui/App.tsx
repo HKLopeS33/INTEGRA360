@@ -5463,6 +5463,33 @@ export function App() {
                     </div>
                   )}
                 </div>
+
+                {/* Apagar todos os produtos */}
+                <div style={{ borderTop: '1px solid #fee2e2', marginTop: 16, paddingTop: 16 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: '#991b1b', marginBottom: 4 }}>⚠️ Apagar todos os produtos</div>
+                  <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 8 }}>
+                    Remove todos os produtos ativos do cardápio. Use antes de reimportar para evitar duplicatas.
+                  </div>
+                  <button
+                    className="secondary-button"
+                    style={{ fontSize: 12, padding: '7px 14px', color: '#dc2626', borderColor: '#fca5a5' }}
+                    onClick={() => confirmAction(
+                      'Apagar TODOS os produtos do cardápio? Esta ação não pode ser desfeita.',
+                      async () => {
+                        try {
+                          await api.deleteAllProducts();
+                          showToast('Todos os produtos foram removidos.', 'success');
+                          const prods = await api.products();
+                          setProducts(prods);
+                        } catch (e: any) {
+                          showToast(e.message ?? 'Falha ao apagar produtos.', 'error');
+                        }
+                      }
+                    )}
+                  >
+                    🗑 Apagar todos os produtos
+                  </button>
+                </div>
               </form>
 
               {/* Gerenciar categorias */}

@@ -702,6 +702,17 @@ export const api = {
     return { ...data, price: Number(data.price) };
   },
 
+  deleteAllProducts: async () => {
+    const user = await requireCompanyUserWithRoles(['ADMIN', 'GERENTE', 'ESTOQUE']);
+    const { error } = await supabase
+      .from('Product')
+      .update({ active: false })
+      .eq('companyId', user.companyId)
+      .eq('active', true);
+    if (error) throwSupabaseError(error, 'Falha ao apagar produtos.');
+    return { success: true };
+  },
+
   deleteProduct: async (productId: string) => {
     const user = await requireCompanyUserWithRoles(['ADMIN', 'GERENTE', 'ESTOQUE']);
     const { error } = await supabase
