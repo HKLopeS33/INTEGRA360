@@ -3040,6 +3040,54 @@ export function App() {
     setNewProductImagePreview(null);
   };
 
+  const [importingCsv, setImportingCsv] = useState(false);
+  const [importCsvResult, setImportCsvResult] = useState<{ ok: number; fail: number } | null>(null);
+
+  const importProductsCsv = async (file: File) => {
+    setImportingCsv(true);
+    setImportCsvResult(null);
+    try {
+      const text = await file.text();
+      const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+      // Remove cabeçalho se existir
+      const dataLines = lines[0]?.toLowerCase().includes('categoria') ? lines.slice(1) : lines;
+      let ok = 0; let fail = 0;
+      for (const line of dataLines) {
+        // Suporta ; e , como separadores
+        const sep = line.includes(';') ? ';' : ',';
+        const parts = line.split(sep).map((p) => p.trim().replace(/^"|"$/g, ''));
+        const [categoria, nome, descricao, precoStr] = parts;
+        if (!nome || !precoStr) { fail++; continue; }
+        const preco = Number(precoStr.replace(',', '.').replace(/[^0-9.]/g, ''));
+        if (!nome || Number.isNaN(preco) || preco <= 0) { fail++; continue; }
+        try {
+          // Busca categoria por nome ou cria — api.createProduct já faz fallback, mas passamos o nome
+          // Se categoria informada, tenta encontrar pelo nome na lista carregada
+          const cat = categoria ? categories.find((c) => c.name.toLowerCase() === categoria.toLowerCase()) : null;
+          await api.createProduct({
+            name: nome,
+            description: descricao || undefined,
+            price: preco,
+            categoryId: cat?.id || undefined,
+          });
+          ok++;
+        } catch { fail++; }
+      }
+      setImportCsvResult({ ok, fail });
+      if (ok > 0) {
+        const updatedProducts = await api.products();
+        setProducts(updatedProducts);
+        showToast(`✅ ${ok} produto(s) importado(s)${fail > 0 ? `, ${fail} com erro` : ''}.`, ok > 0 ? 'success' : 'warning');
+      } else {
+        showToast('Nenhum produto importado. Verifique o arquivo.', 'error');
+      }
+    } catch (e: any) {
+      showToast(e.message ?? 'Falha ao importar CSV.', 'error');
+    } finally {
+      setImportingCsv(false);
+    }
+  };
+
   const createProduct = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const normalizedPrice = Number(newProductPrice.replace(',', '.'));
@@ -5382,6 +5430,37 @@ export function App() {
                     <button className="secondary-button" type="button" onClick={cancelEdit}>
                       Cancelar
                     </button>
+                  )}
+                </div>
+
+                {/* Importação em lote via CSV */}
+                <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #e5e7eb' }}>
+                  <div style={{ fontSize: 12, color: '#789088', marginBottom: 8, fontWeight: 600 }}>
+                    📥 IMPORTAR EM LOTE (CSV)
+                  </div>
+                  <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 8, lineHeight: 1.5 }}>
+                    Arquivo .csv com colunas: <code style={{ background: '#f3f4f6', padding: '1px 4px', borderRadius: 3 }}>categoria;nome;descricao;preco</code>
+                  </div>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: importingCsv ? 'wait' : 'pointer' }}>
+                    <input
+                      type="file"
+                      accept=".csv,text/csv"
+                      style={{ display: 'none' }}
+                      disabled={importingCsv}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) void importProductsCsv(file);
+                        e.target.value = '';
+                      }}
+                    />
+                    <span className="secondary-button" style={{ fontSize: 12, padding: '7px 14px', pointerEvents: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, opacity: importingCsv ? 0.6 : 1 }}>
+                      {importingCsv ? '⏳ Importando...' : '📂 Selecionar arquivo CSV'}
+                    </span>
+                  </label>
+                  {importCsvResult && (
+                    <div style={{ marginTop: 8, fontSize: 12, color: importCsvResult.fail === 0 ? '#16a34a' : '#92400e' }}>
+                      ✅ {importCsvResult.ok} importado(s){importCsvResult.fail > 0 ? ` · ⚠️ ${importCsvResult.fail} com erro` : ''}
+                    </div>
                   )}
                 </div>
               </form>

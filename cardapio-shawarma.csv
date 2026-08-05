@@ -1,0 +1,73 @@
+categoria;nome;descricao;preco
+Shawarma Pão Árabe;Moda da Casa;Carne bovina, queijo coalho, salada e pasta de alho;24.00
+Shawarma Pão Árabe;Shawarma de Carne;Carne bovina, salada e pasta de alho;22.00
+Shawarma Pão Árabe;Shawarma de Frango c/ Bacon;Frango, bacon, salada e pasta de alho;24.00
+Shawarma Pão Árabe;Shawarma Misto;Carne bovina, frango, salada e pasta de alho;24.00
+Shawarma Pão Árabe;Shawarma Q Delícia;Calabresa, queijo mussarela, batata frita, salada e pasta de alho;28.00
+Shawarma Pão Árabe;Shawarma Arretado de Bom;Carne seca acebolada, queijo de coalho, salada, bacon e pasta de alho;28.00
+Shawarma Pão Árabe;Shawarma Baba Q Bom;Filé suíno, queijo de coalho, batata frita, salada e pasta de alho;30.00
+Shawarma Pão Árabe;Shawarma Big Arábia;Carne bovina, frango, bacon, queijo mussarela, batata frita, salada e pasta de alho;35.00
+Shawarma Pão Árabe;Shawarma Ravi's;Carne bovina, bacon, ovo, queijo mussarela, salada e molho barbecue;30.00
+Shawarma Pão Árabe;Shawarma Menffi's;Carne bovina, calabresa, batata frita, salada e molho barbecue;30.00
+Shawarma Pão Árabe;Shawarma Brother;Queijo de coalho, ovo frito e salada;18.00
+Shawarma Pão Árabe;Shawarma Apetito das Arábias;Frango, bacon, ovo frito e salada;30.00
+Shawarma Pão Árabe;Shawarma Bom da Conta;Filé suíno, bacon, mussarela, cebola caramelizada, salada e pasta de alho;30.00
+Shawarma Pão Árabe;Shawarma Aliba;Charque, queijo coalho, barbecue, salada e pasta de alho;30.00
+Shawarma Pão Árabe;Shawarma Top;Camarão, mussarela, salada e pasta de alho;33.00
+Shawarma Pão Árabe;Shawarma Favorito 01;Carne bovina, bacon, mussarela, cebola agridoce, salada e pasta de alho;27.00
+Shawarma Pão Árabe;Shawarma Favorito 02;Charque desfiado, queijo de coalho, ovo, cebola agridoce, salada e pasta de alho;30.00
+Shawarma Pão Árabe;Shawarma da Hora;Pernil suíno, frango, mussarela, salada e pasta de alho;28.00
+Shawarma Pão Árabe;Shawarma To Taste;Charque desfiado, calabresa, mussarela, salada e pasta de alho;30.00
+Shawarma Pão Árabe;Shawarma Aliska;Pernil suíno, ovo, mussarela, cebola agridoce, salada e pasta de alho;30.00
+Shawarma Pão Árabe;Shawarma Turco 01;Frango crocante empanado, mussarela, salada e pasta de alho;30.00
+Shawarma Pão Árabe;Shawarma Turco 02;Bolinho de carne picante crocante, mussarela, salada e pasta de alho;30.00
+Shawarma Pão Árabe;Shawarma Kafta;Bolinho de carne picante crocante, mussarela, salada, pasta de alho e molho barbecue;30.00
+Shawarma Pão Árabe;Shawarma Camarão 01;Camarão empanado, mussarela, salada e pasta de alho;33.00
+Shawarma Pão Árabe;Shawarma Camarão 02;Camarão ao alho e óleo, mussarela, salada e pasta de alho;30.00
+Cuscuz Recheado;Cuscuz Arretado de Bom;Carne seca, queijo coalho, bacon, molho de alho e ovo;28.00
+Cuscuz Recheado;Cuscuz Moda da Casa;Carne bovina, calabresa, mussarela e molho de alho;24.00
+Cuscuz Recheado;Cuscuz do Sítio;Frango, bacon, mussarela e molho de alho;24.00
+Cuscuz Recheado;Cuscuz Cabra Macho;Carne desfiada, banana frita, mussarela e molho de alho;24.00
+Cuscuz Recheado;Cuscuz Apetito;Carne bovina, bacon, ovo frito, molho de barbecue e molho de alho;28.00
+Cuscuz Recheado;Cuscuz Nordestino;Pernil suíno, mussarela, creme de alho e molho de alho;25.00
+Cuscuz Recheado;Cuscuz Nº 11;Camarão acebolado ao molho de queijo e molho de alho;30.00
+Cuscuz Recheado;Cuscuz Nº 12;Pernil suíno acebolado e creme de alho;26.00
+Cuscuz Recheado;Cuscuz Nº 13;Pernil suíno, cebola agridoce, creme de alho e molho de alho;26.00
+Cuscuz Recheado;Cuscuz Nº 14;Charque desfiado, frango, cebola, creme de alho e molho de alho;28.00
+Cuscuz Recheado;Cuscuz Nº 15;Charque, calabresa, cebola, creme de alho e molho de alho;29.00
+Cuscuz Recheado;Cuscuz Nº 16;Charque, bacon, cebola agridoce, creme de alho e molho de alho;28.00
+Cuscuz Recheado;Cuscuz Paraxará;Costelinha suína frita, vinagrete, creme de alho e molho de alho;28.00
+Cuscuz Recheado;Cuscuz do Chef;Costelinha ao molho barbecue, vinagrete, creme de alho e molho de alho;28.00
+Cuscuz Recheado;Cuscuz Caipira;Frango frito crocante, molho barbecue, vinagrete, creme de alho e molho de alho;28.00
+Espaguete na Chapa;Espaguete Nº 01;Carne acebolada, creme branco, azeitona e orégano;22.00
+Espaguete na Chapa;Espaguete Nº 02;Frango, bacon, creme branco, azeitona e orégano;25.00
+Espaguete na Chapa;Espaguete Nº 03;Carne bovina, bacon, creme branco, azeitona e orégano;25.00
+Espaguete na Chapa;Espaguete Nº 04;Carne seca, creme branco, azeitona e orégano;26.00
+Espaguete na Chapa;Espaguete Nº 05;Camarão ao creme de requeijão, cebola e azeitona;28.00
+Espaguete na Chapa;Espaguete Nº 06;Charque desfiado, frango, cebola e creme de alho;29.00
+Espaguete na Chapa;Espaguete Nº 07;Pernil suíno acebolado, creme de alho e azeitona;29.00
+Espaguete na Chapa;Espaguete Nº 08;Pernil suíno acebolado, bacon, creme de alho e azeitona;27.00
+Espaguete na Chapa;Espaguete Nº 09;Pernil suíno, calabresa, creme de alho e azeitona;27.00
+Espaguete na Chapa;Espaguete Nº 10;Charque, mussarela, creme branco, azeitona e orégano;28.00
+Hambúguer;Hambúguer 01;Carne seca, bacon, creme de alho e salada;25.00
+Hambúguer;Hambúguer 02;Pernil suíno acebolado, creme de alho e salada;25.00
+Hambúguer;Hambúguer 03;Frango, bacon, creme de alho e salada;25.00
+Café;Café Puro;;4.00
+Café;Café com Leite;;5.00
+Café;Capuccino Tradicional;;12.00
+Café;Capuccino Chocolate;;13.00
+Tapioca;Tapioca Nº 02;Carne seca, bacon, queijo coalho e molho de alho;24.00
+Tapioca;Tapioca Nº 03;Frango, queijo coalho e molho de alho;20.00
+Tapioca;Tapioca Nº 04;Charque, queijo coalho e molho de alho;24.00
+Tapioca;Tapioca Nº 05;Filé suíno, queijo de coalho e molho de alho;24.00
+Tapioca;Tapioca Nº 06;Calabresa, queijo coalho e molho de alho;20.00
+Tapioca;Tapioca Nº 07;Ovo frito, queijo coalho e molho de alho;13.00
+Tapioca;Tapioca Nº 08;Queijo de coalho;12.00
+Macaxeira;Macaxeira Nº 01;Costelinha suína, vinagrete, farofa e molho de alho;28.00
+Macaxeira;Macaxeira Nº 02;Carne bovina, vinagrete, farofa e molho de alho;23.00
+Macaxeira;Macaxeira Nº 04;Carne seca, bacon, vinagrete, farofa e molho de alho;26.00
+Macaxeira;Macaxeira Nº 05;Frango empanado, vinagrete, farofa e molho de alho;28.00
+Sucos;Suco Sem Leite;Acerola, Abacaxi, Abacaxi com hortelã, Caju, Cajá, Goiaba, Manga, Maracujá, Morango ou Graviola;10.00
+Sucos;Suco com Leite;Acerola, Abacaxi, Abacaxi com hortelã, Caju, Cajá, Goiaba, Manga, Maracujá, Morango ou Graviola;11.00
+Batata Frita;Porção de Batata Frita;;39.00
+Batata Frita;Porção de Batata com Bacon;Bacon e molho de alho;36.00
