@@ -7234,7 +7234,22 @@ export function App() {
                               ))}
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <span style={{ fontWeight: 700, fontSize: 16 }}>{formatCurrency(order.total)}</span>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                <span style={{ fontWeight: 700, fontSize: 16 }}>{formatCurrency(order.total)}</span>
+                                {order.paymentMethod && (() => {
+                                  const pm = order.paymentMethod;
+                                  const isPix = pm === 'PIX' || pm === 'PIX_ONLINE';
+                                  const isCard = pm === 'CARTAO' || pm === 'CREDITO' || pm === 'DEBITO';
+                                  const icon = isPix ? '◈' : isCard ? '💳' : '💵';
+                                  const label = pm === 'PIX_ONLINE' ? 'Pix Online' : pm === 'PIX' ? 'Pix' : pm === 'DINHEIRO' ? 'Dinheiro' : pm === 'CARTAO' ? 'Cartão' : pm === 'CREDITO' ? 'Crédito' : pm === 'DEBITO' ? 'Débito' : pm;
+                                  const color = isPix ? '#0891b2' : isCard ? '#7c3aed' : '#16a34a';
+                                  return (
+                                    <span style={{ fontSize: 11, fontWeight: 600, color, display: 'flex', alignItems: 'center', gap: 3 }}>
+                                      {icon} {label}
+                                    </span>
+                                  );
+                                })()}
+                              </div>
                               <div style={{ display: 'flex', gap: 8 }}>
                                 <button type="button" className="secondary-button" style={{ fontSize: 12, padding: '6px 10px' }} onClick={(e) => { e.stopPropagation(); printDeliveryReceipt(order); }}>
                                   🖨 Recibo
