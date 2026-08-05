@@ -1528,7 +1528,7 @@ export const api = {
       // Inclui pedidos pagos normais + cancelados/estornados (para exibir nos recibos com badge)
       supabase
         .from('DeliveryOrder')
-        .select('id,customerName,total,deliveryFee,paymentMethod,status,paymentStatus,createdAt,receiptNumber')
+        .select('id,customerName,customerPhone,customerAddress,notes,total,deliveryFee,paymentMethod,status,paymentStatus,createdAt,receiptNumber')
         .eq('companyId', user.companyId)
         .in('paymentStatus', ['PAGO', 'ESTORNADO'])
         .gte('createdAt', today.toISOString())
@@ -1555,18 +1555,35 @@ export const api = {
       receiptGeneratedAt: formatDate(receipt.receiptGeneratedAt),
     }));
 
+    // Busca itens de todos os pedidos delivery do dia
+    const deliveryIds = (deliveryResult.data || []).map((d: any) => d.id);
+    const { data: deliveryItemsData } = deliveryIds.length > 0
+      ? await supabase.from('DeliveryOrderItem').select('id,deliveryOrderId,productName,quantity,unitPrice').in('deliveryOrderId', deliveryIds)
+      : { data: [] as any[] };
+    const itemsByDelivery = (deliveryItemsData || []).reduce((acc: any, i: any) => {
+      acc[i.deliveryOrderId] = acc[i.deliveryOrderId] || [];
+      acc[i.deliveryOrderId].push(i);
+      return acc;
+    }, {} as Record<string, any[]>);
+
     const deliveryReceipts = (deliveryResult.data || []).map((d: any) => ({
       id: d.id,
       type: 'delivery' as const,
       receiptNumber: d.receiptNumber ?? null,
       tableName: `Delivery – ${d.customerName}`,
+      customerName: d.customerName,
+      customerPhone: d.customerPhone ?? null,
+      customerAddress: d.customerAddress ?? null,
+      notes: d.notes ?? null,
       subtotal: Number(d.total) - Number(d.deliveryFee || 0),
+      deliveryFee: Number(d.deliveryFee || 0),
       total: Number(d.total),
       closedAt: formatDate(d.createdAt),
       receiptGeneratedAt: formatDate(d.createdAt),
       paymentMethod: d.paymentMethod,
       status: d.status,
       paymentStatus: d.paymentStatus,
+      orders: [{ id: d.id, status: d.status, items: (itemsByDelivery[d.id] || []).map((i: any) => ({ id: i.id, productName: i.productName, quantity: i.quantity, unitPrice: Number(i.unitPrice), total: Number(i.unitPrice) * i.quantity })) }],
     }));
 
     return [...mesaReceipts, ...deliveryReceipts].sort((a, b) =>
@@ -1615,7 +1632,7 @@ export const api = {
     // Busca em DeliveryOrder se não encontrado em Tab
     const { data: dlv } = await supabase
       .from('DeliveryOrder')
-      .select('id,receiptNumber,customerName,total,status,paymentMethod,createdAt')
+      .select('id,receiptNumber,customerName,customerPhone,customerAddress,notes,total,deliveryFee,status,paymentMethod,paymentStatus,createdAt')
       .eq('companyId', user.companyId)
       .eq('receiptNumber', receiptNumber)
       .maybeSingle();
@@ -1631,8 +1648,18 @@ export const api = {
       }));
       return {
         id: dlv.id, receiptNumber: dlv.receiptNumber,
+        type: 'delivery' as const,
         tableName: `Delivery – ${dlv.customerName}`,
-        subtotal: Number(dlv.total), total: Number(dlv.total),
+        customerName: dlv.customerName,
+        customerPhone: dlv.customerPhone ?? null,
+        customerAddress: dlv.customerAddress ?? null,
+        notes: dlv.notes ?? null,
+        subtotal: Number(dlv.total) - Number(dlv.deliveryFee || 0),
+        deliveryFee: Number(dlv.deliveryFee || 0),
+        total: Number(dlv.total),
+        paymentMethod: dlv.paymentMethod,
+        status: dlv.status,
+        paymentStatus: dlv.paymentStatus,
         closedAt: null, receiptGeneratedAt: formatDate(dlv.createdAt),
         orders: [{ id: dlv.id, status: dlv.status, items }],
       };

@@ -7754,11 +7754,26 @@ export function App() {
                       <div style={{ padding: 12, background: '#f9fafb', borderRadius: 8, border: '1px solid #e5e7eb' }}>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
                           <div><strong>Recibo Nº</strong><p style={{ margin: 0 }}>{selectedReceipt.receiptNumber ? String(selectedReceipt.receiptNumber).padStart(6, '0') : '—'}</p></div>
-                          <div><strong>Mesa</strong><p style={{ margin: 0 }}>{selectedReceipt.tableName}</p></div>
+                          <div><strong>{selectedReceipt.type === 'delivery' ? 'Cliente' : 'Mesa'}</strong><p style={{ margin: 0 }}>{selectedReceipt.type === 'delivery' ? selectedReceipt.customerName : selectedReceipt.tableName}</p></div>
                         </div>
+                        {selectedReceipt.type === 'delivery' && (
+                          <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 7, padding: '10px 12px', marginBottom: 12, display: 'grid', gap: 4 }}>
+                            {selectedReceipt.customerPhone && <div style={{ fontSize: 13, color: '#374151', display: 'flex', alignItems: 'center', gap: 6 }}>📞 {selectedReceipt.customerPhone}</div>}
+                            {selectedReceipt.customerAddress && <div style={{ fontSize: 13, color: '#374151', display: 'flex', alignItems: 'center', gap: 6 }}>📍 {selectedReceipt.customerAddress}</div>}
+                            {selectedReceipt.notes && <div style={{ fontSize: 12, color: '#6b7280', fontStyle: 'italic' }}>📝 {selectedReceipt.notes}</div>}
+                            <div style={{ fontSize: 12, color: '#374151', marginTop: 2 }}>
+                              💳 {selectedReceipt.paymentMethod === 'PIX_ONLINE' ? 'Pix Online' : selectedReceipt.paymentMethod === 'PIX' ? 'Pix' : selectedReceipt.paymentMethod === 'DINHEIRO' ? 'Dinheiro' : selectedReceipt.paymentMethod}
+                              {selectedReceipt.paymentStatus === 'ESTORNADO' && <span style={{ marginLeft: 8, background: '#fee2e2', color: '#b91c1c', borderRadius: 4, padding: '1px 6px', fontSize: 11, fontWeight: 700 }}>ESTORNADO</span>}
+                            </div>
+                          </div>
+                        )}
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
                           <div><strong>Subtotal</strong><p style={{ margin: 0 }}>{formatCurrency(selectedReceipt.subtotal)}</p></div>
-                          <div><strong>Total</strong><p style={{ margin: 0, fontWeight: 700 }}>{formatCurrency(selectedReceipt.total)}</p></div>
+                          <div>
+                            <strong>Total</strong>
+                            <p style={{ margin: 0, fontWeight: 700 }}>{formatCurrency(selectedReceipt.total)}</p>
+                            {selectedReceipt.deliveryFee > 0 && <p style={{ margin: 0, fontSize: 11, color: '#6b7280' }}>incl. taxa {formatCurrency(selectedReceipt.deliveryFee)}</p>}
+                          </div>
                         </div>
                         {selectedReceipt.orders && selectedReceipt.orders.length > 0 && (
                           <div style={{ maxHeight: 180, overflowY: 'auto' }}>
