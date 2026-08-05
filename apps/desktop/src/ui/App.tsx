@@ -7788,7 +7788,30 @@ export function App() {
                             </div>
                           </div>
                         )}
-                        <button className="secondary-button" type="button" onClick={() => setSelectedReceipt(null)} style={{ marginTop: 12, width: '100%' }}>Fechar</button>
+                        <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                          <button className="primary-button" type="button" style={{ flex: 1 }} onClick={async () => {
+                            const r = selectedReceipt;
+                            const allItems = (r.orders ?? []).flatMap((o: any) => o.items ?? []);
+                            void printCashierReceipt({
+                              companyName: storeName,
+                              cnpj: storeCnpj ? `CNPJ: ${storeCnpj}` : undefined,
+                              address: storeAddress,
+                              phone: storePhone,
+                              receiptNumber: r.receiptNumber,
+                              tableName: r.type === 'delivery' ? `DELIVERY — ${r.customerName}` : r.tableName,
+                              consumer: r.type === 'delivery' ? [r.customerPhone, r.customerAddress].filter(Boolean).join(' | ') : undefined,
+                              items: allItems.map((i: any) => ({ name: i.productName, quantity: i.quantity, unitPrice: i.unitPrice, total: i.total })),
+                              subtotal: r.subtotal,
+                              total: r.total,
+                              paymentMethod: r.paymentMethod,
+                              date: r.closedAt ?? r.receiptGeneratedAt,
+                              nota: r.deliveryFee > 0 ? `Taxa entrega: ${formatCurrency(r.deliveryFee)}` : undefined,
+                            });
+                          }}>
+                            🖨 Imprimir recibo
+                          </button>
+                          <button className="secondary-button" type="button" style={{ flex: 1 }} onClick={() => setSelectedReceipt(null)}>Fechar</button>
+                        </div>
                       </div>
                     )}
                     {!selectedReceipt && (
