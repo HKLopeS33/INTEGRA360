@@ -5280,7 +5280,17 @@ export function App() {
                             </div>
                             <div style={{ fontSize: 12, color: '#789088', marginBottom: 4 }}>
                               <MapPin size={10} style={{ marginRight: 3, verticalAlign: 'middle' }} />
-                              {order.customerAddress}
+                              {(() => {
+                                const parts = order.customerAddress.split(', ');
+                                const ref = parts.find(p => p.startsWith('Ref:'));
+                                const main = parts.filter(p => !p.startsWith('Ref:')).join(', ');
+                                return (
+                                  <>
+                                    <span>{main}</span>
+                                    {ref && <span style={{ display: 'block', fontSize: 11, color: '#9ca3af', fontStyle: 'italic' }}>{ref}</span>}
+                                  </>
+                                );
+                              })()}
                             </div>
                             <div style={{ fontSize: 13, color: '#4b5563' }}>
                               {order.items.map((i) => `${i.quantity}× ${i.productName}`).join(' • ')}
@@ -7407,7 +7417,15 @@ export function App() {
                                     </a>
                                   </div>
                                 )}
-                                <div style={{ fontSize: 12, color: '#789088', marginTop: 2 }}><MapPin size={11} style={{ marginRight: 4, verticalAlign: 'middle' }} />{order.customerAddress}</div>
+                                <div style={{ fontSize: 12, color: '#789088', marginTop: 2 }}>
+                                  <MapPin size={11} style={{ marginRight: 4, verticalAlign: 'middle' }} />
+                                  {(() => {
+                                    const parts = order.customerAddress.split(', ');
+                                    const ref = parts.find(p => p.startsWith('Ref:'));
+                                    const main = parts.filter(p => !p.startsWith('Ref:')).join(', ');
+                                    return <>{main}{ref && <span style={{ fontStyle: 'italic', color: '#9ca3af' }}> — {ref}</span>}</>;
+                                  })()}
+                                </div>
                               </div>
                               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
                                 <span style={{ background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.color}30`, borderRadius: 6, padding: '3px 10px', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>
