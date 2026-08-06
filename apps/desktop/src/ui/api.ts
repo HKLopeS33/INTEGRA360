@@ -750,13 +750,20 @@ export const api = {
 
   createCategory: async (name: string) => {
     const user = await requireCompanyUserWithRoles(['ADMIN', 'GERENTE', 'ESTOQUE']);
+    // Busca sem filtrar active — pode estar desativada (ex: após "apagar categorias")
     const { data: existing } = await supabase
       .from('Category')
-      .select('id')
+      .select('id,name,active')
       .eq('companyId', user.companyId)
       .ilike('name', name.trim())
       .maybeSingle();
-    if (existing) return existing as { id: string; name: string; active: boolean };
+    if (existing) {
+      // Se estava desativada, reativa
+      if (!existing.active) {
+        await supabase.from('Category').update({ active: true }).eq('id', existing.id);
+      }
+      return existing as { id: string; name: string; active: boolean };
+    }
     const { data: maxSort } = await supabase
       .from('Category')
       .select('sort')
