@@ -41,7 +41,7 @@ const LINE_WIDTH = 32;
 
 export function generateThermalHTML(data: ReceiptData) {
   const now = data.date ? new Date(data.date) : new Date();
-  const TZ = 'America/Sao_Paulo';
+  const TZ = 'America/Recife'; // Pernambuco — UTC-3 fixo, sem horário de verão
   const dateStr = `${now.toLocaleDateString('pt-BR', { timeZone: TZ })} ${now.toLocaleTimeString('pt-BR', { timeZone: TZ })}`;
 
   const company = (data.companyName ?? 'ESTABELECIMENTO').toUpperCase();

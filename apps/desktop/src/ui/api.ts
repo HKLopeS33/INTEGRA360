@@ -113,7 +113,12 @@ const buildReportQuery = (params?: Record<string, any>) => {
   return Object.keys(params).length ? `?${new URLSearchParams(params).toString()}` : '';
 };
 
-const formatDate = (value: string | null) => (value ? new Date(value).toISOString() : null);
+const formatDate = (value: string | null) => {
+  if (!value) return null;
+  // Garante que o timestamp seja tratado como UTC mesmo se vier sem marcador de timezone
+  const utc = /Z$|[+-]\d{2}:?\d{2}$/.test(value) ? value : value + 'Z';
+  return new Date(utc).toISOString();
+};
 
 // ── API pública de delivery (sem autenticação — acesso anon) ─────────────────
 

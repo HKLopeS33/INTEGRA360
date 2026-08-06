@@ -20,7 +20,7 @@ const reportPeriods: Array<{ value: ReportPeriod; label: string }> = [
   { value: 'yearly', label: 'Ano' }
 ];
 
-const TZ = 'America/Sao_Paulo';
+const TZ = 'America/Recife'; // Pernambuco — UTC-3 fixo, sem horário de verão
 
 // Retorna a data local de Brasília no formato YYYY-MM-DD
 const getBrazilDateStr = (d = new Date()) =>
