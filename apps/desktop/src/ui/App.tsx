@@ -388,6 +388,9 @@ export function App() {
   const [publicDeliveryName, setPublicDeliveryName] = useState('');
   const [publicDeliveryPhone, setPublicDeliveryPhone] = useState('');
   const [publicDeliveryAddress, setPublicDeliveryAddress] = useState('');
+  const [publicDeliveryStreet, setPublicDeliveryStreet] = useState('');
+  const [publicDeliveryNeighborhood, setPublicDeliveryNeighborhood] = useState('');
+  const [publicDeliveryReference, setPublicDeliveryReference] = useState('');
   const [publicDeliveryPayment, setPublicDeliveryPayment] = useState('DINHEIRO');
   const [publicDeliveryFee, setPublicDeliveryFee] = useState(0);
   const [publicDeliveryNotes, setPublicDeliveryNotes] = useState('');
@@ -1809,7 +1812,15 @@ export function App() {
     if (!publicDeliveryCompanyId) return;
     if (publicDeliveryCart.length === 0) { setPublicDeliveryError('Adicione itens ao carrinho.'); return; }
     if (!publicDeliveryName.trim()) { setPublicDeliveryError('Informe seu nome.'); return; }
-    if (!publicDeliveryAddress.trim()) { setPublicDeliveryError('Informe o endereço de entrega.'); return; }
+    if (!publicDeliveryStreet.trim()) { setPublicDeliveryError('Informe a rua e número.'); return; }
+    if (!publicDeliveryNeighborhood.trim()) { setPublicDeliveryError('Informe o bairro.'); return; }
+    // Monta endereço completo
+    const fullAddress = [
+      publicDeliveryStreet.trim(),
+      publicDeliveryNeighborhood.trim(),
+      publicDeliveryReference.trim() ? `Ref: ${publicDeliveryReference.trim()}` : '',
+    ].filter(Boolean).join(', ');
+    setPublicDeliveryAddress(fullAddress);
     setPublicDeliveryError(null);
     setPublicDeliverySubmitting(true);
     try {
@@ -1822,10 +1833,16 @@ export function App() {
       const cartTotalSnap = cartSnapshot.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
       const grandTotalSnap = cartTotalSnap + publicDeliveryFee;
 
+      const builtAddress = [
+        publicDeliveryStreet.trim(),
+        publicDeliveryNeighborhood.trim(),
+        publicDeliveryReference.trim() ? `Ref: ${publicDeliveryReference.trim()}` : '',
+      ].filter(Boolean).join(', ');
+
       const result = await publicDeliveryApi.createOrder(publicDeliveryCompanyId, {
         customerName: publicDeliveryName,
         customerPhone: publicDeliveryPhone || undefined,
-        customerAddress: publicDeliveryAddress,
+        customerAddress: builtAddress || publicDeliveryAddress,
         paymentMethod: publicDeliveryPayment,
         deliveryFee: publicDeliveryFee,
         notes: publicDeliveryNotes || undefined,
@@ -1842,7 +1859,7 @@ export function App() {
       // Salva snapshot para a mensagem WhatsApp (antes de limpar o carrinho)
       setPublicDeliverySnapshot({ items: cartSnapshot, paymentMethod: publicDeliveryPayment, grandTotal: grandTotalSnap });
       // Salva perfil do cliente para pré-preencher em visitas futuras
-      saveCustomerProfile({ name: publicDeliveryName.trim(), phone: publicDeliveryPhone.trim(), address: publicDeliveryAddress.trim() });
+      saveCustomerProfile({ name: publicDeliveryName.trim(), phone: publicDeliveryPhone.trim(), address: builtAddress || publicDeliveryAddress.trim() });
 
       if (publicDeliveryPayment === 'PIX_ONLINE') {
         setPublicDeliveryStep('payment');
@@ -3344,7 +3361,7 @@ export function App() {
                       Enviar mensagem ao estabelecimento
                     </a>
                   )}
-                  <button type="button" onClick={() => { setPublicDeliveryStep('menu'); setPublicDeliveryCart([]); setPublicDeliveryName(''); setPublicDeliveryPhone(''); setPublicDeliveryAddress(''); setPublicDeliveryNotes(''); setPublicDeliverySnapshot(null); }}
+                  <button type="button" onClick={() => { setPublicDeliveryStep('menu'); setPublicDeliveryCart([]); setPublicDeliveryName(''); setPublicDeliveryPhone(''); setPublicDeliveryAddress(''); setPublicDeliveryStreet(''); setPublicDeliveryNeighborhood(''); setPublicDeliveryReference(''); setPublicDeliveryNotes(''); setPublicDeliverySnapshot(null); }}
                     style={{ background: 'transparent', color: '#6b7280', border: '1px solid #e5e7eb', borderRadius: 10, padding: '11px 24px', cursor: 'pointer', fontWeight: 500, fontSize: 14, width: '100%', maxWidth: 360 }}>
                     Fazer novo pedido
                   </button>
@@ -3499,7 +3516,7 @@ export function App() {
                 <div style={{ textAlign: 'center' }}>
                   {isFinished || isCancelled ? (
                     <button type="button"
-                      onClick={() => { setPublicDeliveryStep('menu'); setPublicDeliveryCart([]); setPublicDeliveryName(''); setPublicDeliveryPhone(''); setPublicDeliveryAddress(''); setPublicDeliveryNotes(''); setPublicDeliverySnapshot(null); }}
+                      onClick={() => { setPublicDeliveryStep('menu'); setPublicDeliveryCart([]); setPublicDeliveryName(''); setPublicDeliveryPhone(''); setPublicDeliveryAddress(''); setPublicDeliveryStreet(''); setPublicDeliveryNeighborhood(''); setPublicDeliveryReference(''); setPublicDeliveryNotes(''); setPublicDeliverySnapshot(null); }}
                       style={{ background: '#18201d', color: '#fff', border: 'none', borderRadius: 10, padding: '12px 28px', cursor: 'pointer', fontWeight: 600, fontSize: 15 }}>
                       Fazer novo pedido
                     </button>
@@ -3546,7 +3563,9 @@ export function App() {
                 </div>
                 <label style={{ display: 'grid', gap: 4, fontSize: 14 }}>Nome *<input value={publicDeliveryName} onChange={(e) => setPublicDeliveryName(e.target.value)} placeholder="Seu nome completo" style={{ padding: '10px 12px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 14 }} /></label>
                 <label style={{ display: 'grid', gap: 4, fontSize: 14 }}>Telefone<input value={publicDeliveryPhone} onChange={(e) => setPublicDeliveryPhone(e.target.value)} placeholder="(00) 00000-0000" type="tel" style={{ padding: '10px 12px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 14 }} /></label>
-                <label style={{ display: 'grid', gap: 4, fontSize: 14 }}>Endereco de entrega *<input value={publicDeliveryAddress} onChange={(e) => setPublicDeliveryAddress(e.target.value)} placeholder="Rua, numero, bairro" style={{ padding: '10px 12px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 14 }} /></label>
+                <label style={{ display: 'grid', gap: 4, fontSize: 14 }}>Rua e número *<input value={publicDeliveryStreet} onChange={(e) => setPublicDeliveryStreet(e.target.value)} placeholder="Ex: Rua das Flores, 123" style={{ padding: '10px 12px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 14 }} /></label>
+                <label style={{ display: 'grid', gap: 4, fontSize: 14 }}>Bairro *<input value={publicDeliveryNeighborhood} onChange={(e) => setPublicDeliveryNeighborhood(e.target.value)} placeholder="Ex: Centro" style={{ padding: '10px 12px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 14 }} /></label>
+                <label style={{ display: 'grid', gap: 4, fontSize: 14 }}>Ponto de referência<input value={publicDeliveryReference} onChange={(e) => setPublicDeliveryReference(e.target.value)} placeholder="Ex: Próximo ao mercado X" style={{ padding: '10px 12px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 14 }} /></label>
                 <div style={{ display: 'grid', gap: 8 }}>
                   <label style={{ fontSize: 14, fontWeight: 600, color: '#374151' }}>Forma de pagamento</label>
                   {/* 3 opções, pagamento processado dentro da própria plataforma */}
@@ -3687,7 +3706,7 @@ export function App() {
                         setPublicDeliveryShowResumeBanner(false);
                         setPublicDeliveryCart([]);
                         setPublicDeliveryName(''); setPublicDeliveryPhone('');
-                        setPublicDeliveryAddress(''); setPublicDeliveryNotes('');
+                        setPublicDeliveryAddress(''); setPublicDeliveryStreet(''); setPublicDeliveryNeighborhood(''); setPublicDeliveryReference(''); setPublicDeliveryNotes('');
                         setPublicDeliveryOrderId(null);
                         clearPublicDeliveryState(publicDeliveryCompanyId!);
                       }} style={{ background: 'transparent', color: '#9ca3af', border: '1px solid #374151', borderRadius: 8, padding: '7px 10px', fontSize: 13, cursor: 'pointer' }}>
