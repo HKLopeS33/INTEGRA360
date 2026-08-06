@@ -3047,7 +3047,16 @@ export function App() {
     setImportingCsv(true);
     setImportCsvResult(null);
     try {
-      const text = await file.text();
+      // Detecta encoding: tenta UTF-8 estrito, cai para Windows-1252 se inválido
+      const arrayBuffer = await file.arrayBuffer();
+      let text: string;
+      try {
+        text = new TextDecoder('utf-8', { fatal: true }).decode(arrayBuffer);
+      } catch {
+        text = new TextDecoder('windows-1252').decode(arrayBuffer);
+      }
+      // Remove BOM se presente
+      text = text.replace(/^﻿/, '');
       const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
       // Remove cabeçalho se existir
       const dataLines = lines[0]?.toLowerCase().includes('categoria') ? lines.slice(1) : lines;
