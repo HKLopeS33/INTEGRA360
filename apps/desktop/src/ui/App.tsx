@@ -3061,8 +3061,30 @@ export function App() {
       // Remove cabeçalho se existir
       const dataLines = lines[0]?.toLowerCase().includes('categoria') ? lines.slice(1) : lines;
       let ok = 0; let fail = 0;
-      // Cache nome → id para evitar chamadas repetidas ao banco
-      const catCache = new Map<string, string>(); // nome.toLowerCase().trim() → id
+      // Cache nome.toLowerCase() → id, pré-populado com categorias existentes
+      const catCache = new Map<string, string>();
+      try {
+        const existing = await api.categories();
+        for (const c of existing) catCache.set(c.name.toLowerCase().trim(), c.id);
+      } catch { /* segue sem cache inicial */ }
+
+      // Resolve categoryId para um nome de categoria — cria se não existir
+      const resolveCategory = async (nome: string): Promise<string | undefined> => {
+        const key = nome.toLowerCase().trim();
+        if (catCache.has(key)) return catCache.get(key);
+        try {
+          const cat = await api.createCategory(nome.trim());
+          if (cat?.id) { catCache.set(key, cat.id); return cat.id; }
+        } catch {
+          // Criação falhou (ex: já existe com nome ligeiramente diferente) — busca novamente
+          try {
+            const fresh = await api.categories();
+            for (const c of fresh) catCache.set(c.name.toLowerCase().trim(), c.id);
+            if (catCache.has(key)) return catCache.get(key);
+          } catch { /* ignora */ }
+        }
+        return undefined;
+      };
 
       for (const line of dataLines) {
         // Suporta ; e , como separadores
@@ -3073,18 +3095,7 @@ export function App() {
         const preco = Number(precoStr.replace(',', '.').replace(/[^0-9.]/g, ''));
         if (!nome || Number.isNaN(preco) || preco <= 0) { fail++; continue; }
         try {
-          let categoryId: string | undefined;
-          if (categoria) {
-            const key = categoria.toLowerCase().trim();
-            if (catCache.has(key)) {
-              categoryId = catCache.get(key);
-            } else {
-              // createCategory retorna a existente (via ilike) ou cria nova
-              const cat = await api.createCategory(categoria.trim());
-              catCache.set(key, cat.id);
-              categoryId = cat.id;
-            }
-          }
+          const categoryId = categoria ? await resolveCategory(categoria) : undefined;
           await api.createProduct({
             name: nome,
             description: descricao || undefined,
@@ -5491,25 +5502,48 @@ export function App() {
                   <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 8 }}>
                     Remove todos os produtos ativos do cardápio. Use antes de reimportar para evitar duplicatas.
                   </div>
-                  <button
-                    className="secondary-button"
-                    style={{ fontSize: 12, padding: '7px 14px', color: '#dc2626', borderColor: '#fca5a5' }}
-                    onClick={() => confirmAction(
-                      'Apagar TODOS os produtos do cardápio? Esta ação não pode ser desfeita.',
-                      async () => {
-                        try {
-                          await api.deleteAllProducts();
-                          showToast('Todos os produtos foram removidos.', 'success');
-                          const prods = await api.products();
-                          setProducts(prods);
-                        } catch (e: any) {
-                          showToast(e.message ?? 'Falha ao apagar produtos.', 'error');
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button
+                      className="secondary-button"
+                      style={{ fontSize: 12, padding: '7px 14px', color: '#dc2626', borderColor: '#fca5a5' }}
+                      onClick={() => confirmAction(
+                        'Apagar TODOS os produtos do cardápio? Esta ação não pode ser desfeita.',
+                        async () => {
+                          try {
+                            await api.deleteAllProducts();
+                            showToast('Todos os produtos foram removidos.', 'success');
+                            const prods = await api.products();
+                            setProducts(prods);
+                          } catch (e: any) {
+                            showToast(e.message ?? 'Falha ao apagar produtos.', 'error');
+                          }
                         }
-                      }
-                    )}
-                  >
-                    🗑 Apagar todos os produtos
-                  </button>
+                      )}
+                    >
+                      🗑 Apagar todos os produtos
+                    </button>
+                    <button
+                      className="secondary-button"
+                      style={{ fontSize: 12, padding: '7px 14px', color: '#dc2626', borderColor: '#fca5a5' }}
+                      onClick={() => confirmAction(
+                        'Apagar TODAS as categorias e seus produtos? Esta ação não pode ser desfeita.',
+                        async () => {
+                          try {
+                            const cats = await api.categories();
+                            for (const c of cats) await api.deleteCategory(c.id);
+                            showToast('Todas as categorias foram removidas.', 'success');
+                            await loadCategories();
+                            const prods = await api.products();
+                            setProducts(prods);
+                          } catch (e: any) {
+                            showToast(e.message ?? 'Falha ao apagar categorias.', 'error');
+                          }
+                        }
+                      )}
+                    >
+                      🗑 Apagar todas as categorias
+                    </button>
+                  </div>
                 </div>
               </form>
 
