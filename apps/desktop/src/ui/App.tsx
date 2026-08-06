@@ -3061,13 +3061,8 @@ export function App() {
       // Remove cabeçalho se existir
       const dataLines = lines[0]?.toLowerCase().includes('categoria') ? lines.slice(1) : lines;
       let ok = 0; let fail = 0;
-      // Cache local de categorias para evitar buscas repetidas ao banco
-      const normalize = (s: string) =>
-        s.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-      const catCache = new Map<string, string>(); // nome normalizado → id
-      // Pré-popula com categorias já existentes
-      const currentCats = await api.categories();
-      for (const c of currentCats) catCache.set(normalize(c.name), c.id);
+      // Cache nome → id para evitar chamadas repetidas ao banco
+      const catCache = new Map<string, string>(); // nome.toLowerCase().trim() → id
 
       for (const line of dataLines) {
         // Suporta ; e , como separadores
@@ -3080,21 +3075,14 @@ export function App() {
         try {
           let categoryId: string | undefined;
           if (categoria) {
-            const key = normalize(categoria);
+            const key = categoria.toLowerCase().trim();
             if (catCache.has(key)) {
               categoryId = catCache.get(key);
             } else {
-              // Categoria não existe — cria e adiciona ao cache
-              try {
-                const newCat = await api.createCategory(categoria.trim());
-                catCache.set(key, newCat.id);
-                categoryId = newCat.id;
-              } catch {
-                // Pode ter sido criada por outra linha — tenta buscar novamente
-                const cats2 = await api.categories();
-                const found = cats2.find((c) => normalize(c.name) === key);
-                if (found) { catCache.set(key, found.id); categoryId = found.id; }
-              }
+              // createCategory retorna a existente (via ilike) ou cria nova
+              const cat = await api.createCategory(categoria.trim());
+              catCache.set(key, cat.id);
+              categoryId = cat.id;
             }
           }
           await api.createProduct({

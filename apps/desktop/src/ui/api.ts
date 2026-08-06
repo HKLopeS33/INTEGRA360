@@ -550,8 +550,9 @@ export const api = {
   uploadMenuBanner: async (file: File): Promise<string> => {
     const user = await requireCompanyUserWithRoles(['ADMIN', 'GERENTE']);
     const ext = file.name.split('.').pop() ?? 'jpg';
-    const path = `${user.companyId}/menu_banner.${ext}`;
-    const { error } = await supabase.storage.from('product-images').upload(path, file, { upsert: true, contentType: file.type });
+    const ts = Date.now();
+    const path = `${user.companyId}/menu_banner_${ts}.${ext}`;
+    const { error } = await supabase.storage.from('product-images').upload(path, file, { upsert: false, contentType: file.type });
     if (error) throw new Error(error.message || 'Falha ao enviar banner.');
     const { data } = supabase.storage.from('product-images').getPublicUrl(path);
     // Salva a URL no perfil da empresa
@@ -750,7 +751,7 @@ export const api = {
       .eq('companyId', user.companyId)
       .ilike('name', name.trim())
       .maybeSingle();
-    if (existing) throw new Error('Categoria já existe.');
+    if (existing) return existing as { id: string; name: string; active: boolean };
     const { data: maxSort } = await supabase
       .from('Category')
       .select('sort')
