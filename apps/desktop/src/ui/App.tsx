@@ -5593,7 +5593,9 @@ export function App() {
                               async () => {
                                 try {
                                   await api.deleteCategory(cat.id);
-                                  await loadData();
+                                  await loadCategories();
+                                  const prods = await api.products();
+                                  setProducts(prods);
                                   showToast(`Categoria "${cat.name}" removida.`, 'success');
                                 } catch (err) {
                                   showToast((err as Error).message, 'error');
