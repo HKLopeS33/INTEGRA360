@@ -5583,9 +5583,27 @@ export function App() {
                               }}
                               style={{ background: 'transparent', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: 16, padding: '4px 6px' }}
                               title="Remover foto">
-                              x
+                              ✕
                             </button>
                           )}
+                          <button type="button"
+                            title="Apagar categoria e seus produtos"
+                            onClick={() => confirmAction(
+                              `Apagar a categoria "${cat.name}" e todos os seus produtos? Esta ação não pode ser desfeita.`,
+                              async () => {
+                                try {
+                                  await api.deleteCategory(cat.id);
+                                  await loadData();
+                                  showToast(`Categoria "${cat.name}" removida.`, 'success');
+                                } catch (err) {
+                                  showToast((err as Error).message, 'error');
+                                }
+                              }
+                            )}
+                            style={{ background: 'transparent', border: '1px solid #fca5a5', borderRadius: 6, color: '#dc2626', cursor: 'pointer', fontSize: 13, padding: '4px 8px' }}
+                          >
+                            🗑
+                          </button>
                         </div>
                       ))}
                     </div>

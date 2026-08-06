@@ -724,6 +724,24 @@ export const api = {
     return { success: true };
   },
 
+  deleteCategory: async (categoryId: string) => {
+    const user = await requireCompanyUserWithRoles(['ADMIN', 'GERENTE', 'ESTOQUE']);
+    // Desativa todos os produtos da categoria antes
+    await supabase
+      .from('Product')
+      .update({ active: false })
+      .eq('companyId', user.companyId)
+      .eq('categoryId', categoryId)
+      .eq('active', true);
+    const { error } = await supabase
+      .from('Category')
+      .update({ active: false })
+      .eq('id', categoryId)
+      .eq('companyId', user.companyId);
+    if (error) throwSupabaseError(error, 'Falha ao remover categoria.');
+    return { success: true };
+  },
+
   createCategory: async (name: string) => {
     const user = await requireCompanyUserWithRoles(['ADMIN', 'GERENTE', 'ESTOQUE']);
     const { data: existing } = await supabase
