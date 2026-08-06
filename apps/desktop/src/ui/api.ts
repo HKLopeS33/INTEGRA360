@@ -1365,7 +1365,10 @@ export const api = {
       .eq('status', 'ABERTO')
       .maybeSingle();
 
-    if (cashRegister && amountPaid != null) {
+    if (cashRegister) {
+      // Registra o TOTAL DA COMANDA no caixa, não o valor entregue pelo cliente
+      // (troco não entra no caixa — apenas o valor devido)
+      const tabTotal = total;
       if (paymentMethod === 'PIX') {
         const { data: existingPixPayment, error: existingPixError } = await supabase
           .from('Payment')
@@ -1384,19 +1387,19 @@ export const api = {
         if (existingPixPayment) {
           const { error: paymentUpdateError } = await supabase
             .from('Payment')
-            .update({ status: 'PAGO' })
+            .update({ status: 'PAGO', amount: tabTotal.toString() })
             .eq('id', existingPixPayment.id);
           if (paymentUpdateError) {
             throwSupabaseError(paymentUpdateError, 'Falha ao atualizar pagamento PIX.');
           }
         } else {
-          const { error: paymentCreateError } = await supabase.from('Payment').insert([{ tabId, cashRegisterId: cashRegister.id, method: 'PIX', amount: amountPaid.toString(), status: 'PAGO' }]);
+          const { error: paymentCreateError } = await supabase.from('Payment').insert([{ tabId, cashRegisterId: cashRegister.id, method: 'PIX', amount: tabTotal.toString(), status: 'PAGO' }]);
           if (paymentCreateError) {
             throwSupabaseError(paymentCreateError, 'Falha ao gerar pagamento PIX.');
           }
         }
       } else {
-        const { error: paymentCreateError } = await supabase.from('Payment').insert([{ tabId, cashRegisterId: cashRegister.id, method: paymentMethod || 'DINHEIRO', amount: (amountPaid ?? 0).toString(), status: 'confirmado' }]);
+        const { error: paymentCreateError } = await supabase.from('Payment').insert([{ tabId, cashRegisterId: cashRegister.id, method: paymentMethod || 'DINHEIRO', amount: tabTotal.toString(), status: 'confirmado' }]);
         if (paymentCreateError) {
           throwSupabaseError(paymentCreateError, 'Falha ao registrar pagamento.');
         }
