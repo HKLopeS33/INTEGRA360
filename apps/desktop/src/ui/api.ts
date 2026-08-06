@@ -1805,17 +1805,32 @@ export const api = {
 
     const { data: payments, error: paymentsError } = await supabase
       .from('Payment')
-      .select('amount,method,status,createdAt,tab:Tab(number,name),deliveryOrder:DeliveryOrder(customerName)')
+      .select('id,amount,method,status,createdAt,tabId')
       .eq('cashRegisterId', cashRegister.id)
       .order('createdAt', { ascending: true });
     if (paymentsError) {
       throwSupabaseError(paymentsError, 'Falha ao carregar pagamentos do caixa.');
     }
 
+    // Busca nomes das mesas via Tab → RestaurantTable
+    const tabIds = (payments || []).filter(p => p.tabId).map(p => p.tabId);
+    const tabMap: Record<string, string> = {};
+    if (tabIds.length > 0) {
+      const { data: tabs } = await supabase.from('Tab').select('id,tableId').in('id', tabIds);
+      const tableIdsForMap = (tabs || []).map((t: any) => t.tableId).filter(Boolean);
+      const { data: tablesData } = tableIdsForMap.length > 0
+        ? await supabase.from('RestaurantTable').select('id,name,number').in('id', tableIdsForMap)
+        : { data: [] as any[] };
+      const tableNameMap: Record<string, string> = {};
+      for (const tbl of tablesData || []) tableNameMap[tbl.id] = tbl.name || `${tbl.number}`;
+      for (const t of tabs || []) {
+        tabMap[(t as any).id] = (t as any).tableId ? `Mesa ${tableNameMap[(t as any).tableId] || ''}`.trim() : 'Mesa';
+      }
+    }
+
     const validPayments = (payments || []).filter(p => p.status !== 'ESTORNADO');
     const totalPayments = validPayments.reduce((sum, p) => sum + Number(p.amount), 0);
 
-    // Breakdown por método
     const byMethod: Record<string, number> = {};
     for (const p of validPayments) {
       const m = p.method || 'DINHEIRO';
@@ -1839,11 +1854,7 @@ export const api = {
         method: p.method || 'DINHEIRO',
         amount: Number(p.amount),
         status: p.status,
-        origin: (p.tab as any)?.name || (p.tab as any)?.number
-          ? `Mesa ${(p.tab as any)?.name || (p.tab as any)?.number}`
-          : (p.deliveryOrder as any)?.customerName
-            ? `Delivery — ${(p.deliveryOrder as any).customerName}`
-            : 'Avulso',
+        origin: p.tabId ? (tabMap[p.tabId] || 'Mesa') : 'Avulso',
       })),
     };
   },
