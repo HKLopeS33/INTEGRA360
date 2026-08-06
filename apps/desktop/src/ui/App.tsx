@@ -3061,33 +3061,30 @@ export function App() {
       // Remove cabeçalho se existir
       const dataLines = lines[0]?.toLowerCase().includes('categoria') ? lines.slice(1) : lines;
       let ok = 0; let fail = 0;
-      // Cache nome.toLowerCase() → id, pré-populado com categorias existentes
-      const catCache = new Map<string, string>();
-      try {
-        const existing = await api.categories();
-        for (const c of existing) catCache.set(c.name.toLowerCase().trim(), c.id);
-      } catch { /* segue sem cache inicial */ }
 
-      // Resolve categoryId para um nome de categoria — cria se não existir
-      const resolveCategory = async (nome: string): Promise<string | undefined> => {
-        const key = nome.toLowerCase().trim();
-        if (catCache.has(key)) return catCache.get(key);
-        try {
-          const cat = await api.createCategory(nome.trim());
-          if (cat?.id) { catCache.set(key, cat.id); return cat.id; }
-        } catch {
-          // Criação falhou (ex: já existe com nome ligeiramente diferente) — busca novamente
-          try {
-            const fresh = await api.categories();
-            for (const c of fresh) catCache.set(c.name.toLowerCase().trim(), c.id);
-            if (catCache.has(key)) return catCache.get(key);
-          } catch { /* ignora */ }
-        }
-        return undefined;
-      };
-
+      // Passo 1: coleta nomes únicos de categoria do CSV
+      const catNomes = new Set<string>();
       for (const line of dataLines) {
-        // Suporta ; e , como separadores
+        const sep = line.includes(';') ? ';' : ',';
+        const parts = line.split(sep).map((p) => p.trim().replace(/^"|"$/g, ''));
+        if (parts[0]) catNomes.add(parts[0].trim());
+      }
+
+      // Passo 2: cria todas as categorias de uma vez e monta cache
+      const catCache = new Map<string, string>(); // nome original → id
+      for (const nomecat of catNomes) {
+        try {
+          const cat = await api.createCategory(nomecat);
+          if (cat?.id) catCache.set(nomecat.toLowerCase().trim(), cat.id);
+          else showToast(`Categoria sem ID: ${nomecat}`, 'error');
+        } catch (e: any) {
+          showToast(`Erro ao criar categoria "${nomecat}": ${e?.message ?? e}`, 'error');
+        }
+      }
+      await loadCategories();
+
+      // Passo 3: insere produtos
+      for (const line of dataLines) {
         const sep = line.includes(';') ? ';' : ',';
         const parts = line.split(sep).map((p) => p.trim().replace(/^"|"$/g, ''));
         const [categoria, nome, descricao, precoStr] = parts;
@@ -3095,7 +3092,7 @@ export function App() {
         const preco = Number(precoStr.replace(',', '.').replace(/[^0-9.]/g, ''));
         if (!nome || Number.isNaN(preco) || preco <= 0) { fail++; continue; }
         try {
-          const categoryId = categoria ? await resolveCategory(categoria) : undefined;
+          const categoryId = categoria ? catCache.get(categoria.toLowerCase().trim()) : undefined;
           await api.createProduct({
             name: nome,
             description: descricao || undefined,
