@@ -1800,12 +1800,24 @@ export const api = {
     }
     const userMap = (users || []).reduce((acc, u) => { acc[u.id] = u; return acc; }, {} as Record<string, any>);
 
-    const { data: payments, error: paymentsError } = await supabase.from('Payment').select('amount').eq('cashRegisterId', cashRegister.id);
+    const { data: payments, error: paymentsError } = await supabase
+      .from('Payment')
+      .select('amount,method,status,createdAt,tab:Tab(number,name),deliveryOrder:DeliveryOrder(customerName)')
+      .eq('cashRegisterId', cashRegister.id)
+      .order('createdAt', { ascending: true });
     if (paymentsError) {
       throwSupabaseError(paymentsError, 'Falha ao carregar pagamentos do caixa.');
     }
 
-    const totalPayments = (payments || []).reduce((sum, payment) => sum + Number(payment.amount), 0);
+    const validPayments = (payments || []).filter(p => p.status !== 'ESTORNADO');
+    const totalPayments = validPayments.reduce((sum, p) => sum + Number(p.amount), 0);
+
+    // Breakdown por método
+    const byMethod: Record<string, number> = {};
+    for (const p of validPayments) {
+      const m = p.method || 'DINHEIRO';
+      byMethod[m] = (byMethod[m] ?? 0) + Number(p.amount);
+    }
 
     return {
       id: cashRegister.id,
@@ -1816,8 +1828,20 @@ export const api = {
       closingAmount: cashRegister.closingAmount != null ? Number(cashRegister.closingAmount) : null,
       openedBy: userMap[cashRegister.openedById]?.name ?? null,
       closedBy: cashRegister.closedById ? userMap[cashRegister.closedById]?.name ?? null : null,
-      paymentsCount: payments?.length ?? 0,
-      totalPayments
+      paymentsCount: validPayments.length,
+      totalPayments,
+      byMethod,
+      movements: (payments || []).map(p => ({
+        time: formatDate(p.createdAt) ?? '',
+        method: p.method || 'DINHEIRO',
+        amount: Number(p.amount),
+        status: p.status,
+        origin: (p.tab as any)?.name || (p.tab as any)?.number
+          ? `Mesa ${(p.tab as any)?.name || (p.tab as any)?.number}`
+          : (p.deliveryOrder as any)?.customerName
+            ? `Delivery — ${(p.deliveryOrder as any).customerName}`
+            : 'Avulso',
+      })),
     };
   },
 

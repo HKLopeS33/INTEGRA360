@@ -2145,6 +2145,8 @@ export function App() {
     closedBy: string | null;
     paymentsCount: number;
     totalPayments: number;
+    byMethod: Record<string, number>;
+    movements: Array<{ time: string; method: string; amount: number; status: string; origin: string }>;
   } | null>(null);
   const [isCashOpen, setIsCashOpen] = useState(false);
   const [currentCashClosingAmount, setCurrentCashClosingAmount] = useState('');
@@ -7646,69 +7648,142 @@ export function App() {
                   </div>
                   <div style={{ display: 'grid', gap: 16 }}>
                     {cashRegister ? (
-                      <div style={{ display: 'grid', gap: 12 }}>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                          <div>
-                            <strong>Caixa aberto</strong>
-                            <p>Aberto em {fmtDateTime(cashRegister.openedAt)}</p>
-                          </div>
-                          <div>
-                            <strong>Status</strong>
-                            <p>{cashRegister.status}</p>
-                          </div>
+                      <div style={{ display: 'grid', gap: 16 }}>
+                        {/* Info básica */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                          <div><strong style={{ fontSize: 12, color: '#789088', textTransform: 'uppercase' }}>Aberto em</strong><p style={{ margin: '2px 0 0', fontSize: 14 }}>{fmtDateTime(cashRegister.openedAt)}</p></div>
+                          <div><strong style={{ fontSize: 12, color: '#789088', textTransform: 'uppercase' }}>Operador</strong><p style={{ margin: '2px 0 0', fontSize: 14 }}>{cashRegister.openedBy}</p></div>
+                          <div><strong style={{ fontSize: 12, color: '#789088', textTransform: 'uppercase' }}>Saldo inicial</strong><p style={{ margin: '2px 0 0', fontSize: 14, fontWeight: 600 }}>{formatCurrency(cashRegister.initialAmount)}</p></div>
+                          <div><strong style={{ fontSize: 12, color: '#789088', textTransform: 'uppercase' }}>Total recebido</strong><p style={{ margin: '2px 0 0', fontSize: 14, fontWeight: 600, color: '#15803d' }}>{formatCurrency(cashRegister.totalPayments)}</p></div>
                         </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                          <div>
-                            <strong>Saldo inicial</strong>
-                            <p>{formatCurrency(cashRegister.initialAmount)}</p>
-                          </div>
-                          <div>
-                            <strong>Pagamentos</strong>
-                            <p>{formatCurrency(cashRegister.totalPayments)} ({cashRegister.paymentsCount})</p>
-                          </div>
-                        </div>
-                        <label>
-                          Valor de fechamento
-                          <input
-                            inputMode="decimal"
-                            placeholder="0.00"
-                            value={currentCashClosingAmount}
-                            onChange={(event) => setCurrentCashClosingAmount(event.target.value)}
-                          />
-                        </label>
-                        {/* Alerta de diferença no fechamento */}
-                        {(() => {
-                          const closing = Number(currentCashClosingAmount.replace(',', '.'));
-                          const expected = cashRegister.initialAmount + cashRegister.totalPayments;
-                          const diff = closing - expected;
-                          if (!currentCashClosingAmount || isNaN(closing) || Math.abs(diff) < 0.01) return null;
-                          const isShort = diff < 0;
-                          return (
-                            <div style={{ background: isShort ? '#fef2f2' : '#f0fdf4', border: `1px solid ${isShort ? '#fca5a5' : '#86efac'}`, borderRadius: 8, padding: '10px 14px', fontSize: 13, color: isShort ? '#b91c1c' : '#15803d' }}>
-                              {isShort ? '⚠️' : '✅'} Diferença de <strong>{formatCurrency(Math.abs(diff))}</strong> em relação ao esperado ({formatCurrency(expected)}).
-                              {isShort ? ' Verifique se há troco ou pagamentos não registrados.' : ' Caixa com sobra.'}
+
+                        {/* Breakdown por método */}
+                        {Object.keys(cashRegister.byMethod ?? {}).length > 0 && (
+                          <div style={{ background: '#f8fafc', borderRadius: 8, padding: '10px 14px', display: 'grid', gap: 6 }}>
+                            <strong style={{ fontSize: 12, color: '#789088', textTransform: 'uppercase' }}>Por forma de pagamento</strong>
+                            {Object.entries(cashRegister.byMethod).map(([method, total]) => (
+                              <div key={method} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                                <span>{method === 'DINHEIRO' ? '💵 Dinheiro' : method === 'PIX' || method === 'PIX_ONLINE' ? '⚡ Pix' : method === 'CARTAO' || method === 'CREDITO' ? '💳 Cartão Crédito' : method === 'DEBITO' ? '💳 Cartão Débito' : method}</span>
+                                <strong>{formatCurrency(total)}</strong>
+                              </div>
+                            ))}
+                            <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: 6, display: 'flex', justifyContent: 'space-between', fontSize: 13, fontWeight: 700 }}>
+                              <span>Saldo esperado</span>
+                              <span style={{ color: '#15803d' }}>{formatCurrency(cashRegister.initialAmount + cashRegister.totalPayments)}</span>
                             </div>
-                          );
-                        })()}
-                        <button
-                          className="primary-button"
-                          type="button"
-                          onClick={async () => {
-                            const value = Number(currentCashClosingAmount.replace(',', '.'));
-                            if (Number.isNaN(value)) return showToast('Informe um valor de fechamento válido.', 'warning');
-                            try {
-                              await api.closeCashRegister(value);
-                              await loadData();
-                              setCurrentCashClosingAmount('');
-                              showToast('Caixa fechado com sucesso!', 'success');
-                            } catch (error) {
-                              console.error(error);
-                              showToast('Erro ao fechar o caixa.', 'error');
-                            }
-                          }}
-                        >
-                          Fechar caixa
-                        </button>
+                          </div>
+                        )}
+
+                        {/* Movimentações do dia */}
+                        {(cashRegister.movements ?? []).length > 0 && (
+                          <div style={{ display: 'grid', gap: 6 }}>
+                            <strong style={{ fontSize: 12, color: '#789088', textTransform: 'uppercase' }}>Movimentações ({cashRegister.paymentsCount})</strong>
+                            <div style={{ maxHeight: 220, overflowY: 'auto', display: 'grid', gap: 4 }}>
+                              {cashRegister.movements.map((m, i) => (
+                                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', background: m.status === 'ESTORNADO' ? '#fef2f2' : '#f9fafb', borderRadius: 6, fontSize: 12 }}>
+                                  <div>
+                                    <span style={{ color: '#374151', fontWeight: 500 }}>{m.origin}</span>
+                                    <span style={{ color: '#9ca3af', marginLeft: 8 }}>{fmtTime(m.time)}</span>
+                                    {m.status === 'ESTORNADO' && <span style={{ marginLeft: 6, color: '#b91c1c', fontSize: 10, fontWeight: 700 }}>ESTORNADO</span>}
+                                  </div>
+                                  <span style={{ fontWeight: 600, color: m.status === 'ESTORNADO' ? '#b91c1c' : '#15803d' }}>
+                                    {m.status === 'ESTORNADO' ? '-' : '+'}{formatCurrency(m.amount)}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Fechamento */}
+                        <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: 12, display: 'grid', gap: 10 }}>
+                          <label style={{ fontSize: 14, fontWeight: 600 }}>
+                            Valor contado no fechamento
+                            <input
+                              inputMode="decimal"
+                              placeholder="0.00"
+                              value={currentCashClosingAmount}
+                              onChange={(event) => setCurrentCashClosingAmount(event.target.value)}
+                              style={{ marginTop: 4 }}
+                            />
+                          </label>
+                          {/* Alerta de diferença */}
+                          {(() => {
+                            const closing = Number(currentCashClosingAmount.replace(',', '.'));
+                            const expected = cashRegister.initialAmount + cashRegister.totalPayments;
+                            const diff = closing - expected;
+                            if (!currentCashClosingAmount || isNaN(closing) || Math.abs(diff) < 0.01) return null;
+                            const isShort = diff < 0;
+                            return (
+                              <div style={{ background: isShort ? '#fef2f2' : '#f0fdf4', border: `1px solid ${isShort ? '#fca5a5' : '#86efac'}`, borderRadius: 8, padding: '10px 14px', fontSize: 13, color: isShort ? '#b91c1c' : '#15803d' }}>
+                                {isShort ? '⚠️' : '✅'} Diferença de <strong>{formatCurrency(Math.abs(diff))}</strong> em relação ao esperado ({formatCurrency(expected)}).
+                                {isShort ? ' Falta de caixa.' : ' Sobra de caixa.'}
+                              </div>
+                            );
+                          })()}
+                          <div style={{ display: 'flex', gap: 8 }}>
+                            <button
+                              className="secondary-button"
+                              type="button"
+                              style={{ flex: 1 }}
+                              onClick={() => {
+                                const closing = Number(currentCashClosingAmount.replace(',', '.')) || (cashRegister.initialAmount + cashRegister.totalPayments);
+                                const expected = cashRegister.initialAmount + cashRegister.totalPayments;
+                                const diff = closing - expected;
+                                const w = window.open('', '_blank', 'width=320,height=700,toolbar=no,menubar=no');
+                                if (!w) return;
+                                const lines = [
+                                  `<b>${storeName || 'ESTABELECIMENTO'}</b>`,
+                                  `<small>RELATÓRIO DE FECHAMENTO DE CAIXA</small>`,
+                                  `<hr/>`,
+                                  `Aberto em: ${fmtDateTime(cashRegister.openedAt)}`,
+                                  `Fechado em: ${fmtDateTime(new Date())}`,
+                                  `Operador: ${cashRegister.openedBy}`,
+                                  `<hr/>`,
+                                  `Saldo inicial: <b>${formatCurrency(cashRegister.initialAmount)}</b>`,
+                                  ...Object.entries(cashRegister.byMethod ?? {}).map(([m, v]) =>
+                                    `${m === 'DINHEIRO' ? 'Dinheiro' : m === 'PIX' || m === 'PIX_ONLINE' ? 'Pix' : m === 'CARTAO' || m === 'CREDITO' ? 'Cartão Créd.' : m === 'DEBITO' ? 'Cartão Déb.' : m}: <b>${formatCurrency(v)}</b>`
+                                  ),
+                                  `Total recebido: <b>${formatCurrency(cashRegister.totalPayments)}</b>`,
+                                  `<hr/>`,
+                                  `Saldo esperado: <b>${formatCurrency(expected)}</b>`,
+                                  `Valor contado: <b>${formatCurrency(closing)}</b>`,
+                                  `Diferença: <b style="color:${diff < 0 ? 'red' : diff > 0 ? 'green' : 'inherit'}">${diff >= 0 ? '+' : ''}${formatCurrency(diff)}</b>`,
+                                  `<hr/>`,
+                                  `<small>Movimentações (${cashRegister.paymentsCount})</small>`,
+                                  ...(cashRegister.movements ?? []).map(m =>
+                                    `${fmtTime(m.time)} ${m.origin} — ${formatCurrency(m.amount)}${m.status === 'ESTORNADO' ? ' <b style="color:red">[ESTORNADO]</b>' : ''}`
+                                  ),
+                                  `<hr/><small>SEM VALOR FISCAL</small>`,
+                                ];
+                                w.document.write(`<!doctype html><html><head><meta charset="utf-8"><style>@page{size:58mm auto;margin:3mm}body{font-family:Arial,sans-serif;font-size:11px;width:54mm}hr{border:1px dashed #000;margin:4px 0}b{font-weight:700}</style></head><body>${lines.join('<br/>')}<script>window.onload=()=>setTimeout(()=>window.print(),200)</script></body></html>`);
+                                w.document.close();
+                              }}
+                            >
+                              🖨 Imprimir relatório
+                            </button>
+                            <button
+                              className="primary-button"
+                              type="button"
+                              style={{ flex: 2 }}
+                              onClick={async () => {
+                                const value = Number(currentCashClosingAmount.replace(',', '.'));
+                                if (Number.isNaN(value)) return showToast('Informe um valor de fechamento válido.', 'warning');
+                                try {
+                                  await api.closeCashRegister(value);
+                                  await loadData();
+                                  setCurrentCashClosingAmount('');
+                                  showToast('Caixa fechado com sucesso!', 'success');
+                                } catch (error) {
+                                  console.error(error);
+                                  showToast('Erro ao fechar o caixa.', 'error');
+                                }
+                              }}
+                            >
+                              Fechar caixa
+                            </button>
+                          </div>
+                        </div>
                       </div>
                     ) : (
                       <div style={{ display: 'grid', gap: 12 }}>
