@@ -858,6 +858,7 @@ export const api = {
         .eq('companyId', user.companyId)
         .not('cancellationRequestedAt', 'is', null)
         .neq('status', 'CANCELADO')
+        .neq('paymentStatus', 'ESTORNADO')
         .order('createdAt', { ascending: false });
 
       if (pendingCancellations && pendingCancellations.length > 0) {
@@ -980,6 +981,12 @@ export const api = {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error ?? 'Falha ao aprovar estorno.');
+    // Garante que o pedido some do painel mesmo se a Edge Function não atualizou o status
+    await supabase.from('DeliveryOrder').update({
+      status: 'CANCELADO',
+      paymentStatus: 'ESTORNADO',
+      closedAt: new Date().toISOString(),
+    }).eq('id', deliveryOrderId);
     return data;
   },
 
@@ -997,6 +1004,8 @@ export const api = {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error ?? 'Falha ao rejeitar cancelamento.');
+    // Limpa o campo de solicitação para o pedido sair da lista de pendentes
+    await supabase.from('DeliveryOrder').update({ cancellationRequestedAt: null, cancellationReason: null }).eq('id', deliveryOrderId);
     return data;
   },
 
@@ -1016,6 +1025,12 @@ export const api = {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error ?? 'Falha ao cancelar pedido.');
+    // Garante cancelamento local
+    await supabase.from('DeliveryOrder').update({
+      status: 'CANCELADO',
+      paymentStatus: 'ESTORNADO',
+      closedAt: new Date().toISOString(),
+    }).eq('id', deliveryOrderId);
     return data;
   },
 
