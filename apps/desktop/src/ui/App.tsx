@@ -421,6 +421,7 @@ export function App() {
   const [publicCancellationReason, setPublicCancellationReason] = useState('');
   const [publicCancellationSubmitting, setPublicCancellationSubmitting] = useState(false);
   const [publicCancellationRequested, setPublicCancellationRequested] = useState(false);
+  const [publicCancellationRejected, setPublicCancellationRejected] = useState(false);
   const [publicCancellationError, setPublicCancellationError] = useState<string | null>(null);
   const [menuCart, setMenuCart] = useState<Array<{ product: Product; quantity: number; note: string }>>([]);
   const [menuModalTable, setMenuModalTable] = useState<RestaurantTable | null>(null);
@@ -773,6 +774,14 @@ export function App() {
           if (row.status) setPublicDeliveryTrackingStatus(row.status);
           if (row.paymentStatus) setPublicDeliveryTrackingPaymentStatus(row.paymentStatus);
           if (row.receiptNumber != null) setPublicDeliveryReceiptNumber(row.receiptNumber);
+          // Sincroniza solicitação de cancelamento — cobre rejeição (cancellationRequestedAt vira null)
+          const wasRequested = publicCancellationRequested;
+          const stillRequested = !!row.cancellationRequestedAt;
+          setPublicCancellationRequested(stillRequested);
+          // Se havia pedido e foi rejeitado (não cancelado), marca como rejeitado para mostrar aviso
+          if (wasRequested && !stillRequested && !FINAL.includes(row.status)) {
+            setPublicCancellationRejected(true);
+          }
           // Para de escutar quando pedido finalizado
           if (FINAL.includes(row.status)) supabaseAnon.removeChannel(channel);
         },
@@ -787,6 +796,7 @@ export function App() {
           setPublicDeliveryTrackingStatus(result.status);
           setPublicDeliveryTrackingPaymentStatus(result.paymentStatus ?? '');
           if (result.receiptNumber != null) setPublicDeliveryReceiptNumber(result.receiptNumber);
+          setPublicCancellationRequested(!!result.cancellationRequestedAt);
         }
       }).catch(() => {});
     }, 30000);
@@ -3407,9 +3417,9 @@ export function App() {
                   </h2>
                   <p style={{ color: '#6b7280', fontSize: 14, margin: 0 }}>
                     {isRefunded
-                      ? 'Seu pedido foi cancelado e o valor será devolvido em até 5 dias úteis.'
+                      ? 'Seu pedido foi cancelado. O valor será devolvido em até 5 dias úteis.'
                       : isCancelled
-                      ? 'Seu pedido foi cancelado pelo restaurante.'
+                      ? 'Seu pedido foi cancelado. Não há valor a ser reembolsado.'
                       : isFinished
                       ? 'Obrigado pela preferência!'
                       : currentStage?.desc ?? ''}
@@ -3468,10 +3478,18 @@ export function App() {
 
                 {/* Solicitar estorno — disponível quando pedido não está cancelado */}
                 {!isCancelled && publicDeliveryOrderId && (
-                  <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 12, padding: 16, marginBottom: 12 }}>
+                  <div style={{ background: publicCancellationRejected ? '#fef2f2' : '#fff7ed', border: `1px solid ${publicCancellationRejected ? '#fca5a5' : '#fed7aa'}`, borderRadius: 12, padding: 16, marginBottom: 12 }}>
                     {publicCancellationRequested ? (
                       <div style={{ textAlign: 'center', color: '#ea580c', fontWeight: 600, fontSize: 14 }}>
                         ⏳ Solicitação de cancelamento enviada. O estabelecimento irá analisar.
+                      </div>
+                    ) : publicCancellationRejected ? (
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ color: '#b91c1c', fontWeight: 700, fontSize: 15, marginBottom: 4 }}>❌ Cancelamento não aprovado</div>
+                        <div style={{ color: '#6b7280', fontSize: 13 }}>O estabelecimento analisou e não aprovou o cancelamento. Seu pedido continua em andamento.</div>
+                        <button type="button" onClick={() => setPublicCancellationRejected(false)} style={{ marginTop: 10, background: 'none', border: '1px solid #fca5a5', color: '#b91c1c', borderRadius: 8, padding: '6px 16px', fontSize: 13, cursor: 'pointer' }}>
+                          Solicitar novamente
+                        </button>
                       </div>
                     ) : (
                       <>
