@@ -1571,10 +1571,13 @@ export const api = {
 
   listDailyReceipts: async (dateStr?: string) => {
     const user = await requireCompanyUserWithRoles(['ADMIN', 'CAIXA', 'GERENTE', 'FINANCEIRO']);
-    const today = dateStr ? new Date(`${dateStr}T00:00:00`) : new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    // Recife = UTC-3 fixo (sem horário de verão). Ajusta o intervalo para que
+    // "dia X local" corresponda a "dia X 00:00-23:59 em Recife" = "dia X 03:00Z - dia X+1 03:00Z"
+    const TZ_OFFSET_MS = 3 * 60 * 60 * 1000; // UTC-3
+    const localMidnight = dateStr ? new Date(`${dateStr}T00:00:00`) : (() => { const d = new Date(); d.setHours(0,0,0,0); return d; })();
+    // Converte meia-noite local para UTC-3: soma 3h para obter o equivalente UTC
+    const today    = new Date(localMidnight.getTime() + TZ_OFFSET_MS);
+    const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
 
     const [tabResult, deliveryResult] = await Promise.all([
       supabase
@@ -3037,6 +3040,7 @@ export const api = {
 
   exposeCompanyProductsReport: async (dateType: 'day' | 'week' = 'day', dateValue?: string) => {
     const user = await requireCompanyUserWithRoles(['FINANCEIRO', 'GERENTE', 'ADMIN']);
+    const TZ_OFFSET_MS = 3 * 60 * 60 * 1000; // Recife UTC-3
     let startDate = new Date();
     let endDate = new Date();
 
@@ -3050,21 +3054,19 @@ export const api = {
         const isoStart = new Date(simple);
         if (dow <= 4) isoStart.setDate(simple.getDate() - simple.getDay() + 1);
         else isoStart.setDate(simple.getDate() + 8 - simple.getDay());
-        startDate = new Date(isoStart);
-        startDate.setHours(0, 0, 0, 0);
-        endDate = new Date(startDate);
-        endDate.setDate(startDate.getDate() + 7);
+        isoStart.setHours(0, 0, 0, 0);
+        startDate = new Date(isoStart.getTime() + TZ_OFFSET_MS);
+        endDate = new Date(startDate.getTime() + 7 * 24 * 60 * 60 * 1000);
       } else {
-        startDate.setHours(0, 0, 0, 0);
-        endDate = new Date(startDate);
-        endDate.setDate(startDate.getDate() + 1);
+        const d = new Date(); d.setHours(0,0,0,0);
+        startDate = new Date(d.getTime() + TZ_OFFSET_MS);
+        endDate = new Date(startDate.getTime() + 24 * 60 * 60 * 1000);
       }
     } else {
       const date = dateValue ? new Date(dateValue) : new Date();
-      startDate = new Date(date);
-      startDate.setHours(0, 0, 0, 0);
-      endDate = new Date(startDate);
-      endDate.setDate(startDate.getDate() + 1);
+      date.setHours(0, 0, 0, 0);
+      startDate = new Date(date.getTime() + TZ_OFFSET_MS);
+      endDate = new Date(startDate.getTime() + 24 * 60 * 60 * 1000);
     }
 
     const { data: orders, error: ordersError } = await supabase

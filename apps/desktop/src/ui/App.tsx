@@ -8066,6 +8066,7 @@ export function App() {
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
                           <div><strong>Recibo Nº</strong><p style={{ margin: 0 }}>{selectedReceipt.receiptNumber ? String(selectedReceipt.receiptNumber).padStart(6, '0') : '—'}</p></div>
                           <div><strong>{selectedReceipt.type === 'delivery' ? 'Cliente' : 'Mesa'}</strong><p style={{ margin: 0 }}>{selectedReceipt.type === 'delivery' ? selectedReceipt.customerName : selectedReceipt.tableName}</p></div>
+                          {selectedReceipt.receiptGeneratedAt && <div style={{ gridColumn: '1/-1' }}><strong>Data / Hora</strong><p style={{ margin: 0, fontSize: 13 }}>{fmtDateTime(selectedReceipt.receiptGeneratedAt)}</p></div>}
                         </div>
                         {selectedReceipt.type === 'delivery' && (
                           <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 7, padding: '10px 12px', marginBottom: 12, display: 'grid', gap: 4 }}>
@@ -8140,7 +8141,10 @@ export function App() {
                                     <span style={{ fontWeight: 700, color: receipt.paymentStatus === 'ESTORNADO' || receipt.status === 'CANCELADO' ? '#9ca3af' : undefined, textDecoration: receipt.paymentStatus === 'ESTORNADO' ? 'line-through' : undefined }}>{formatCurrency(receipt.total)}</span>
                                   </div>
                                 </div>
-                                {receipt.type === 'delivery' && receipt.status && <div style={{ fontSize: 11, color: '#92400e', marginTop: 2 }}>{receipt.status} · {receipt.paymentMethod}</div>}
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 2 }}>
+                                  {receipt.type === 'delivery' && receipt.status && <div style={{ fontSize: 11, color: '#92400e' }}>{receipt.status} · {receipt.paymentMethod}</div>}
+                                  {receipt.receiptGeneratedAt && <div style={{ fontSize: 11, color: '#9ca3af', marginLeft: 'auto' }}>{fmtDateTime(receipt.receiptGeneratedAt)}</div>}
+                                </div>
                               </button>
                             ))}
                           </div>
