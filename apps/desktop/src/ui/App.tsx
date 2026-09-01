@@ -417,7 +417,7 @@ export function App() {
   const [publicDeliveryShowResumeBanner, setPublicDeliveryShowResumeBanner] = useState(false);
   const [publicDeliveryCartBounce, setPublicDeliveryCartBounce] = useState(false);
   const [customOptionsModal, setCustomOptionsModal] = useState<{ product: any; selected: string[] } | null>(null);
-  const [tableCustomOptionsModal, setTableCustomOptionsModal] = useState<{ product: any; selected: string[] } | null>(null);
+  const [tableCustomOptionsModal, setTableCustomOptionsModal] = useState<{ product: any; selected: string[]; source?: 'admin' | 'menu' } | null>(null);
   const [publicDeliveryProfilePrefilled, setPublicDeliveryProfilePrefilled] = useState(false);
   const [publicDeliveryActiveCategory, setPublicDeliveryActiveCategory] = useState<string | null>(null);
   const [publicPixCharge, setPublicPixCharge] = useState<{ qrCode: string | null; qrCodeBase64: string | null; ticketUrl: string | null } | null>(null);
@@ -4945,19 +4945,25 @@ export function App() {
                         {items.map((product) => {
                           const inCart = tableCart.filter((c) => c.product.id === product.id).reduce((s, c) => s + c.quantity, 0);
                           return (
-                            <div key={product.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: mobile ? '10px 12px' : '12px 14px', border: `1px solid ${inCart > 0 ? '#16a34a' : '#ececec'}`, borderRadius: 10, background: inCart > 0 ? '#f0fdf4' : '#fff', transition: 'all .15s' }}>
+                            <div key={product.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: mobile ? '10px 12px' : '12px 14px', border: `1px solid ${inCart > 0 ? '#16a34a' : '#ececec'}`, borderRadius: 10, background: inCart > 0 ? '#f0fdf4' : '#fff', transition: 'all .15s' }}>
                               <div style={{ flex: 1, minWidth: 0 }}>
-                                <strong style={{ fontSize: mobile ? 13 : 14 }}>{product.name}</strong>
-                                {inCart > 0 && <span style={{ marginLeft: 8, background: '#16a34a', color: '#fff', fontSize: 10, fontWeight: 700, borderRadius: 20, padding: '1px 7px' }}>{inCart}x</span>}
-                                {product.description && <div style={{ marginTop: 2, color: '#5d6c66', fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{product.description}</div>}
+                                <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 4 }}>
+                                  <strong style={{ fontSize: mobile ? 13 : 14 }}>{product.name}</strong>
+                                  {inCart > 0 && <span style={{ background: '#16a34a', color: '#fff', fontSize: 10, fontWeight: 700, borderRadius: 20, padding: '1px 7px' }}>{inCart}x</span>}
+                                </div>
+                                {product.description && <div style={{ marginTop: 2, color: '#5d6c66', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{product.description}</div>}
                               </div>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 10, flexShrink: 0 }}>
-                                <strong style={{ fontSize: 13 }}>{formatCurrency(product.price)}</strong>
-                                <button type="button" className="secondary-button" style={{ padding: '6px 12px', minHeight: 'unset', fontSize: 12 }} onClick={() => {
-                                  setSelectedTableId(menuModalTable.id);
-                                  setTableCartNoteProduct(product);
-                                  setTableCartNote('');
-                                }}>+ Add</button>
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
+                                <strong style={{ fontSize: 13, whiteSpace: 'nowrap' }}>{formatCurrency(product.price)}</strong>
+                                <button type="button" className="secondary-button" style={{ padding: '5px 10px', minHeight: 'unset', fontSize: 12, whiteSpace: 'nowrap' }} onClick={() => {
+                                  if ((product as any).customOptions?.options?.length) {
+                                    setTableCustomOptionsModal({ product, selected: [], source: 'admin' });
+                                  } else {
+                                    setSelectedTableId(menuModalTable.id);
+                                    setTableCartNoteProduct(product);
+                                    setTableCartNote('');
+                                  }
+                                }}>{(product as any).customOptions?.options?.length ? '🎛 Montar' : '+ Add'}</button>
                               </div>
                             </div>
                           );
@@ -9125,7 +9131,7 @@ export function App() {
 
       {/* ── Modal de customização para cardápio de mesa ── */}
       {tableCustomOptionsModal && (() => {
-        const { product, selected } = tableCustomOptionsModal;
+        const { product, selected, source } = tableCustomOptionsModal;
         const opts = product.customOptions as { label?: string; maxSelections?: number; minSelections?: number; options: string[] };
         const max = opts.maxSelections ?? opts.options.length;
         const min = opts.minSelections ?? 0;
@@ -9143,15 +9149,22 @@ export function App() {
         };
 
         const confirm = () => {
-          addProductToMenuCart(product);
-          if (selected.length > 0) {
-            setMenuCart(prev => {
-              const updated = [...prev];
-              let idx = -1;
-              for (let i = updated.length - 1; i >= 0; i--) { if (updated[i].product.id === product.id) { idx = i; break; } }
-              if (idx >= 0) updated[idx] = { ...updated[idx], note: selected.join(', ') };
-              return updated;
-            });
+          const note = selected.length > 0 ? selected.join(', ') : undefined;
+          if (source === 'admin') {
+            // Adiciona ao carrinho do modal admin da mesa
+            setTableCart(prev => [...prev, { product, quantity: 1, note: note || '' }]);
+          } else {
+            // Adiciona ao carrinho do cardápio QR
+            addProductToMenuCart(product);
+            if (note) {
+              setMenuCart(prev => {
+                const updated = [...prev];
+                let idx = -1;
+                for (let i = updated.length - 1; i >= 0; i--) { if (updated[i].product.id === product.id) { idx = i; break; } }
+                if (idx >= 0) updated[idx] = { ...updated[idx], note };
+                return updated;
+              });
+            }
           }
           setTableCustomOptionsModal(null);
         };
