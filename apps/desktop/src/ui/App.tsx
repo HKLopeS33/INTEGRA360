@@ -331,6 +331,12 @@ export function App() {
   const [newProductPreparationMinutes, setNewProductPreparationMinutes] = useState('10');
   const [newProductCategoryId, setNewProductCategoryId] = useState('');
   const [categories, setCategories] = useState<Array<{ id: string; name: string }>>([]);
+  // customOptions do produto em edição/criação
+  const [customOptionsEnabled, setCustomOptionsEnabled] = useState(false);
+  const [customOptionsLabel, setCustomOptionsLabel] = useState('Escolha as opções');
+  const [customOptionsMax, setCustomOptionsMax] = useState('4');
+  const [customOptionsMin, setCustomOptionsMin] = useState('0');
+  const [customOptionsText, setCustomOptionsText] = useState(''); // uma opção por linha
   const [editingProduct, setEditingProduct] = useState<any | null>(null);
   const [newProductImageFile, setNewProductImageFile] = useState<File | null>(null);
   const [newProductImagePreview, setNewProductImagePreview] = useState<string | null>(null);
@@ -407,6 +413,7 @@ export function App() {
   const [publicDeliveryMpAvailable, setPublicDeliveryMpAvailable] = useState(false);
   const [publicDeliveryShowResumeBanner, setPublicDeliveryShowResumeBanner] = useState(false);
   const [publicDeliveryCartBounce, setPublicDeliveryCartBounce] = useState(false);
+  const [customOptionsModal, setCustomOptionsModal] = useState<{ product: any; selected: string[] } | null>(null);
   const [publicDeliveryProfilePrefilled, setPublicDeliveryProfilePrefilled] = useState(false);
   const [publicDeliveryActiveCategory, setPublicDeliveryActiveCategory] = useState<string | null>(null);
   const [publicPixCharge, setPublicPixCharge] = useState<{ qrCode: string | null; qrCodeBase64: string | null; ticketUrl: string | null } | null>(null);
@@ -3057,6 +3064,21 @@ export function App() {
     setNewProductCategoryId(product.categoryId ?? '');
     setNewProductImageFile(null);
     setNewProductImagePreview(product.imageUrl ?? null);
+    // customOptions
+    const co = product.customOptions;
+    if (co?.options?.length) {
+      setCustomOptionsEnabled(true);
+      setCustomOptionsLabel(co.label ?? 'Escolha as opções');
+      setCustomOptionsMax(String(co.maxSelections ?? co.options.length));
+      setCustomOptionsMin(String(co.minSelections ?? 0));
+      setCustomOptionsText(co.options.join('\n'));
+    } else {
+      setCustomOptionsEnabled(false);
+      setCustomOptionsLabel('Escolha as opções');
+      setCustomOptionsMax('4');
+      setCustomOptionsMin('0');
+      setCustomOptionsText('');
+    }
   };
 
   const cancelEdit = () => {
@@ -3068,6 +3090,11 @@ export function App() {
     setNewProductCategoryId(categories[0]?.id ?? '');
     setNewProductImageFile(null);
     setNewProductImagePreview(null);
+    setCustomOptionsEnabled(false);
+    setCustomOptionsLabel('Escolha as opções');
+    setCustomOptionsMax('4');
+    setCustomOptionsMin('0');
+    setCustomOptionsText('');
   };
 
   const [importingCsv, setImportingCsv] = useState(false);
@@ -3154,6 +3181,12 @@ export function App() {
       showToast('Preencha nome e preço válido.', 'warning');
       return;
     }
+    // Monta customOptions se habilitado
+    const coOptions = customOptionsText.split('\n').map(s => s.trim()).filter(Boolean);
+    const customOptionsPayload = customOptionsEnabled && coOptions.length > 0
+      ? { label: customOptionsLabel, maxSelections: Number(customOptionsMax) || coOptions.length, minSelections: Number(customOptionsMin) || 0, options: coOptions }
+      : null;
+
     try {
       if (editingProduct) {
         let imageUrl: string | null | undefined = undefined;
@@ -3167,6 +3200,7 @@ export function App() {
           preparationMinutes: Number(newProductPreparationMinutes || 0),
           categoryId: newProductCategoryId || undefined,
           ...(imageUrl !== undefined && { imageUrl }),
+          customOptions: customOptionsPayload,
         });
         showToast('Produto atualizado!', 'success');
       } else {
@@ -3180,6 +3214,9 @@ export function App() {
         if (newProductImageFile) {
           const imageUrl = await api.uploadProductImage(newProductImageFile, created.id);
           await api.updateProduct(created.id, { imageUrl });
+        }
+        if (customOptionsPayload) {
+          await api.updateProduct(created.id, { customOptions: customOptionsPayload });
         }
         showToast('Produto criado!', 'success');
       }
@@ -3691,7 +3728,15 @@ export function App() {
                         <button type="button" onClick={() => { updatePublicCartItem(product.id, { quantity: cartItem.quantity + 1 }); setPublicDeliveryCartBounce(true); setTimeout(() => setPublicDeliveryCartBounce(false), 400); }} style={{ width: 32, height: 32, borderRadius: '50%', border: 'none', background: '#18201d', color: '#fff', cursor: 'pointer', fontSize: 18, display: 'grid', placeItems: 'center' }}>+</button>
                       </div>
                     ) : (
-                      <button type="button" onClick={() => addToPublicCart(product)} style={{ background: '#18201d', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 14px', cursor: 'pointer', fontWeight: 600, fontSize: 14, whiteSpace: 'nowrap', flexShrink: 0 }}>+ Adicionar</button>
+                      <button type="button" onClick={() => {
+                        if ((product as any).customOptions?.options?.length) {
+                          setCustomOptionsModal({ product, selected: [] });
+                        } else {
+                          addToPublicCart(product);
+                        }
+                      }} style={{ background: '#18201d', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 14px', cursor: 'pointer', fontWeight: 600, fontSize: 14, whiteSpace: 'nowrap', flexShrink: 0 }}>
+                        {(product as any).customOptions?.options?.length ? '🎛 Montar' : '+ Adicionar'}
+                      </button>
                     )}
                   </div>
                 </div>
@@ -5499,6 +5544,42 @@ export function App() {
                     Preparo (min)
                     <input inputMode="numeric" placeholder="10" value={newProductPreparationMinutes} onChange={(e) => setNewProductPreparationMinutes(e.target.value)} />
                   </label>
+                </div>
+
+                {/* ── Produto personalizável (Monte o Seu) ── */}
+                <div style={{ background: '#f8fafc', borderRadius: 10, padding: 14, display: 'grid', gap: 10 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', margin: 0 }}>
+                    <input type="checkbox" checked={customOptionsEnabled} onChange={(e) => setCustomOptionsEnabled(e.target.checked)} style={{ width: 16, height: 16 }} />
+                    <span style={{ fontWeight: 600, fontSize: 14 }}>🎛 Produto personalizável (ex: Monte o Seu)</span>
+                  </label>
+                  {customOptionsEnabled && (
+                    <>
+                      <label style={{ margin: 0 }}>
+                        Título da seleção
+                        <input value={customOptionsLabel} onChange={(e) => setCustomOptionsLabel(e.target.value)} placeholder="Ex: Escolha os sabores" />
+                      </label>
+                      <div className="form-grid">
+                        <label style={{ margin: 0 }}>
+                          Mín. seleções
+                          <input inputMode="numeric" value={customOptionsMin} onChange={(e) => setCustomOptionsMin(e.target.value)} placeholder="0" />
+                        </label>
+                        <label style={{ margin: 0 }}>
+                          Máx. seleções
+                          <input inputMode="numeric" value={customOptionsMax} onChange={(e) => setCustomOptionsMax(e.target.value)} placeholder="4" />
+                        </label>
+                      </div>
+                      <label style={{ margin: 0 }}>
+                        Opções <span style={{ fontWeight: 400, color: '#9ca3af' }}>(uma por linha)</span>
+                        <textarea
+                          rows={5}
+                          value={customOptionsText}
+                          onChange={(e) => setCustomOptionsText(e.target.value)}
+                          placeholder={"Frango\nQueijo\nCalabresa\nBacon\nCarne moída"}
+                          style={{ resize: 'vertical', fontFamily: 'monospace', fontSize: 13 }}
+                        />
+                      </label>
+                    </>
+                  )}
                 </div>
 
                 <div style={{ display: 'flex', gap: 8 }}>
@@ -8761,6 +8842,127 @@ export function App() {
           </section>
         )}
       </section>
+
+      {/* ── Modal de customização de produto (ex: Monte o Seu) ── */}
+      {customOptionsModal && (() => {
+        const { product, selected } = customOptionsModal;
+        const opts = product.customOptions as { label?: string; maxSelections?: number; minSelections?: number; options: string[] };
+        const max = opts.maxSelections ?? opts.options.length;
+        const min = opts.minSelections ?? 0;
+        const label = opts.label ?? 'Escolha as opções';
+        const canConfirm = selected.length >= min;
+
+        const toggle = (option: string) => {
+          setCustomOptionsModal(prev => {
+            if (!prev) return prev;
+            const already = prev.selected.includes(option);
+            if (already) return { ...prev, selected: prev.selected.filter(o => o !== option) };
+            if (prev.selected.length >= max) return prev; // atingiu o máximo
+            return { ...prev, selected: [...prev.selected, option] };
+          });
+        };
+
+        const confirm = () => {
+          addToPublicCart(product);
+          // aplica seleção como nota no último item adicionado
+          if (selected.length > 0) {
+            setMenuCart(prev => {
+              const updated = [...prev];
+              // encontra o produto recém adicionado (último da lista ou o que bate id)
+              let idx = -1;
+              for (let i = updated.length - 1; i >= 0; i--) { if ((updated[i] as any).product.id === product.id) { idx = i; break; } }
+              if (idx >= 0) {
+                updated[idx] = { ...updated[idx], note: selected.join(', ') };
+              }
+              return updated;
+            });
+          }
+          setCustomOptionsModal(null);
+        };
+
+        return (
+          <div
+            onClick={(e) => { if (e.target === e.currentTarget) setCustomOptionsModal(null); }}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 2000, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', padding: 0 }}
+          >
+            <div style={{ background: '#fff', borderRadius: '20px 20px 0 0', width: '100%', maxWidth: 540, maxHeight: '85vh', overflowY: 'auto', padding: '24px 20px 32px' }}>
+              {/* Header */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 17, color: '#18201d' }}>{product.name}</div>
+                  <div style={{ fontSize: 13, color: '#6b7280', marginTop: 2 }}>{label}</div>
+                </div>
+                <button onClick={() => setCustomOptionsModal(null)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#9ca3af', marginLeft: 8 }}>✕</button>
+              </div>
+
+              {/* Contador */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+                <span style={{
+                  background: selected.length >= max ? '#18201d' : '#f1f5f9',
+                  color: selected.length >= max ? '#fff' : '#6b7280',
+                  borderRadius: 20, padding: '3px 12px', fontSize: 13, fontWeight: 600, transition: 'all .2s'
+                }}>
+                  {selected.length}/{max} selecionado{selected.length !== 1 ? 's' : ''}
+                </span>
+                {min > 0 && <span style={{ fontSize: 12, color: '#9ca3af' }}>mínimo {min}</span>}
+              </div>
+
+              {/* Opções */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10, marginBottom: 20 }}>
+                {opts.options.map((option: string) => {
+                  const isSelected = selected.includes(option);
+                  const isDisabled = !isSelected && selected.length >= max;
+                  return (
+                    <button
+                      key={option}
+                      type="button"
+                      onClick={() => toggle(option)}
+                      disabled={isDisabled}
+                      style={{
+                        padding: '10px 12px',
+                        borderRadius: 10,
+                        border: `2px solid ${isSelected ? '#18201d' : '#e5e7eb'}`,
+                        background: isSelected ? '#18201d' : '#fff',
+                        color: isSelected ? '#fff' : isDisabled ? '#d1d5db' : '#18201d',
+                        fontWeight: isSelected ? 700 : 500,
+                        fontSize: 14,
+                        cursor: isDisabled ? 'not-allowed' : 'pointer',
+                        transition: 'all .15s',
+                        textAlign: 'center',
+                      }}
+                    >
+                      {isSelected && <span style={{ marginRight: 4 }}>✓</span>}{option}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Botão confirmar */}
+              <button
+                type="button"
+                onClick={confirm}
+                disabled={!canConfirm}
+                style={{
+                  width: '100%',
+                  padding: '14px 0',
+                  background: canConfirm ? '#18201d' : '#e5e7eb',
+                  color: canConfirm ? '#fff' : '#9ca3af',
+                  border: 'none',
+                  borderRadius: 12,
+                  fontWeight: 700,
+                  fontSize: 16,
+                  cursor: canConfirm ? 'pointer' : 'not-allowed',
+                  transition: 'all .2s',
+                }}
+              >
+                {canConfirm
+                  ? `Adicionar ao carrinho${selected.length > 0 ? ` (${selected.length} opção${selected.length !== 1 ? 'ões' : ''})` : ''}`
+                  : `Selecione ao menos ${min} opção${min !== 1 ? 'ões' : ''}`}
+              </button>
+            </div>
+          </div>
+        );
+      })()}
     </main>
   );
 }

@@ -141,7 +141,7 @@ export const publicDeliveryApi = {
     const [companyRes, categoriesRes, productsRes] = await Promise.all([
       anonFetch(`/Company?id=eq.${encodeURIComponent(companyId)}&active=eq.true&select=id,name,menuBannerUrl,phone,deliveryFeeAmount,openingTime,closingTime,isOpen&limit=1`),
       anonFetch(`/Category?companyId=eq.${encodeURIComponent(companyId)}&active=eq.true&select=id,name,sort,imageUrl&order=sort.asc`),
-      anonFetch(`/Product?companyId=eq.${encodeURIComponent(companyId)}&active=eq.true&available=eq.true&select=id,categoryId,name,description,price,available,salesCount&order=name.asc`),
+      anonFetch(`/Product?companyId=eq.${encodeURIComponent(companyId)}&active=eq.true&available=eq.true&select=id,categoryId,name,description,price,available,salesCount,customOptions&order=name.asc`),
     ]);
     if (!companyRes.ok) throw new Error('Empresa não encontrada ou inativa.');
     const companies: any[] = await companyRes.json();
@@ -569,7 +569,7 @@ export const api = {
     const user = await requireCompanyUser();
     const { data, error } = await supabase
       .from('Product')
-      .select('id,categoryId,name,description,price,preparationMinutes,available,imageUrl')
+      .select('id,categoryId,name,description,price,preparationMinutes,available,imageUrl,customOptions')
       .eq('companyId', user.companyId)
       .eq('active', true)
       .order('name', { ascending: true });
@@ -699,10 +699,11 @@ export const api = {
         ...(payload.categoryId !== undefined && { categoryId: payload.categoryId }),
         ...(payload.available !== undefined && { available: payload.available }),
         ...('imageUrl' in payload && { imageUrl: payload.imageUrl ?? null }),
+        ...('customOptions' in payload && { customOptions: payload.customOptions ?? null }),
       })
       .eq('id', productId)
       .eq('companyId', user.companyId)
-      .select('id,categoryId,name,description,price,preparationMinutes,available,imageUrl')
+      .select('id,categoryId,name,description,price,preparationMinutes,available,imageUrl,customOptions')
       .single();
     if (error) throwSupabaseError(error, 'Falha ao atualizar produto.');
     return { ...data, price: Number(data.price) };

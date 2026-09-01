@@ -1,4 +1,4 @@
-categoria;nome;descricao;preco
+﻿categoria;nome;descricao;preco
 Shawarma Pão Árabe;Moda da Casa;Carne bovina, queijo coalho, salada e pasta de alho;24.00
 Shawarma Pão Árabe;Shawarma de Carne;Carne bovina, salada e pasta de alho;22.00
 Shawarma Pão Árabe;Shawarma de Frango c/ Bacon;Frango, bacon, salada e pasta de alho;24.00
@@ -7,8 +7,8 @@ Shawarma Pão Árabe;Shawarma Q Delícia;Calabresa, queijo mussarela, batata fri
 Shawarma Pão Árabe;Shawarma Arretado de Bom;Carne seca acebolada, queijo de coalho, salada, bacon e pasta de alho;28.00
 Shawarma Pão Árabe;Shawarma Baba Q Bom;Filé suíno, queijo de coalho, batata frita, salada e pasta de alho;30.00
 Shawarma Pão Árabe;Shawarma Big Arábia;Carne bovina, frango, bacon, queijo mussarela, batata frita, salada e pasta de alho;35.00
-Shawarma Pão Árabe;Shawarma Ravi's;Carne bovina, bacon, ovo, queijo mussarela, salada e molho barbecue;30.00
-Shawarma Pão Árabe;Shawarma Menffi's;Carne bovina, calabresa, batata frita, salada e molho barbecue;30.00
+Shawarma Pão Árabe;Shawarma Ravis;Carne bovina, bacon, ovo, queijo mussarela, salada e molho barbecue;30.00
+Shawarma Pão Árabe;Shawarma Menfis;Carne bovina, calabresa, batata frita, salada e molho barbecue;30.00
 Shawarma Pão Árabe;Shawarma Brother;Queijo de coalho, ovo frito e salada;18.00
 Shawarma Pão Árabe;Shawarma Apetito das Arábias;Frango, bacon, ovo frito e salada;30.00
 Shawarma Pão Árabe;Shawarma Bom da Conta;Filé suíno, bacon, mussarela, cebola caramelizada, salada e pasta de alho;30.00
@@ -49,9 +49,9 @@ Espaguete na Chapa;Espaguete Nº 07;Pernil suíno acebolado, creme de alho e aze
 Espaguete na Chapa;Espaguete Nº 08;Pernil suíno acebolado, bacon, creme de alho e azeitona;27.00
 Espaguete na Chapa;Espaguete Nº 09;Pernil suíno, calabresa, creme de alho e azeitona;27.00
 Espaguete na Chapa;Espaguete Nº 10;Charque, mussarela, creme branco, azeitona e orégano;28.00
-Hambúguer;Hambúguer 01;Carne seca, bacon, creme de alho e salada;25.00
-Hambúguer;Hambúguer 02;Pernil suíno acebolado, creme de alho e salada;25.00
-Hambúguer;Hambúguer 03;Frango, bacon, creme de alho e salada;25.00
+Hambúrguer;Hambúrguer 01;Carne seca, bacon, creme de alho e salada;25.00
+Hambúrguer;Hambúrguer 02;Pernil suíno acebolado, creme de alho e salada;25.00
+Hambúrguer;Hambúrguer 03;Frango, bacon, creme de alho e salada;25.00
 Café;Café Puro;;4.00
 Café;Café com Leite;;5.00
 Café;Capuccino Tradicional;;12.00

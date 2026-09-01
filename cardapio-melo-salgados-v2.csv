@@ -1,0 +1,50 @@
+﻿Categoria;Produto;Descricao;Preco
+Pasteis;Pastel Tradicional - Pizza;Pastel tradicional sabor Pizza;12.00
+Pasteis;Pastel Tradicional - Portuguesa;Pastel tradicional sabor Portuguesa;12.00
+Pasteis;Pastel Tradicional - Queijo;Pastel tradicional sabor Queijo;12.00
+Pasteis;Pastel Tradicional - 2 Queijos;Pastel tradicional sabor 2 Queijos;12.00
+Pasteis;Pastel Tradicional - 3 Queijos;Pastel tradicional sabor 3 Queijos;12.00
+Pasteis;Pastel Tradicional - 4 Queijos;Pastel tradicional sabor 4 Queijos;12.00
+Pasteis;Pastel Tradicional - Frango;Pastel tradicional sabor Frango;12.00
+Pasteis;Pastel Tradicional - Frango com Catupiry;Pastel tradicional sabor Frango com Catupiry;12.00
+Pasteis;Pastel Tradicional - Frango com Queijo;Pastel tradicional sabor Frango com Queijo;12.00
+Pasteis;Pastel Tradicional - Frango com Cheddar;Pastel tradicional sabor Frango com Cheddar;12.00
+Pasteis;Pastel Tradicional - Batata Frita com Queijo;Pastel tradicional sabor Batata Frita com Queijo;12.00
+Pasteis;Pastel Tradicional - Carne Seca;Pastel tradicional sabor Carne Seca;12.00
+Pasteis;Pastel Tradicional - Carne Seca com Queijo;Pastel tradicional sabor Carne Seca com Queijo;12.00
+Pasteis;Pastel Tradicional - Carne Seca com Catupiry;Pastel tradicional sabor Carne Seca com Catupiry;12.00
+Pasteis;Pastel Tradicional - Carne Seca com Cheddar;Pastel tradicional sabor Carne Seca com Cheddar;12.00
+Pasteis;Pastel Tradicional - Calabresa;Pastel tradicional sabor Calabresa;12.00
+Pasteis;Pastel Tradicional - Calabresa com Queijo;Pastel tradicional sabor Calabresa com Queijo;12.00
+Pasteis;Pastel Tradicional - Calabresa com Catupiry;Pastel tradicional sabor Calabresa com Catupiry;12.00
+Pasteis;Pastel Tradicional - Calabresa com Cheddar;Pastel tradicional sabor Calabresa com Cheddar;12.00
+Pasteis;Pastel Tradicional - Chocolate;Pastel tradicional sabor Chocolate;12.00
+Pasteis;Pastel Monte o Seu;Monte seu pastel com ate 4 sabores (Frango Calabresa Queijo Catupiry Batata Frita Cheddar Queijo Ralado Carne Seca Pizza);15.00
+Coxinhas;Coxinha Frango com Queijo;Coxinha de Frango com Queijo;8.00
+Coxinhas;Coxinha Carne com Queijo;Coxinha de Carne com Queijo;8.00
+Enroladinhos;Enroladinho de Salsicha;Enroladinho de Salsicha;4.00
+Sobremesas;Mousse;Mousse do dia;6.00
+Sobremesas;Pave;Pave do dia;6.00
+Batata Frita;Batata Frita P;Porcao pequena de batata frita;15.00
+Batata Frita;Batata Frita M;Porcao media de batata frita;20.00
+Batata Frita;Batata Frita G;Porcao grande de batata frita;25.00
+Espetinhos;Espetinho;Espetinho consultar sabores disponiveis;8.00
+Espetinhos;Jantinha com Espetinho;1 Jantinha mais 1 Espetinho consultar jantinha disponivel do dia;20.00
+Espetinhos;X-Espeto;X-Espeto;15.00
+Porcoes;Porcao de Carne Assada;Porcao de carne assada preco a partir de;25.00
+Caldos;Caldo;Caldo do dia;6.00
+Refrigerantes;Pitchulinhas;Refrigerante Pitchulinhas;3.00
+Refrigerantes;Coca-Cola Lata;Coca-Cola Lata 350ml;6.00
+Refrigerantes;Coca-Cola Lata Zero;Coca-Cola Lata Zero 350ml;6.00
+Refrigerantes;Fanta Lata;Fanta Lata 350ml;6.00
+Refrigerantes;Guarana Antarctica Lata;Guarana Antarctica Lata 350ml;6.00
+Refrigerantes;Hiran 1L;Refrigerante Hiran 1 Litro;7.00
+Refrigerantes;Guarana Antarctica 1L;Guarana Antarctica 1 Litro;10.00
+Refrigerantes;Fanta 1L;Fanta 1 Litro;11.00
+Refrigerantes;Coca-Cola 1L;Coca-Cola 1 Litro;11.00
+Refrigerantes;Coca-Cola 2L;Coca-Cola 2 Litros;15.00
+Aguas;Agua sem Gas;Agua mineral sem gas;3.00
+Aguas;Agua com Gas;Agua mineral com gas;4.00
+Sucos;Suco de Laranja Natural;Suco de laranja natural da fruta;10.00
+Sucos;Suco de Polpa com Agua;Suco de polpa com agua sabores disponiveis;8.00
+Sucos;Suco de Polpa com Leite;Suco de polpa com leite sabores disponiveis;10.00

@@ -40,6 +40,13 @@ export interface RestaurantTable {
   hasOpenTab?: boolean;
 }
 
+export interface ProductCustomOptions {
+  label?: string;          // ex: "Escolha os sabores"
+  maxSelections?: number;  // ex: 4
+  minSelections?: number;  // ex: 1 (opcional)
+  options: string[];       // ex: ["Frango", "Queijo", "Calabresa"]
+}
+
 export interface Product {
   id: string;
   categoryId: string;
@@ -48,6 +55,8 @@ export interface Product {
   price: number;
   preparationMinutes: number;
   available: boolean;
+  imageUrl?: string | null;
+  customOptions?: ProductCustomOptions | null;
 }
 
 export interface Order {
