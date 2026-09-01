@@ -5062,38 +5062,45 @@ export function App() {
               };
 
               const productList = (
-                <div style={{ flex: 1, overflowY: 'auto', padding: mobile ? '12px 12px calc(80px + env(safe-area-inset-bottom))' : 24 }}>
+                <div style={{ flex: 1, overflowY: 'auto', padding: mobile ? '8px 10px calc(80px + env(safe-area-inset-bottom))' : '16px 20px' }}>
                   {Object.entries(groupedMenuSections).map(([section, items]) => items.length > 0 ? (
-                    <div key={section} style={{ marginBottom: 20 }}>
-                      <h3 style={{ marginBottom: 10, fontSize: mobile ? 13 : 15, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#789088' }}>{section}</h3>
-                      {(() => { const addList = getSectionAdditionals(section) as { name: string; price: number }[] | null; return addList?.length ? (
-                        <div style={{ background: 'linear-gradient(90deg, #3b1f00 0%, #5c2e00 100%)', borderRadius: 8, padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                          <span style={{ fontSize: 18, flexShrink: 0 }}>🍅</span>
-                          <div>
-                            <div style={{ fontSize: 9, fontWeight: 700, color: '#f1c44e', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 1 }}>Adicionais disponíveis:</div>
-                            <div style={{ fontSize: 12, fontWeight: 600, color: '#fff' }}>
-                              {addList.map((a) => a.price > 0 ? `${a.name} +${formatCurrency(a.price)}` : a.name).join(' • ')}
-                            </div>
-                          </div>
+                    <div key={section} style={{ marginBottom: 14 }}>
+                      {/* Header da seção compacto */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#789088' }}>{section}</span>
+                        <div style={{ flex: 1, height: 1, background: '#eef2ef' }} />
+                      </div>
+                      {/* Banner de adicionais compacto */}
+                      {(() => { const addList = getSectionAdditionals(section); return addList?.length ? (
+                        <div style={{ background: 'linear-gradient(90deg, #3b1f00 0%, #5c2e00 100%)', borderRadius: 6, padding: '5px 10px', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                          <span style={{ fontSize: 14, flexShrink: 0 }}>🍅</span>
+                          <span style={{ fontSize: 11, fontWeight: 600, color: '#fff' }}>
+                            <span style={{ color: '#f1c44e', marginRight: 4 }}>Adicionais:</span>
+                            {addList.map((a) => a.price > 0 ? `${a.name} +${formatCurrency(a.price)}` : a.name).join(' • ')}
+                          </span>
                         </div>
                       ) : null; })()}
-                      <div style={{ display: 'grid', gap: 8 }}>
+                      {/* Grid de produtos — 2 colunas no desktop */}
+                      <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr' : '1fr 1fr', gap: 5 }}>
                         {items.map((product) => {
                           const inCart = tableCart.filter((c) => c.product.id === product.id).reduce((s, c) => s + c.quantity, 0);
+                          const isCustom = !!(product as any).customOptions?.options?.length;
                           return (
-                            <div key={product.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: mobile ? '10px 12px' : '12px 14px', border: `1px solid ${inCart > 0 ? '#16a34a' : '#ececec'}`, borderRadius: 10, background: inCart > 0 ? '#f0fdf4' : '#fff', transition: 'all .15s' }}>
+                            <div key={product.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', border: `1px solid ${inCart > 0 ? '#16a34a' : '#ececec'}`, borderRadius: 8, background: inCart > 0 ? '#f0fdf4' : '#fff', transition: 'all .15s' }}>
+                              {/* Nome + badge */}
                               <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 4 }}>
-                                  <strong style={{ fontSize: mobile ? 13 : 14 }}>{product.name}</strong>
-                                  {inCart > 0 && <span style={{ background: '#16a34a', color: '#fff', fontSize: 10, fontWeight: 700, borderRadius: 20, padding: '1px 7px' }}>{inCart}x</span>}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'nowrap' }}>
+                                  <span style={{ fontWeight: 600, fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{product.name}</span>
+                                  {inCart > 0 && <span style={{ background: '#16a34a', color: '#fff', fontSize: 9, fontWeight: 700, borderRadius: 20, padding: '1px 5px', flexShrink: 0 }}>{inCart}×</span>}
                                 </div>
-                                {product.description && <div style={{ marginTop: 2, color: '#5d6c66', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{product.description}</div>}
+                                <div style={{ fontSize: 11, color: '#789088', fontWeight: 600, marginTop: 1 }}>{formatCurrency(product.price)}</div>
                               </div>
-                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
-                                <strong style={{ fontSize: 13, whiteSpace: 'nowrap' }}>{formatCurrency(product.price)}</strong>
-                                <button type="button" className="secondary-button" style={{ padding: '5px 10px', minHeight: 'unset', fontSize: 12, whiteSpace: 'nowrap' }} onClick={() => {
+                              {/* Botão */}
+                              <button type="button"
+                                style={{ flexShrink: 0, padding: '5px 10px', border: `1px solid ${isCustom ? '#6366f1' : '#18201d'}`, borderRadius: 7, background: isCustom ? '#6366f1' : '#18201d', color: '#fff', fontWeight: 700, fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap', lineHeight: 1 }}
+                                onClick={() => {
                                   const catAdditionals = (categories as any[]).find((c: any) => c.id === product.categoryId)?.additionals as { name: string; price: number }[] | undefined;
-                                  if ((product as any).customOptions?.options?.length) {
+                                  if (isCustom) {
                                     setTableCustomOptionsModal({ product, selected: [], source: 'admin', categoryAdditionals: catAdditionals ?? [] });
                                   } else if (catAdditionals?.length) {
                                     setAdditionalsModal({ product, categoryAdditionals: catAdditionals, selected: [], source: 'admin' });
@@ -5102,8 +5109,9 @@ export function App() {
                                     setTableCartNoteProduct(product);
                                     setTableCartNote('');
                                   }
-                                }}>{(product as any).customOptions?.options?.length ? '🎛 Montar' : '+ Add'}</button>
-                              </div>
+                                }}>
+                                {isCustom ? '🎛' : '+'} {isCustom ? 'Montar' : 'Add'}
+                              </button>
                             </div>
                           );
                         })}
@@ -5115,36 +5123,34 @@ export function App() {
 
               /* Painel do carrinho — compartilhado */
               const cartPanel = (
-                <div style={{ display: 'flex', flexDirection: 'column', flex: mobile ? 1 : undefined, width: mobile ? '100%' : 300, borderLeft: mobile ? 'none' : '1px solid #eef2ef', background: '#fafafa', overflowY: mobile ? 'auto' : undefined }}>
-                  {!mobile && <div style={{ padding: '16px 18px', borderBottom: '1px solid #eef2ef' }}><span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: '#7a8a7a' }}>Pedido atual</span></div>}
-                  <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', flex: mobile ? 1 : undefined, width: mobile ? '100%' : 260, borderLeft: mobile ? 'none' : '1px solid #eef2ef', background: '#fafafa' }}>
+                  {!mobile && <div style={{ padding: '10px 14px', borderBottom: '1px solid #eef2ef' }}><span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: '#7a8a7a' }}>Pedido atual</span></div>}
+                  <div style={{ flex: 1, overflowY: 'auto', padding: '8px 12px' }}>
                     {tableCart.length === 0 ? (
-                      <p style={{ color: '#9a9a9a', fontSize: 13, textAlign: 'center', marginTop: 24 }}>Nenhum item adicionado.</p>
+                      <p style={{ color: '#9a9a9a', fontSize: 12, textAlign: 'center', marginTop: 20 }}>Nenhum item adicionado.</p>
                     ) : (
-                      <div style={{ display: 'grid', gap: 8 }}>
+                      <div style={{ display: 'grid', gap: 5 }}>
                         {tableCart.map((entry, idx) => (
-                          <div key={idx} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, padding: '10px 12px' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                              <div style={{ flex: 1 }}>
-                                <span style={{ fontWeight: 600, fontSize: 13 }}>{entry.quantity}× {entry.product.name}</span>
+                          <div key={idx} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 7, padding: '7px 10px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 6 }}>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <span style={{ fontWeight: 600, fontSize: 12 }}>{entry.quantity}× {entry.product.name}</span>
                                 {entry.extras?.length ? (
-                                  <div style={{ fontSize: 11, color: '#16a34a', marginTop: 2 }}>
-                                    + {entry.extras.map((e) => e.price > 0 ? `${e.name} (+${formatCurrency(e.price)})` : e.name).join(', ')}
-                                  </div>
+                                  <div style={{ fontSize: 10, color: '#16a34a', marginTop: 1 }}>+ {entry.extras.map((e) => e.price > 0 ? `${e.name} (+${formatCurrency(e.price)})` : e.name).join(', ')}</div>
                                 ) : null}
-                                {entry.note && <div style={{ fontSize: 12, color: '#7a8a7a', marginTop: 3 }}>↳ {entry.note}</div>}
+                                {entry.note && <div style={{ fontSize: 11, color: '#7a8a7a', marginTop: 1 }}>↳ {entry.note}</div>}
                               </div>
-                              <button type="button" onClick={() => setTableCart((prev) => prev.filter((_, i) => i !== idx))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#b91c1c', padding: '0 0 0 8px', fontSize: 18, lineHeight: 1 }}>×</button>
+                              <button type="button" onClick={() => setTableCart((prev) => prev.filter((_, i) => i !== idx))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#b91c1c', padding: 0, fontSize: 16, lineHeight: 1, flexShrink: 0 }}>×</button>
                             </div>
-                            <div style={{ fontSize: 12, color: '#9a9a9a', marginTop: 4, textAlign: 'right' }}>{formatCurrency(entry.quantity * (entry.product.price + (entry.extras?.reduce((s, e) => s + e.price, 0) ?? 0)))}</div>
+                            <div style={{ fontSize: 11, color: '#9a9a9a', marginTop: 3, textAlign: 'right' }}>{formatCurrency(entry.quantity * (entry.product.price + (entry.extras?.reduce((s, e) => s + e.price, 0) ?? 0)))}</div>
                           </div>
                         ))}
                       </div>
                     )}
                   </div>
                   {tableCart.length > 0 && (
-                    <div style={{ padding: mobile ? '14px 16px calc(14px + env(safe-area-inset-bottom))' : '14px 16px', borderTop: '1px solid #eef2ef', background: '#fff' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, fontWeight: 700, marginBottom: 12 }}>
+                    <div style={{ padding: mobile ? '10px 14px calc(10px + env(safe-area-inset-bottom))' : '10px 14px', borderTop: '1px solid #eef2ef', background: '#fff' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, fontWeight: 700, marginBottom: 8 }}>
                         <span>Total</span>
                         <span>{formatCurrency(cartTotal)}</span>
                       </div>
