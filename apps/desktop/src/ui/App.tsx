@@ -3931,6 +3931,85 @@ export function App() {
             );
           })()}
         </div>
+
+        {/* ── Modal de customização de produto (ex: Monte o Seu) ── */}
+        {customOptionsModal && (() => {
+          const { product, selected } = customOptionsModal;
+          const opts = product.customOptions as { label?: string; maxSelections?: number; minSelections?: number; options: string[] };
+          const max = opts.maxSelections ?? opts.options.length;
+          const min = opts.minSelections ?? 0;
+          const label = opts.label ?? 'Escolha as opções';
+          const canConfirm = selected.length >= min;
+
+          const toggle = (option: string) => {
+            setCustomOptionsModal(prev => {
+              if (!prev) return prev;
+              const already = prev.selected.includes(option);
+              if (already) return { ...prev, selected: prev.selected.filter(o => o !== option) };
+              if (prev.selected.length >= max) return prev;
+              return { ...prev, selected: [...prev.selected, option] };
+            });
+          };
+
+          const confirm = () => {
+            addToPublicCart(product);
+            if (selected.length > 0) {
+              setPublicDeliveryCart(prev => {
+                const updated = [...prev];
+                let idx = -1;
+                for (let i = updated.length - 1; i >= 0; i--) { if ((updated[i] as any).product.id === product.id) { idx = i; break; } }
+                if (idx >= 0) updated[idx] = { ...updated[idx], note: selected.join(', ') };
+                return updated;
+              });
+            }
+            setCustomOptionsModal(null);
+          };
+
+          return (
+            <div
+              key="custom-options-modal"
+              onClick={(e) => { if (e.target === e.currentTarget) setCustomOptionsModal(null); }}
+              style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
+            >
+              <div style={{ background: '#fff', borderRadius: '20px 20px 0 0', width: '100%', maxWidth: 540, maxHeight: '85vh', overflowY: 'auto', padding: '24px 20px 32px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 17, color: '#18201d' }}>{product.name}</div>
+                    <div style={{ fontSize: 13, color: '#6b7280', marginTop: 2 }}>{label}</div>
+                  </div>
+                  <button onClick={() => setCustomOptionsModal(null)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#9ca3af', marginLeft: 8 }}>✕</button>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+                  <span style={{ background: selected.length >= max ? '#18201d' : '#f1f5f9', color: selected.length >= max ? '#fff' : '#6b7280', borderRadius: 20, padding: '3px 12px', fontSize: 13, fontWeight: 600 }}>
+                    {selected.length}/{max} selecionado{selected.length !== 1 ? 's' : ''}
+                  </span>
+                  {min > 0 && <span style={{ fontSize: 12, color: '#9ca3af' }}>mínimo {min}</span>}
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 10, marginBottom: 20 }}>
+                  {opts.options.map((option: string) => {
+                    const isSelected = selected.includes(option);
+                    const isDisabled = !isSelected && selected.length >= max;
+                    return (
+                      <button key={option} type="button" onClick={() => toggle(option)} disabled={isDisabled}
+                        style={{ padding: '10px 12px', borderRadius: 10, border: `2px solid ${isSelected ? '#18201d' : '#e5e7eb'}`, background: isSelected ? '#18201d' : '#fff', color: isSelected ? '#fff' : isDisabled ? '#d1d5db' : '#18201d', fontWeight: isSelected ? 700 : 500, fontSize: 14, cursor: isDisabled ? 'not-allowed' : 'pointer', textAlign: 'center' }}>
+                        {isSelected && <span style={{ marginRight: 4 }}>✓</span>}{option}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <button type="button" onClick={confirm} disabled={!canConfirm}
+                  style={{ width: '100%', padding: '14px 0', background: canConfirm ? '#18201d' : '#e5e7eb', color: canConfirm ? '#fff' : '#9ca3af', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 16, cursor: canConfirm ? 'pointer' : 'not-allowed' }}>
+                  {canConfirm
+                    ? `Adicionar ao carrinho${selected.length > 0 ? ` (${selected.length} sabor${selected.length !== 1 ? 'es' : ''})` : ''}`
+                    : `Selecione ao menos ${min} opção${min !== 1 ? 'ões' : ''}`}
+                </button>
+              </div>
+            </div>
+          );
+        })()}
       </main>
     );
   }
@@ -8918,7 +8997,7 @@ export function App() {
         return (
           <div
             onClick={(e) => { if (e.target === e.currentTarget) setCustomOptionsModal(null); }}
-            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 2000, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', padding: 0 }}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', padding: 0 }}
           >
             <div style={{ background: '#fff', borderRadius: '20px 20px 0 0', width: '100%', maxWidth: 540, maxHeight: '85vh', overflowY: 'auto', padding: '24px 20px 32px' }}>
               {/* Header */}
