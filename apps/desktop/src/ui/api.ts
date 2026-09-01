@@ -575,7 +575,7 @@ export const api = {
     const user = await requireCompanyUser();
     const { data, error } = await supabase
       .from('Product')
-      .select('id,categoryId,name,description,price,preparationMinutes,available,imageUrl,customOptions')
+      .select('id,categoryId,name,description,price,preparationMinutes,available,imageUrl,customOptions,requiresKitchen')
       .eq('companyId', user.companyId)
       .eq('active', true)
       .order('name', { ascending: true });
@@ -672,7 +672,7 @@ export const api = {
         active: true,
         imageUrl: product.imageUrl ?? null,
       }])
-      .select('id,categoryId,name,description,price,preparationMinutes,available,imageUrl')
+      .select('id,categoryId,name,description,price,preparationMinutes,available,imageUrl,customOptions,requiresKitchen')
       .single();
 
     if (error) {
@@ -706,10 +706,11 @@ export const api = {
         ...(payload.available !== undefined && { available: payload.available }),
         ...('imageUrl' in payload && { imageUrl: payload.imageUrl ?? null }),
         ...('customOptions' in payload && { customOptions: payload.customOptions ?? null }),
+        ...('requiresKitchen' in payload && { requiresKitchen: payload.requiresKitchen }),
       })
       .eq('id', productId)
       .eq('companyId', user.companyId)
-      .select('id,categoryId,name,description,price,preparationMinutes,available,imageUrl,customOptions')
+      .select('id,categoryId,name,description,price,preparationMinutes,available,imageUrl,customOptions,requiresKitchen')
       .single();
     if (error) throwSupabaseError(error, 'Falha ao atualizar produto.');
     return { ...data, price: Number(data.price) };
@@ -1766,7 +1767,7 @@ export const api = {
     const tableMap = (tables || []).reduce((acc, table) => { acc[table.id] = table; return acc; }, {} as Record<string, any>);
     const tabMap = (tabs || []).reduce((acc, tab) => { acc[tab.id] = tab; return acc; }, {} as Record<string, any>);
     const productIds = (items || []).map((item) => item.productId);
-    const { data: productRows, error: productError } = await supabase.from('Product').select('id,name').in('id', productIds);
+    const { data: productRows, error: productError } = await supabase.from('Product').select('id,name,requiresKitchen').in('id', productIds);
     if (productError) {
       throwSupabaseError(productError, 'Falha ao carregar produtos.');
     }
@@ -1790,7 +1791,8 @@ export const api = {
         productName: productMap[item.productId]?.name ?? '',
         quantity: item.quantity,
         unitPrice: Number(item.unitPrice),
-        note: item.note ?? undefined
+        note: item.note ?? undefined,
+        requiresKitchen: productMap[item.productId]?.requiresKitchen !== false,
       }))
     }));
   },

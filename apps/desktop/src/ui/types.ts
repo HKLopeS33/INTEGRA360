@@ -57,6 +57,7 @@ export interface Product {
   available: boolean;
   imageUrl?: string | null;
   customOptions?: ProductCustomOptions | null;
+  requiresKitchen?: boolean;
 }
 
 export interface Order {

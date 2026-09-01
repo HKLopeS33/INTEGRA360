@@ -331,6 +331,7 @@ export function App() {
   const [newProductPreparationMinutes, setNewProductPreparationMinutes] = useState('10');
   const [newProductCategoryId, setNewProductCategoryId] = useState('');
   const [categories, setCategories] = useState<Array<{ id: string; name: string }>>([]);
+  const [newProductRequiresKitchen, setNewProductRequiresKitchen] = useState(true);
   // customOptions do produto em edição/criação
   const [customOptionsEnabled, setCustomOptionsEnabled] = useState(false);
   const [customOptionsLabel, setCustomOptionsLabel] = useState('Escolha as opções');
@@ -3067,6 +3068,7 @@ export function App() {
     setNewProductCategoryId(product.categoryId ?? '');
     setNewProductImageFile(null);
     setNewProductImagePreview(product.imageUrl ?? null);
+    setNewProductRequiresKitchen(product.requiresKitchen !== false); // default true
     // customOptions
     const co = product.customOptions;
     if (co?.options?.length) {
@@ -3093,6 +3095,7 @@ export function App() {
     setNewProductCategoryId(categories[0]?.id ?? '');
     setNewProductImageFile(null);
     setNewProductImagePreview(null);
+    setNewProductRequiresKitchen(true);
     setCustomOptionsEnabled(false);
     setCustomOptionsLabel('Escolha as opções');
     setCustomOptionsMax('4');
@@ -3204,6 +3207,7 @@ export function App() {
           categoryId: newProductCategoryId || undefined,
           ...(imageUrl !== undefined && { imageUrl }),
           customOptions: customOptionsPayload,
+          requiresKitchen: newProductRequiresKitchen,
         });
         showToast('Produto atualizado!', 'success');
       } else {
@@ -5370,36 +5374,49 @@ export function App() {
                   <Utensils size={22} />
                 </div>
                 <div className="kitchen-list">
-                  {kitchenOrders.length === 0 ? (
-                    <p style={{ color: '#789088', padding: 12 }}>Fila vazia.</p>
-                  ) : (
-                    kitchenOrders.map((order) => {
+                  {(() => {
+                    // Explode cada pedido em itens individuais que precisam de cozinha
+                    const kitchenItems = kitchenOrders.flatMap((order) =>
+                      (order.items as any[])
+                        .filter((i) => i.requiresKitchen !== false)
+                        .map((item) => ({ order, item }))
+                    );
+                    if (kitchenItems.length === 0) return <p style={{ color: '#789088', padding: 12 }}>Fila vazia.</p>;
+                    return kitchenItems.map(({ order, item }, idx) => {
                       const age = now - new Date(order.createdAt).getTime();
                       const urgent = age > urgentMs;
+                      const statusColors: Record<string, string> = { ENVIADO: '#2563eb', EM_PREPARO: '#d97706', PRONTO: '#16a34a' };
+                      const statusLabels: Record<string, string> = { ENVIADO: 'Novo', EM_PREPARO: 'Em preparo', PRONTO: 'Pronto' };
+                      const dotColor = statusColors[order.status] ?? '#789088';
                       return (
-                        <div className="kitchen-row" key={order.id} style={{ borderLeft: `4px solid ${urgent ? '#b91c1c' : '#16211d'}`, paddingLeft: 12, gap: 8 }}>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                              <strong style={{ fontSize: 15 }}>{order.tableName}</strong>
-                              <span style={{ fontSize: 11, fontWeight: 700, color: urgent ? '#b91c1c' : '#789088', background: urgent ? '#fef2f2' : '#f1f5f0', borderRadius: 4, padding: '2px 6px' }}>
-                                <Clock size={10} style={{ marginRight: 3, verticalAlign: 'middle' }} />
+                        <div key={`${order.id}-${item.id ?? idx}`} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, background: urgent ? '#fff5f5' : '#f9fafb', border: `1.5px solid ${urgent ? '#fca5a5' : '#e5e7eb'}`, marginBottom: 6 }}>
+                          {/* Indicador de status */}
+                          <div style={{ width: 8, height: 8, borderRadius: '50%', background: dotColor, flexShrink: 0 }} />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                              <span style={{ fontWeight: 700, fontSize: 14, color: '#18201d' }}>{item.quantity}× {item.productName}</span>
+                              <span style={{ fontSize: 11, fontWeight: 600, color: '#789088', background: '#f1f5f0', borderRadius: 4, padding: '1px 6px', whiteSpace: 'nowrap' }}>
+                                {order.tableName}
+                              </span>
+                              <span style={{ fontSize: 11, fontWeight: 700, color: urgent ? '#b91c1c' : '#789088', background: urgent ? '#fef2f2' : '#f1f5f0', borderRadius: 4, padding: '1px 6px', whiteSpace: 'nowrap' }}>
+                                <Clock size={9} style={{ marginRight: 2, verticalAlign: 'middle' }} />
                                 {elapsed(order.createdAt)}
                               </span>
                             </div>
-                            <div style={{ fontSize: 13, color: '#4b5563' }}>
-                              {order.items.map((i) => `${i.quantity}× ${i.productName}`).join(' • ')}
-                            </div>
+                            {item.note && <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>↳ {item.note}</div>}
                           </div>
-                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
-                            <span style={{ fontSize: 11, color: '#789088' }}>{fmtTime(order.createdAt)}</span>
-                            <button type="button" className="primary-button" style={{ fontSize: 12, padding: '5px 12px' }} onClick={() => void advanceOrder(order)}>
-                              {orderStatusLabel[order.status]} →
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
+                            <span style={{ fontSize: 10, color: '#789088' }}>{fmtTime(order.createdAt)}</span>
+                            <button type="button"
+                              style={{ fontSize: 11, padding: '4px 10px', background: dotColor, color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                              onClick={() => void advanceOrder(order)}>
+                              {statusLabels[order.status] ?? order.status} →
                             </button>
                           </div>
                         </div>
                       );
-                    })
-                  )}
+                    });
+                  })()}
                 </div>
               </div>
 
@@ -5446,8 +5463,13 @@ export function App() {
                                 );
                               })()}
                             </div>
-                            <div style={{ fontSize: 13, color: '#4b5563' }}>
-                              {order.items.map((i) => `${i.quantity}× ${i.productName}`).join(' • ')}
+                            <div style={{ display: 'grid', gap: 4, marginTop: 4 }}>
+                              {order.items.map((i, idx) => (
+                                <div key={idx} style={{ fontSize: 13, color: '#4b5563' }}>
+                                  <span style={{ fontWeight: 600 }}>{i.quantity}× {i.productName}</span>
+                                  {i.note && <span style={{ fontSize: 12, color: '#9ca3af' }}> ↳ {i.note}</span>}
+                                </div>
+                              ))}
                             </div>
                           </div>
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
@@ -5639,6 +5661,13 @@ export function App() {
                     <input inputMode="numeric" placeholder="10" value={newProductPreparationMinutes} onChange={(e) => setNewProductPreparationMinutes(e.target.value)} />
                   </label>
                 </div>
+
+                {/* ── Vai para a cozinha? ── */}
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', margin: 0, padding: '8px 0' }}>
+                  <input type="checkbox" checked={newProductRequiresKitchen} onChange={(e) => setNewProductRequiresKitchen(e.target.checked)} style={{ width: 16, height: 16 }} />
+                  <span style={{ fontSize: 14 }}>🍳 Precisa de preparo na cozinha</span>
+                  <span style={{ fontSize: 12, color: '#9ca3af' }}>(desmarque para refrigerantes, águas, etc.)</span>
+                </label>
 
                 {/* ── Produto personalizável (Monte o Seu) ── */}
                 <div style={{ background: '#f8fafc', borderRadius: 10, padding: 14, display: 'grid', gap: 10 }}>
