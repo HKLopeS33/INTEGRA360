@@ -71,26 +71,35 @@ Deno.serve(async (req) => {
 
     // ── Notificação de saque solicitado (vai para o suporte Integra360) ──
     if (type === 'SAQUE_SOLICITADO') {
-      if (!withdrawalId) return json({ error: 'withdrawalId obrigatório.' }, 400);
-
       const SUPORTE_PHONE = '5587999710850';
 
-      // Buscar dados do saque + empresa
-      const { data: withdrawal } = await admin
-        .from('WalletWithdrawal')
-        .select('id, companyId, amount, pixKey, requestedAt')
-        .eq('id', withdrawalId)
+      // Buscar empresa pelo usuário autenticado (mais confiável que buscar pelo withdrawalId)
+      const { data: companyUser } = await admin
+        .from('User')
+        .select('companyId')
+        .eq('id', user.id)
         .maybeSingle();
 
-      const companyId = withdrawal?.companyId ?? '';
+      const companyId = companyUser?.companyId ?? '';
       const { data: company } = await admin
         .from('Company')
         .select('name')
         .eq('id', companyId)
         .maybeSingle();
 
-      const companyName   = company?.name ?? 'Estabelecimento';
-      const saqueAmount   = formatCurrency(Number(withdrawal?.amount ?? amount ?? 0));
+      // Buscar dados do saque se withdrawalId fornecido
+      let saqueAmountVal = amount ?? 0;
+      if (withdrawalId) {
+        const { data: withdrawal } = await admin
+          .from('WalletWithdrawal')
+          .select('amount')
+          .eq('id', withdrawalId)
+          .maybeSingle();
+        if (withdrawal?.amount) saqueAmountVal = Number(withdrawal.amount);
+      }
+
+      const companyName = company?.name ?? 'Estabelecimento';
+      const saqueAmount = formatCurrency(Number(saqueAmountVal));
       const pixKey        = String(withdrawal?.pixKey ?? 'Não informado');
       const requestedAt   = withdrawal?.requestedAt
         ? new Date(withdrawal.requestedAt).toLocaleString('pt-BR')
