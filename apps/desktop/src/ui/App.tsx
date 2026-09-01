@@ -344,6 +344,10 @@ export function App() {
   const [newCategoryName, setNewCategoryName] = useState('');
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
   const [editingCategoryName, setEditingCategoryName] = useState('');
+  const [editingCategoryAdditionalsId, setEditingCategoryAdditionalsId] = useState<string | null>(null);
+  const [editingCategoryAdditionals, setEditingCategoryAdditionals] = useState<Array<{ name: string; price: number }>>([]);
+  const [newAdditionalName, setNewAdditionalName] = useState('');
+  const [newAdditionalPrice, setNewAdditionalPrice] = useState('0');
   const [printerKitchen, setPrinterKitchen] = useState('');
   const [printerCashier, setPrinterCashier] = useState('');
   const [printingDisabled, setPrintingDisabled] = useState(false);
@@ -387,9 +391,9 @@ export function App() {
   // Delivery público (link para cliente)
   const [publicDeliveryCompanyId, setPublicDeliveryCompanyId] = useState<string | null>(null);
   const [publicDeliveryCompany, setPublicDeliveryCompany] = useState<{ id: string; name: string; menuBannerUrl?: string | null; phone?: string | null; deliveryFeeAmount?: number; openingTime?: string; closingTime?: string; isOpen?: boolean } | null>(null);
-  const [publicDeliveryCategories, setPublicDeliveryCategories] = useState<Array<{ id: string; name: string; sort: number; imageUrl?: string | null }>>([]);
+  const [publicDeliveryCategories, setPublicDeliveryCategories] = useState<Array<{ id: string; name: string; sort: number; imageUrl?: string | null; additionals?: Array<{ name: string; price: number }> | null }>>([]);
   const [publicDeliveryProducts, setPublicDeliveryProducts] = useState<Array<{ id: string; categoryId: string; name: string; description: string | null; price: number; available: boolean }>>([]);
-  const [publicDeliveryCart, setPublicDeliveryCart] = useState<Array<{ product: { id: string; name: string; price: number }; quantity: number; note: string }>>([]);
+  const [publicDeliveryCart, setPublicDeliveryCart] = useState<Array<{ product: { id: string; name: string; price: number }; quantity: number; note: string; extras?: { name: string; price: number }[] }>>([]);
   const [publicDeliveryStep, setPublicDeliveryStep] = useState<'menu' | 'checkout' | 'payment' | 'card_payment' | 'payment_return' | 'success' | 'tracking'>('menu');
   const [publicDeliveryTrackingStatus, setPublicDeliveryTrackingStatus] = useState<string>('RECEBIDO');
   const [publicDeliveryTrackingPaymentStatus, setPublicDeliveryTrackingPaymentStatus] = useState<string>('');
@@ -416,8 +420,16 @@ export function App() {
   const [publicDeliveryMpAvailable, setPublicDeliveryMpAvailable] = useState(false);
   const [publicDeliveryShowResumeBanner, setPublicDeliveryShowResumeBanner] = useState(false);
   const [publicDeliveryCartBounce, setPublicDeliveryCartBounce] = useState(false);
-  const [customOptionsModal, setCustomOptionsModal] = useState<{ product: any; selected: string[] } | null>(null);
-  const [tableCustomOptionsModal, setTableCustomOptionsModal] = useState<{ product: any; selected: string[]; source?: 'admin' | 'menu' } | null>(null);
+  const [customOptionsModal, setCustomOptionsModal] = useState<{ product: any; selected: string[]; categoryAdditionals?: { name: string; price: number }[] } | null>(null);
+  const [tableCustomOptionsModal, setTableCustomOptionsModal] = useState<{ product: any; selected: string[]; source?: 'admin' | 'menu'; categoryAdditionals?: { name: string; price: number }[] } | null>(null);
+  // Modal de adicionais da categoria (delivery público e mesa)
+  const [additionalsModal, setAdditionalsModal] = useState<{
+    product: any;
+    categoryAdditionals: { name: string; price: number }[];
+    selected: string[];
+    source: 'delivery' | 'admin' | 'menu';
+    pendingNote?: string; // nota prévia do customOptions
+  } | null>(null);
   const [publicDeliveryProfilePrefilled, setPublicDeliveryProfilePrefilled] = useState(false);
   const [publicDeliveryActiveCategory, setPublicDeliveryActiveCategory] = useState<string | null>(null);
   const [publicPixCharge, setPublicPixCharge] = useState<{ qrCode: string | null; qrCodeBase64: string | null; ticketUrl: string | null } | null>(null);
@@ -434,9 +446,9 @@ export function App() {
   const [publicCancellationRequested, setPublicCancellationRequested] = useState(false);
   const [publicCancellationRejected, setPublicCancellationRejected] = useState(false);
   const [publicCancellationError, setPublicCancellationError] = useState<string | null>(null);
-  const [menuCart, setMenuCart] = useState<Array<{ product: Product; quantity: number; note: string }>>([]);
+  const [menuCart, setMenuCart] = useState<Array<{ product: Product; quantity: number; note: string; extras?: { name: string; price: number }[] }>>([]);
   const [menuModalTable, setMenuModalTable] = useState<RestaurantTable | null>(null);
-  const [tableCart, setTableCart] = useState<Array<{ product: Product; quantity: number; note: string }>>([]);
+  const [tableCart, setTableCart] = useState<Array<{ product: Product; quantity: number; note: string; extras?: { name: string; price: number }[] }>>([]);
   const [tableCartNoteProduct, setTableCartNoteProduct] = useState<Product | null>(null);
   const [tableCartNote, setTableCartNote] = useState('');
   const [qrModalTable, setQrModalTable] = useState<RestaurantTable | null>(null);
@@ -1813,10 +1825,18 @@ export function App() {
     return `${base}/?delivery=${currentUser?.companyId ?? ''}`;
   };
 
-  const addToPublicCart = (product: { id: string; name: string; price: number }) => {
+  // Preço efetivo de um item do carrinho (base + extras)
+  const cartItemEffectivePrice = (item: { product: { price: number }; extras?: { price: number }[] }) =>
+    item.product.price + (item.extras?.reduce((s, e) => s + e.price, 0) ?? 0);
+
+  const addToPublicCart = (product: { id: string; name: string; price: number }, extras?: { name: string; price: number }[], note?: string) => {
     setPublicDeliveryCart((prev) => {
-      const existing = prev.find((i) => i.product.id === product.id);
-      if (existing) return prev.map((i) => i.product.id === product.id ? { ...i, quantity: i.quantity + 1 } : i);
+      // Se tem extras ou nota, sempre adiciona nova entrada (não agrupa)
+      if (extras?.length || note) {
+        return [...prev, { product, quantity: 1, note: note || '', extras }];
+      }
+      const existing = prev.find((i) => i.product.id === product.id && !i.extras?.length && !i.note);
+      if (existing) return prev.map((i) => (i.product.id === product.id && !i.extras?.length && !i.note) ? { ...i, quantity: i.quantity + 1 } : i);
       return [...prev, { product, quantity: 1, note: '' }];
     });
     setPublicDeliveryCartBounce(true);
@@ -1845,12 +1865,21 @@ export function App() {
     setPublicDeliveryError(null);
     setPublicDeliverySubmitting(true);
     try {
-      const cartSnapshot = publicDeliveryCart.map((i) => ({
-        name: i.product.name,
-        quantity: i.quantity,
-        unitPrice: i.product.price,
-        note: i.note || '',
-      }));
+      const cartSnapshot = publicDeliveryCart.map((i) => {
+        const extrasPrice = i.extras?.reduce((s, e) => s + e.price, 0) ?? 0;
+        const extrasNote = i.extras?.length
+          ? (i.extras.some((e) => e.price > 0)
+            ? `Adicionais: ${i.extras.map((e) => e.price > 0 ? `${e.name} (+${formatCurrency(e.price)})` : e.name).join(', ')}`
+            : `Adicionais: ${i.extras.map((e) => e.name).join(', ')}`)
+          : '';
+        const combinedNote = [i.note, extrasNote].filter(Boolean).join(' | ');
+        return {
+          name: i.product.name,
+          quantity: i.quantity,
+          unitPrice: i.product.price + extrasPrice,
+          note: combinedNote,
+        };
+      });
       const cartTotalSnap = cartSnapshot.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
       const grandTotalSnap = cartTotalSnap + publicDeliveryFee;
 
@@ -3243,7 +3272,7 @@ export function App() {
 
   // Página pública de delivery — deve ficar ANTES do login
   if (publicDeliveryCompanyId) {
-    const cartTotal = publicDeliveryCart.reduce((s, i) => s + i.quantity * i.product.price, 0);
+    const cartTotal = publicDeliveryCart.reduce((s, i) => s + i.quantity * cartItemEffectivePrice(i), 0);
     const grandTotal = cartTotal + publicDeliveryFee;
     const cartCount = publicDeliveryCart.reduce((s, i) => s + i.quantity, 0);
     return (
@@ -3604,10 +3633,15 @@ export function App() {
                   <div key={item.product.id} style={{ padding: '10px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f9fafb' }}>
                     <div>
                       <span style={{ fontWeight: 600, fontSize: 14 }}>{item.quantity}x {item.product.name}</span>
+                      {item.extras?.length ? (
+                        <div style={{ fontSize: 12, color: '#16a34a', marginTop: 2 }}>
+                          + {item.extras.map((e) => e.price > 0 ? `${e.name} (+${formatCurrency(e.price)})` : e.name).join(', ')}
+                        </div>
+                      ) : null}
                       {item.note && <div style={{ fontSize: 12, color: '#9ca3af' }}>{item.note}</div>}
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <span style={{ fontSize: 14 }}>{formatCurrency(item.quantity * item.product.price)}</span>
+                      <span style={{ fontSize: 14 }}>{formatCurrency(item.quantity * cartItemEffectivePrice(item))}</span>
                       <button type="button" onClick={() => updatePublicCartItem(item.product.id, { quantity: item.quantity - 1 })}
                         style={{ width: 24, height: 24, borderRadius: '50%', border: '1px solid #e5e7eb', background: '#f9fafb', cursor: 'pointer', fontSize: 14, display: 'grid', placeItems: 'center' }}>-</button>
                     </div>
@@ -3736,8 +3770,11 @@ export function App() {
                       </div>
                     ) : (
                       <button type="button" onClick={() => {
+                        const catAdditionals = publicDeliveryCategories.find((c) => c.id === product.categoryId)?.additionals;
                         if ((product as any).customOptions?.options?.length) {
-                          setCustomOptionsModal({ product, selected: [] });
+                          setCustomOptionsModal({ product, selected: [], categoryAdditionals: catAdditionals ?? [] });
+                        } else if (catAdditionals?.length) {
+                          setAdditionalsModal({ product, categoryAdditionals: catAdditionals, selected: [], source: 'delivery' });
                         } else {
                           addToPublicCart(product);
                         }
@@ -3767,7 +3804,7 @@ export function App() {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ color: '#f1c44e', fontWeight: 700, fontSize: 13, marginBottom: 2 }}>Pedido em andamento</div>
                       <div style={{ color: '#d1d5db', fontSize: 12 }}>
-                        {publicDeliveryCart.reduce((s, i) => s + i.quantity, 0)} {publicDeliveryCart.reduce((s, i) => s + i.quantity, 0) === 1 ? 'item' : 'itens'} · {formatCurrency(publicDeliveryCart.reduce((s, i) => s + i.quantity * i.product.price, 0))}
+                        {publicDeliveryCart.reduce((s, i) => s + i.quantity, 0)} {publicDeliveryCart.reduce((s, i) => s + i.quantity, 0) === 1 ? 'item' : 'itens'} · {formatCurrency(publicDeliveryCart.reduce((s, i) => s + i.quantity * cartItemEffectivePrice(i), 0))}
                       </div>
                     </div>
                     <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
@@ -3903,6 +3940,19 @@ export function App() {
                       <span style={{ fontWeight: 700, fontSize: 14, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{activeCat.name}</span>
                     </div>
                   )}
+                  {activeTab !== 'top' && activeCat?.additionals?.length ? (
+                    <div style={{ background: 'linear-gradient(90deg, #3b1f00 0%, #5c2e00 100%)', borderRadius: 10, padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span style={{ fontSize: 22, flexShrink: 0 }}>🍅</span>
+                      <div>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: '#f1c44e', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>
+                          Adicionais disponíveis:
+                        </div>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: '#fff' }}>
+                          {activeCat.additionals.map((a) => a.price > 0 ? `${a.name} +${formatCurrency(a.price)}` : a.name).join(' • ')}
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
                   {visibleProducts.map((product) => renderProductCard(product, activeTab === 'top'))}
                 </div>
 
@@ -3957,17 +4007,15 @@ export function App() {
           };
 
           const confirm = () => {
-            addToPublicCart(product);
-            if (selected.length > 0) {
-              setPublicDeliveryCart(prev => {
-                const updated = [...prev];
-                let idx = -1;
-                for (let i = updated.length - 1; i >= 0; i--) { if ((updated[i] as any).product.id === product.id) { idx = i; break; } }
-                if (idx >= 0) updated[idx] = { ...updated[idx], note: selected.join(', ') };
-                return updated;
-              });
-            }
+            const note = selected.length > 0 ? selected.join(', ') : '';
+            const catAdditionals = customOptionsModal?.categoryAdditionals ?? [];
             setCustomOptionsModal(null);
+            if (catAdditionals.length) {
+              // Encadeia com o modal de adicionais
+              setAdditionalsModal({ product, categoryAdditionals: catAdditionals, selected: [], source: 'delivery', pendingNote: note });
+            } else {
+              addToPublicCart(product, undefined, note || undefined);
+            }
           };
 
           return (
@@ -4011,6 +4059,70 @@ export function App() {
                     ? `Adicionar ao carrinho${selected.length > 0 ? ` (${selected.length} sabor${selected.length !== 1 ? 'es' : ''})` : ''}`
                     : `Selecione ao menos ${min} opção${min !== 1 ? 'ões' : ''}`}
                 </button>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Modal de adicionais da categoria (delivery) */}
+        {additionalsModal && additionalsModal.source === 'delivery' && (() => {
+          const { product, categoryAdditionals, selected, pendingNote } = additionalsModal;
+          const extrasTotal = selected.reduce((s, name) => {
+            const item = categoryAdditionals.find((a) => a.name === name);
+            return s + (item?.price ?? 0);
+          }, 0);
+          return (
+            <div
+              onClick={(e) => { if (e.target === e.currentTarget) setAdditionalsModal(null); }}
+              style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
+            >
+              <div style={{ background: '#fff', borderRadius: '20px 20px 0 0', width: '100%', maxWidth: 540, maxHeight: '80vh', overflowY: 'auto', padding: '24px 20px 32px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 17, color: '#18201d' }}>{product.name}</div>
+                    <div style={{ fontSize: 13, color: '#6b7280', marginTop: 2 }}>Deseja adicionar algum item?</div>
+                  </div>
+                  <button onClick={() => setAdditionalsModal(null)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#9ca3af', marginLeft: 8 }}>✕</button>
+                </div>
+                <div style={{ display: 'grid', gap: 8, margin: '16px 0 20px' }}>
+                  {categoryAdditionals.map((extra) => {
+                    const isSelected = selected.includes(extra.name);
+                    return (
+                      <button key={extra.name} type="button"
+                        onClick={() => setAdditionalsModal(prev => {
+                          if (!prev) return prev;
+                          const already = prev.selected.includes(extra.name);
+                          return { ...prev, selected: already ? prev.selected.filter(s => s !== extra.name) : [...prev.selected, extra.name] };
+                        })}
+                        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderRadius: 10, border: `2px solid ${isSelected ? '#18201d' : '#e5e7eb'}`, background: isSelected ? '#18201d' : '#fff', cursor: 'pointer', textAlign: 'left', gap: 12 }}>
+                        <span style={{ fontWeight: isSelected ? 700 : 500, fontSize: 14, color: isSelected ? '#fff' : '#18201d' }}>
+                          {isSelected && '✓ '}{extra.name}
+                        </span>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: isSelected ? '#f1c44e' : extra.price > 0 ? '#16a34a' : '#9ca3af', whiteSpace: 'nowrap' }}>
+                          {extra.price > 0 ? `+${formatCurrency(extra.price)}` : 'Grátis'}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button type="button"
+                    onClick={() => { addToPublicCart(product, undefined, pendingNote); setAdditionalsModal(null); }}
+                    style={{ flex: 1, padding: '13px 0', background: '#f1f5f9', color: '#374151', border: 'none', borderRadius: 12, fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
+                    Sem adicionais
+                  </button>
+                  <button type="button"
+                    onClick={() => {
+                      const extras = selected.map((name) => ({ name, price: categoryAdditionals.find((a) => a.name === name)?.price ?? 0 }));
+                      addToPublicCart(product, extras, pendingNote);
+                      setAdditionalsModal(null);
+                    }}
+                    style={{ flex: 2, padding: '13px 0', background: '#18201d', color: '#fff', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+                    {selected.length > 0
+                      ? `Adicionar · ${formatCurrency(product.price + extrasTotal)}`
+                      : `Adicionar · ${formatCurrency(product.price)}`}
+                  </button>
+                </div>
               </div>
             </div>
           );
@@ -4278,8 +4390,11 @@ export function App() {
                       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                         <strong>{formatCurrency(product.price)}</strong>
                         <button type="button" className="secondary-button" onClick={() => {
+                          const catAdditionals = (categories as any[]).find((c: any) => c.id === product.categoryId)?.additionals as { name: string; price: number }[] | undefined;
                           if ((product as any).customOptions?.options?.length) {
-                            setTableCustomOptionsModal({ product, selected: [] });
+                            setTableCustomOptionsModal({ product, selected: [], source: 'menu', categoryAdditionals: catAdditionals ?? [] });
+                          } else if (catAdditionals?.length) {
+                            setAdditionalsModal({ product, categoryAdditionals: catAdditionals, selected: [], source: 'menu' });
                           } else {
                             addProductToMenuCart(product);
                           }
@@ -4931,16 +5046,37 @@ export function App() {
             </div>
 
             {menuModalTable && (() => {
-              const cartTotal = tableCart.reduce((s, c) => s + c.quantity * c.product.price, 0);
+              const cartTotal = tableCart.reduce((s, c) => s + c.quantity * (c.product.price + (c.extras?.reduce((es, e) => es + e.price, 0) ?? 0)), 0);
               const cartCount = tableCart.reduce((s, c) => s + c.quantity, 0);
               const mobile = window.innerWidth <= 640;
 
               /* Painel de produtos — compartilhado entre mobile/desktop */
+              const getSectionAdditionals = (section: string): { name: string; price: number }[] | null => {
+                const lower = section.toLowerCase();
+                const cat = (categories as any[]).find((c: any) =>
+                  c.name?.toLowerCase() === lower ||
+                  c.name?.toLowerCase().includes(lower) ||
+                  lower.includes(c.name?.toLowerCase() ?? '')
+                );
+                return (cat?.additionals as { name: string; price: number }[] | null) ?? null;
+              };
+
               const productList = (
                 <div style={{ flex: 1, overflowY: 'auto', padding: mobile ? '12px 12px calc(80px + env(safe-area-inset-bottom))' : 24 }}>
                   {Object.entries(groupedMenuSections).map(([section, items]) => items.length > 0 ? (
                     <div key={section} style={{ marginBottom: 20 }}>
                       <h3 style={{ marginBottom: 10, fontSize: mobile ? 13 : 15, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#789088' }}>{section}</h3>
+                      {(() => { const addList = getSectionAdditionals(section) as { name: string; price: number }[] | null; return addList?.length ? (
+                        <div style={{ background: 'linear-gradient(90deg, #3b1f00 0%, #5c2e00 100%)', borderRadius: 8, padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                          <span style={{ fontSize: 18, flexShrink: 0 }}>🍅</span>
+                          <div>
+                            <div style={{ fontSize: 9, fontWeight: 700, color: '#f1c44e', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 1 }}>Adicionais disponíveis:</div>
+                            <div style={{ fontSize: 12, fontWeight: 600, color: '#fff' }}>
+                              {addList.map((a) => a.price > 0 ? `${a.name} +${formatCurrency(a.price)}` : a.name).join(' • ')}
+                            </div>
+                          </div>
+                        </div>
+                      ) : null; })()}
                       <div style={{ display: 'grid', gap: 8 }}>
                         {items.map((product) => {
                           const inCart = tableCart.filter((c) => c.product.id === product.id).reduce((s, c) => s + c.quantity, 0);
@@ -4956,8 +5092,11 @@ export function App() {
                               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
                                 <strong style={{ fontSize: 13, whiteSpace: 'nowrap' }}>{formatCurrency(product.price)}</strong>
                                 <button type="button" className="secondary-button" style={{ padding: '5px 10px', minHeight: 'unset', fontSize: 12, whiteSpace: 'nowrap' }} onClick={() => {
+                                  const catAdditionals = (categories as any[]).find((c: any) => c.id === product.categoryId)?.additionals as { name: string; price: number }[] | undefined;
                                   if ((product as any).customOptions?.options?.length) {
-                                    setTableCustomOptionsModal({ product, selected: [], source: 'admin' });
+                                    setTableCustomOptionsModal({ product, selected: [], source: 'admin', categoryAdditionals: catAdditionals ?? [] });
+                                  } else if (catAdditionals?.length) {
+                                    setAdditionalsModal({ product, categoryAdditionals: catAdditionals, selected: [], source: 'admin' });
                                   } else {
                                     setSelectedTableId(menuModalTable.id);
                                     setTableCartNoteProduct(product);
@@ -4988,11 +5127,16 @@ export function App() {
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                               <div style={{ flex: 1 }}>
                                 <span style={{ fontWeight: 600, fontSize: 13 }}>{entry.quantity}× {entry.product.name}</span>
+                                {entry.extras?.length ? (
+                                  <div style={{ fontSize: 11, color: '#16a34a', marginTop: 2 }}>
+                                    + {entry.extras.map((e) => e.price > 0 ? `${e.name} (+${formatCurrency(e.price)})` : e.name).join(', ')}
+                                  </div>
+                                ) : null}
                                 {entry.note && <div style={{ fontSize: 12, color: '#7a8a7a', marginTop: 3 }}>↳ {entry.note}</div>}
                               </div>
                               <button type="button" onClick={() => setTableCart((prev) => prev.filter((_, i) => i !== idx))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#b91c1c', padding: '0 0 0 8px', fontSize: 18, lineHeight: 1 }}>×</button>
                             </div>
-                            <div style={{ fontSize: 12, color: '#9a9a9a', marginTop: 4, textAlign: 'right' }}>{formatCurrency(entry.quantity * entry.product.price)}</div>
+                            <div style={{ fontSize: 12, color: '#9a9a9a', marginTop: 4, textAlign: 'right' }}>{formatCurrency(entry.quantity * (entry.product.price + (entry.extras?.reduce((s, e) => s + e.price, 0) ?? 0)))}</div>
                           </div>
                         ))}
                       </div>
@@ -5006,7 +5150,14 @@ export function App() {
                       </div>
                       <button type="button" className="primary-button" style={{ width: '100%' }}
                         onClick={async () => {
-                          const cartItems = tableCart.map((c) => ({ productId: c.product.id, productName: c.product.name, quantity: c.quantity, unitPrice: c.product.price, note: c.note || undefined }));
+                          const cartItems = tableCart.map((c) => {
+                            const extrasPrice = c.extras?.reduce((s, e) => s + e.price, 0) ?? 0;
+                            const extrasNote = c.extras?.length
+                              ? `Adicionais: ${c.extras.map((e) => e.price > 0 ? `${e.name} (+${formatCurrency(e.price)})` : e.name).join(', ')}`
+                              : '';
+                            const combinedNote = [c.note, extrasNote].filter(Boolean).join(' | ');
+                            return { productId: c.product.id, productName: c.product.name, quantity: c.quantity, unitPrice: c.product.price + extrasPrice, note: combinedNote || undefined };
+                          });
                           setTableCart([]);
                           closeTableMenuModal();
                           await createOrder(menuModalTable.id, cartItems, menuModalTable.name);
@@ -5527,8 +5678,11 @@ export function App() {
                             type="button"
                             className="secondary-button"
                             onClick={() => {
+                              const catAdditionals = (categories as any[]).find((c: any) => c.id === product.categoryId)?.additionals as { name: string; price: number }[] | undefined;
                               if ((product as any).customOptions?.options?.length) {
-                                setTableCustomOptionsModal({ product, selected: [] });
+                                setTableCustomOptionsModal({ product, selected: [], source: 'menu', categoryAdditionals: catAdditionals ?? [] });
+                              } else if (catAdditionals?.length) {
+                                setAdditionalsModal({ product, categoryAdditionals: catAdditionals, selected: [], source: 'menu' });
                               } else {
                                 addProductToMenuCart(product);
                               }
@@ -5830,8 +5984,9 @@ export function App() {
                     </div>
                     {categories.length === 0 && <p style={{ fontSize: 13, color: '#789088', margin: 0 }}>Nenhuma categoria criada.</p>}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                      {(categories as Array<{ id: string; name: string; imageUrl?: string | null }>).map((cat) => (
-                        <div key={cat.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: '#f9fafb', borderRadius: 8, border: '1px solid #e5e7eb' }}>
+                      {(categories as Array<{ id: string; name: string; imageUrl?: string | null; additionals?: { name: string; price: number }[] | null }>).map((cat) => (
+                        <div key={cat.id} style={{ background: '#f9fafb', borderRadius: 8, border: '1px solid #e5e7eb', overflow: 'hidden' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px' }}>
                           {cat.imageUrl
                             ? <img src={cat.imageUrl} alt={cat.name} style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 6, flexShrink: 0 }} />
                             : <div style={{ width: 48, height: 48, borderRadius: 6, background: '#eef2ef', display: 'grid', placeItems: 'center', fontSize: 20, flexShrink: 0 }}>?</div>
@@ -5918,6 +6073,88 @@ export function App() {
                           >
                             🗑
                           </button>
+                        </div>
+                        {/* Adicionais da categoria */}
+                        <div style={{ padding: '8px 10px 10px', borderTop: '1px dashed #e5e7eb' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                            <span style={{ fontSize: 11, color: '#9ca3af', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>➕ Itens Adicionais</span>
+                            {editingCategoryAdditionalsId !== cat.id && (
+                              <button type="button" onClick={() => {
+                                setEditingCategoryAdditionalsId(cat.id);
+                                setEditingCategoryAdditionals((cat as any).additionals ?? []);
+                                setNewAdditionalName('');
+                                setNewAdditionalPrice('0');
+                              }} style={{ fontSize: 11, color: '#6b7280', background: 'none', border: '1px solid #e5e7eb', borderRadius: 6, padding: '2px 8px', cursor: 'pointer' }}>
+                                ✏️ Editar
+                              </button>
+                            )}
+                          </div>
+                          {editingCategoryAdditionalsId === cat.id ? (
+                            <div style={{ display: 'grid', gap: 6 }}>
+                              {editingCategoryAdditionals.map((item, idx) => (
+                                <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, padding: '6px 10px' }}>
+                                  <span style={{ flex: 1, fontSize: 13, fontWeight: 500 }}>{item.name}</span>
+                                  <span style={{ fontSize: 12, color: item.price > 0 ? '#16a34a' : '#9ca3af', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                                    {item.price > 0 ? `+${formatCurrency(item.price)}` : 'Grátis'}
+                                  </span>
+                                  <button type="button" onClick={() => setEditingCategoryAdditionals(prev => prev.filter((_, i) => i !== idx))}
+                                    style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 16, padding: 0, lineHeight: 1, flexShrink: 0 }}>×</button>
+                                </div>
+                              ))}
+                              <div style={{ display: 'flex', gap: 6 }}>
+                                <input
+                                  placeholder="Nome (ex: Milho)"
+                                  value={newAdditionalName}
+                                  onChange={(e) => setNewAdditionalName(e.target.value)}
+                                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (newAdditionalName.trim()) { setEditingCategoryAdditionals(prev => [...prev, { name: newAdditionalName.trim(), price: parseFloat(newAdditionalPrice.replace(',', '.')) || 0 }]); setNewAdditionalName(''); setNewAdditionalPrice('0'); } } }}
+                                  style={{ flex: 2, fontSize: 12, padding: '5px 8px', border: '1px solid #d1d5db', borderRadius: 6 }}
+                                />
+                                <input
+                                  placeholder="Preço"
+                                  value={newAdditionalPrice}
+                                  onChange={(e) => setNewAdditionalPrice(e.target.value)}
+                                  type="number" min="0" step="0.50"
+                                  style={{ width: 70, fontSize: 12, padding: '5px 8px', border: '1px solid #d1d5db', borderRadius: 6 }}
+                                />
+                                <button type="button" onClick={() => {
+                                  if (!newAdditionalName.trim()) return;
+                                  setEditingCategoryAdditionals(prev => [...prev, { name: newAdditionalName.trim(), price: parseFloat(newAdditionalPrice.replace(',', '.')) || 0 }]);
+                                  setNewAdditionalName(''); setNewAdditionalPrice('0');
+                                }} style={{ background: '#18201d', color: '#fff', border: 'none', borderRadius: 6, padding: '5px 10px', cursor: 'pointer', fontWeight: 700, fontSize: 14, flexShrink: 0 }}>+</button>
+                              </div>
+                              <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                                <button type="button" onClick={() => setEditingCategoryAdditionalsId(null)}
+                                  style={{ flex: 1, padding: '7px 0', background: '#f1f5f9', color: '#374151', border: 'none', borderRadius: 8, fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>
+                                  Cancelar
+                                </button>
+                                <button type="button" onClick={async () => {
+                                  try {
+                                    await api.updateCategoryAdditionals(cat.id, editingCategoryAdditionals.length ? editingCategoryAdditionals : null);
+                                    await loadCategories();
+                                    showToast('Adicionais salvos!', 'success');
+                                  } catch (err) { showToast((err as Error).message, 'error'); }
+                                  setEditingCategoryAdditionalsId(null);
+                                }} style={{ flex: 2, padding: '7px 0', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                                  ✅ Salvar adicionais
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div>
+                              {(cat as any).additionals?.length ? (
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                                  {((cat as any).additionals as { name: string; price: number }[]).map((item, idx) => (
+                                    <span key={idx} style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 20, padding: '2px 10px', fontSize: 12, color: '#15803d', fontWeight: 500 }}>
+                                      {item.name}{item.price > 0 ? ` +${formatCurrency(item.price)}` : ' (grátis)'}
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span style={{ fontSize: 12, color: '#9ca3af', fontStyle: 'italic' }}>Nenhum adicional configurado</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
                         </div>
                       ))}
                     </div>
@@ -9150,11 +9387,13 @@ export function App() {
 
         const confirm = () => {
           const note = selected.length > 0 ? selected.join(', ') : undefined;
-          if (source === 'admin') {
-            // Adiciona ao carrinho do modal admin da mesa
+          const catAdditionals = tableCustomOptionsModal?.categoryAdditionals ?? [];
+          setTableCustomOptionsModal(null);
+          if (catAdditionals.length) {
+            setAdditionalsModal({ product, categoryAdditionals: catAdditionals, selected: [], source: source === 'admin' ? 'admin' : 'menu', pendingNote: note });
+          } else if (source === 'admin') {
             setTableCart(prev => [...prev, { product, quantity: 1, note: note || '' }]);
           } else {
-            // Adiciona ao carrinho do cardápio QR
             addProductToMenuCart(product);
             if (note) {
               setMenuCart(prev => {
@@ -9166,7 +9405,6 @@ export function App() {
               });
             }
           }
-          setTableCustomOptionsModal(null);
         };
 
         return (
@@ -9209,6 +9447,81 @@ export function App() {
                   ? `Adicionar ao pedido${selected.length > 0 ? ` (${selected.length} sabor${selected.length !== 1 ? 'es' : ''})` : ''}`
                   : `Selecione ao menos ${min} opção${min !== 1 ? 'ões' : ''}`}
               </button>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Modal de adicionais da categoria (mesa admin e QR) */}
+      {additionalsModal && additionalsModal.source !== 'delivery' && (() => {
+        const { product, categoryAdditionals, selected, source, pendingNote } = additionalsModal;
+        const extrasTotal = selected.reduce((s, name) => {
+          const item = categoryAdditionals.find((a) => a.name === name);
+          return s + (item?.price ?? 0);
+        }, 0);
+        const handleConfirmAdditionals = (withExtras: boolean) => {
+          const extras = withExtras ? selected.map((name) => ({ name, price: categoryAdditionals.find((a) => a.name === name)?.price ?? 0 })) : [];
+          setAdditionalsModal(null);
+          if (source === 'admin') {
+            setTableCart(prev => [...prev, { product, quantity: 1, note: pendingNote || '', extras: extras.length ? extras : undefined }]);
+          } else {
+            // QR menu
+            addProductToMenuCart(product);
+            setMenuCart(prev => {
+              const updated = [...prev];
+              let idx = -1;
+              for (let i = updated.length - 1; i >= 0; i--) { if (updated[i].product.id === product.id) { idx = i; break; } }
+              if (idx >= 0) updated[idx] = { ...updated[idx], note: pendingNote || '', extras: extras.length ? extras : undefined };
+              return updated;
+            });
+          }
+        };
+        return (
+          <div
+            onClick={(e) => { if (e.target === e.currentTarget) setAdditionalsModal(null); }}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
+          >
+            <div style={{ background: '#fff', borderRadius: '20px 20px 0 0', width: '100%', maxWidth: 540, maxHeight: '80vh', overflowY: 'auto', padding: '24px 20px 32px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 17, color: '#18201d' }}>{product.name}</div>
+                  <div style={{ fontSize: 13, color: '#6b7280', marginTop: 2 }}>Deseja adicionar algum item?</div>
+                </div>
+                <button onClick={() => setAdditionalsModal(null)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#9ca3af', marginLeft: 8 }}>✕</button>
+              </div>
+              <div style={{ display: 'grid', gap: 8, margin: '16px 0 20px' }}>
+                {categoryAdditionals.map((extra) => {
+                  const isSelected = selected.includes(extra.name);
+                  return (
+                    <button key={extra.name} type="button"
+                      onClick={() => setAdditionalsModal(prev => {
+                        if (!prev) return prev;
+                        const already = prev.selected.includes(extra.name);
+                        return { ...prev, selected: already ? prev.selected.filter(s => s !== extra.name) : [...prev.selected, extra.name] };
+                      })}
+                      style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderRadius: 10, border: `2px solid ${isSelected ? '#18201d' : '#e5e7eb'}`, background: isSelected ? '#18201d' : '#fff', cursor: 'pointer', textAlign: 'left', gap: 12 }}>
+                      <span style={{ fontWeight: isSelected ? 700 : 500, fontSize: 14, color: isSelected ? '#fff' : '#18201d' }}>
+                        {isSelected && '✓ '}{extra.name}
+                      </span>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: isSelected ? '#f1c44e' : extra.price > 0 ? '#16a34a' : '#9ca3af', whiteSpace: 'nowrap' }}>
+                        {extra.price > 0 ? `+${formatCurrency(extra.price)}` : 'Grátis'}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button type="button" onClick={() => handleConfirmAdditionals(false)}
+                  style={{ flex: 1, padding: '13px 0', background: '#f1f5f9', color: '#374151', border: 'none', borderRadius: 12, fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
+                  Sem adicionais
+                </button>
+                <button type="button" onClick={() => handleConfirmAdditionals(true)}
+                  style={{ flex: 2, padding: '13px 0', background: '#18201d', color: '#fff', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+                  {selected.length > 0
+                    ? `Adicionar · ${formatCurrency(product.price + extrasTotal)}`
+                    : `Adicionar · ${formatCurrency(product.price)}`}
+                </button>
+              </div>
             </div>
           </div>
         );

@@ -140,7 +140,7 @@ export const publicDeliveryApi = {
   getMenu: async (companyId: string) => {
     const [companyRes, categoriesRes, productsRes] = await Promise.all([
       anonFetch(`/Company?id=eq.${encodeURIComponent(companyId)}&active=eq.true&select=id,name,menuBannerUrl,phone,deliveryFeeAmount,openingTime,closingTime,isOpen&limit=1`),
-      anonFetch(`/Category?companyId=eq.${encodeURIComponent(companyId)}&active=eq.true&select=id,name,sort,imageUrl&order=sort.asc`),
+      anonFetch(`/Category?companyId=eq.${encodeURIComponent(companyId)}&active=eq.true&select=id,name,sort,imageUrl,additionals&order=sort.asc`),
       anonFetch(`/Product?companyId=eq.${encodeURIComponent(companyId)}&active=eq.true&available=eq.true&select=id,categoryId,name,description,price,available,salesCount,customOptions&order=name.asc`),
     ]);
     if (!companyRes.ok) throw new Error('Empresa não encontrada ou inativa.');
@@ -525,7 +525,7 @@ export const api = {
     const user = await requireCompanyUser();
     const { data, error } = await supabase
       .from('Category')
-      .select('id,name,active,imageUrl')
+      .select('id,name,active,imageUrl,additionals')
       .eq('companyId', user.companyId)
       .eq('active', true)
       .order('sort', { ascending: true });
@@ -556,6 +556,13 @@ export const api = {
     const user = await requireCompanyUserWithRoles(['ADMIN', 'GERENTE', 'ESTOQUE']);
     const { error } = await supabase.from('Category').update({ name }).eq('id', categoryId).eq('companyId', user.companyId);
     if (error) throwSupabaseError(error, 'Falha ao renomear categoria.');
+  },
+
+  updateCategoryAdditionals: async (categoryId: string, additionals: Array<{ name: string; price: number }> | null): Promise<void> => {
+    const user = await requireCompanyUserWithRoles(['ADMIN', 'GERENTE', 'ESTOQUE']);
+    const value = additionals && additionals.length > 0 ? additionals : null;
+    const { error } = await supabase.from('Category').update({ additionals: value }).eq('id', categoryId).eq('companyId', user.companyId);
+    if (error) throwSupabaseError(error, 'Falha ao salvar adicionais da categoria.');
   },
 
   uploadMenuBanner: async (file: File): Promise<string> => {
