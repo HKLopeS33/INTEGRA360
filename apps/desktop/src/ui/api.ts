@@ -146,7 +146,18 @@ export const publicDeliveryApi = {
     if (!companyRes.ok) throw new Error('Empresa não encontrada ou inativa.');
     const companies: any[] = await companyRes.json();
     if (!companies.length) throw new Error('Empresa não encontrada ou inativa.');
-    const categories: any[] = await categoriesRes.json();
+
+    // Se a coluna additionals ainda não existe no banco (400), faz retry sem ela
+    let categories: any[];
+    if (!categoriesRes.ok) {
+      const fallbackRes = await anonFetch(`/Category?companyId=eq.${encodeURIComponent(companyId)}&active=eq.true&select=id,name,sort,imageUrl&order=sort.asc`);
+      categories = fallbackRes.ok ? await fallbackRes.json() : [];
+    } else {
+      categories = await categoriesRes.json();
+      // Garante que é array (ex: PostgREST retorna objeto de erro em vez de array)
+      if (!Array.isArray(categories)) categories = [];
+    }
+
     const products: any[] = await productsRes.json();
     return {
       company: { ...companies[0], deliveryFeeAmount: Number(companies[0].deliveryFeeAmount ?? 0), isOpen: companies[0].isOpen !== false } as { id: string; name: string; menuBannerUrl: string | null; phone: string | null; deliveryFeeAmount: number; openingTime: string; closingTime: string; isOpen: boolean },
