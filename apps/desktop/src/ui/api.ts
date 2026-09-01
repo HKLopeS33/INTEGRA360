@@ -3323,12 +3323,15 @@ export const api = {
       const { data, error } = await supabase.rpc('request_wallet_withdrawal', { p_amount: amount });
       if (error) throwSupabaseError(error, 'Falha ao solicitar saque.');
 
-      // Notifica o suporte via WhatsApp
-      fetch(`${SUPABASE_URL}/functions/v1/whatsapp-notify`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'SAQUE_SOLICITADO', withdrawalId: data, amount }),
-      }).catch(() => {});
+      // Notifica o suporte via WhatsApp (usa token da sessão para autenticar na Edge Function)
+      supabase.auth.getSession().then(({ data: sessionData }) => {
+        const token = sessionData?.session?.access_token ?? SUPABASE_ANON_KEY;
+        fetch(`${SUPABASE_URL}/functions/v1/whatsapp-notify`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}`, 'apikey': SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 'SAQUE_SOLICITADO', withdrawalId: data, amount }),
+        }).then(r => r.json()).then(d => console.log('WA saque notify:', d)).catch(e => console.warn('WA saque notify falhou:', e));
+      });
 
       return { success: true, withdrawalId: data as string };
     }
