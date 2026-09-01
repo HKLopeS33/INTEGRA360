@@ -341,6 +341,8 @@ export function App() {
   const [newProductImageFile, setNewProductImageFile] = useState<File | null>(null);
   const [newProductImagePreview, setNewProductImagePreview] = useState<string | null>(null);
   const [newCategoryName, setNewCategoryName] = useState('');
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
+  const [editingCategoryName, setEditingCategoryName] = useState('');
   const [printerKitchen, setPrinterKitchen] = useState('');
   const [printerCashier, setPrinterCashier] = useState('');
   const [printingDisabled, setPrintingDisabled] = useState(false);
@@ -5707,7 +5709,40 @@ export function App() {
                             ? <img src={cat.imageUrl} alt={cat.name} style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 6, flexShrink: 0 }} />
                             : <div style={{ width: 48, height: 48, borderRadius: 6, background: '#eef2ef', display: 'grid', placeItems: 'center', fontSize: 20, flexShrink: 0 }}>?</div>
                           }
-                          <span style={{ flex: 1, fontSize: 14, fontWeight: 500 }}>{cat.name}</span>
+                          {editingCategoryId === cat.id ? (
+                            <input
+                              autoFocus
+                              value={editingCategoryName}
+                              onChange={(e) => setEditingCategoryName(e.target.value)}
+                              onBlur={async () => {
+                                const trimmed = editingCategoryName.trim();
+                                if (trimmed && trimmed !== cat.name) {
+                                  try {
+                                    await api.updateCategoryName(cat.id, trimmed);
+                                    await loadCategories();
+                                    showToast('Categoria renomeada!', 'success');
+                                  } catch (err) { showToast((err as Error).message, 'error'); }
+                                }
+                                setEditingCategoryId(null);
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                                if (e.key === 'Escape') { setEditingCategoryId(null); }
+                              }}
+                              style={{ flex: 1, fontSize: 14, fontWeight: 500, border: '1px solid #3b82f6', borderRadius: 6, padding: '4px 8px', outline: 'none' }}
+                            />
+                          ) : (
+                            <span
+                              onClick={() => { setEditingCategoryId(cat.id); setEditingCategoryName(cat.name); }}
+                              title="Clique para renomear"
+                              style={{ flex: 1, fontSize: 14, fontWeight: 500, cursor: 'text', borderRadius: 6, padding: '4px 8px', transition: 'background .15s' }}
+                              onMouseEnter={(e) => (e.currentTarget.style.background = '#f1f5f9')}
+                              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                            >
+                              {cat.name}
+                              <span style={{ marginLeft: 6, fontSize: 11, color: '#9ca3af' }}>✏️</span>
+                            </span>
+                          )}
                           <label style={{ cursor: 'pointer', background: '#fff', border: '1px dashed #d1d5db', borderRadius: 6, padding: '5px 10px', fontSize: 12, color: '#6b7280', whiteSpace: 'nowrap' }}>
                             {cat.imageUrl ? 'Trocar foto' : '+ Foto'}
                             <input type="file" accept="image/*" style={{ display: 'none' }}

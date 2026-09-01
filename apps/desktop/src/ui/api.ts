@@ -552,6 +552,12 @@ export const api = {
     if (error) throwSupabaseError(error, 'Falha ao atualizar imagem da categoria.');
   },
 
+  updateCategoryName: async (categoryId: string, name: string): Promise<void> => {
+    const user = await requireCompanyUserWithRoles(['ADMIN', 'GERENTE', 'ESTOQUE']);
+    const { error } = await supabase.from('Category').update({ name }).eq('id', categoryId).eq('companyId', user.companyId);
+    if (error) throwSupabaseError(error, 'Falha ao renomear categoria.');
+  },
+
   uploadMenuBanner: async (file: File): Promise<string> => {
     const user = await requireCompanyUserWithRoles(['ADMIN', 'GERENTE']);
     const ext = file.name.split('.').pop() ?? 'jpg';
