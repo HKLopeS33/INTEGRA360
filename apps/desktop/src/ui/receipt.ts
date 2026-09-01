@@ -1,4 +1,4 @@
-﻿export type ReceiptItem = {
+export type ReceiptItem = {
   name: string;
   quantity: number;
   unitPrice: number;
@@ -67,12 +67,12 @@ export function generateThermalHTML(data: ReceiptData) {
       const name  = padRight(rawName, NAME_W);
       const qty   = padLeft(String(item.quantity), QTY_W);
       const total = padLeft(
-        formatCurrency(item.total).replace('R$ ', 'R$'),
+        formatCurrency(item.total).replace('R ', 'R$').replace('R$ ', 'R$'),
         TOTAL_W
       );
-      const lines: string[] = [`\${name} \${qty} \${total}`];
+      const lines: string[] = [`${name} ${qty} ${total}`];
       if (item.note) {
-        const noteText = `  > \${item.note}`;
+        const noteText = `  > ${item.note}`;
         for (let i = 0; i < noteText.length; i += LINE_WIDTH) {
           lines.push(noteText.slice(i, i + LINE_WIDTH));
         }
@@ -87,12 +87,12 @@ export function generateThermalHTML(data: ReceiptData) {
   const sep = '-'.repeat(LINE_WIDTH);
 
   const paymentText = (data.paymentMethod ?? 'DINHEIRO').toUpperCase();
-  const totalText   = formatCurrency(data.total).replace('R$ ', 'R$');
+  const totalText   = formatCurrency(data.total).replace('R ', 'R$').replace('R$ ', 'R$');
   const paidText    = data.paid != null
-    ? formatCurrency(data.paid).replace('R$ ', 'R$')
+    ? formatCurrency(data.paid).replace('R ', 'R$').replace('R$ ', 'R$')
     : null;
   const changeText  = data.change != null
-    ? formatCurrency(data.change).replace('R$ ', 'R$')
+    ? formatCurrency(data.change).replace('R ', 'R$').replace('R$ ', 'R$')
     : null;
 
   const totalLine  = `${padRight('TOTAL', LINE_WIDTH - totalText.length)}${totalText}`;
