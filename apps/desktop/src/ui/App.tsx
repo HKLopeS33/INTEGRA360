@@ -3004,7 +3004,7 @@ export function App() {
         receiptNumber,
         tableName: `DELIVERY — ${order.customerName}`,
         consumer: deliveryInfo,
-        items: order.items.map((i) => ({ name: i.productName, quantity: i.quantity, unitPrice: i.unitPrice, total: i.quantity * i.unitPrice })),
+        items: order.items.map((i) => ({ name: i.productName, quantity: i.quantity, unitPrice: i.unitPrice, total: i.quantity * i.unitPrice, note: i.note || null })),
         subtotal,
         total: order.total,
         paymentMethod: order.paymentMethod,
@@ -7661,7 +7661,10 @@ export function App() {
                             </div>
                             <div style={{ fontSize: 13, color: '#4b5563', marginBottom: 10 }}>
                               {order.items.map((item, i) => (
-                                <span key={i}>{item.quantity}× {item.productName}{i < order.items.length - 1 ? ', ' : ''}</span>
+                                <div key={i}>
+                                  <span>{item.quantity}× {item.productName}{i < order.items.length - 1 && !item.note ? ',' : ''}</span>
+                                  {item.note && <span style={{ color: '#9ca3af', fontSize: 12 }}> — {item.note}</span>}
+                                </div>
                               ))}
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -8307,7 +8310,7 @@ export function App() {
                               receiptNumber: r.receiptNumber,
                               tableName: r.type === 'delivery' ? `DELIVERY — ${r.customerName}` : r.tableName,
                               consumer: r.type === 'delivery' ? [r.customerPhone, r.customerAddress].filter(Boolean).join(' | ') : undefined,
-                              items: allItems.map((i: any) => ({ name: i.productName, quantity: i.quantity, unitPrice: i.unitPrice, total: i.total })),
+                              items: allItems.map((i: any) => ({ name: i.productName, quantity: i.quantity, unitPrice: i.unitPrice, total: i.total, note: i.note || null })),
                               subtotal: r.subtotal,
                               total: r.total,
                               paymentMethod: r.paymentMethod,

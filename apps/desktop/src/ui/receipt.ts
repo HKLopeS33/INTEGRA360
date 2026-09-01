@@ -1,8 +1,9 @@
-export type ReceiptItem = {
+﻿export type ReceiptItem = {
   name: string;
   quantity: number;
   unitPrice: number;
   total: number;
+  note?: string | null;
 };
 
 export type ReceiptData = {
@@ -59,7 +60,7 @@ export function generateThermalHTML(data: ReceiptData) {
   const TOTAL_W = 9;
 
   const itemsLines = data.items
-    .map((item) => {
+    .flatMap((item) => {
       const rawName = item.name.length > NAME_W
         ? `${item.name.slice(0, NAME_W - 2)}..`
         : item.name;
@@ -69,7 +70,14 @@ export function generateThermalHTML(data: ReceiptData) {
         formatCurrency(item.total).replace('R$ ', 'R$'),
         TOTAL_W
       );
-      return `${name} ${qty} ${total}`;
+      const lines: string[] = [`\${name} \${qty} \${total}`];
+      if (item.note) {
+        const noteText = `  > \${item.note}`;
+        for (let i = 0; i < noteText.length; i += LINE_WIDTH) {
+          lines.push(noteText.slice(i, i + LINE_WIDTH));
+        }
+      }
+      return lines;
     })
     .join('\n');
 

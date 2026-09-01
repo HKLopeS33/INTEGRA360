@@ -1628,7 +1628,7 @@ export const api = {
     // Busca itens de todos os pedidos delivery do dia
     const deliveryIds = (deliveryResult.data || []).map((d: any) => d.id);
     const { data: deliveryItemsData } = deliveryIds.length > 0
-      ? await supabase.from('DeliveryOrderItem').select('id,deliveryOrderId,productName,quantity,unitPrice').in('deliveryOrderId', deliveryIds)
+      ? await supabase.from('DeliveryOrderItem').select('id,deliveryOrderId,productName,quantity,unitPrice,note').in('deliveryOrderId', deliveryIds)
       : { data: [] as any[] };
     const itemsByDelivery = (deliveryItemsData || []).reduce((acc: any, i: any) => {
       acc[i.deliveryOrderId] = acc[i.deliveryOrderId] || [];
@@ -1653,7 +1653,7 @@ export const api = {
       paymentMethod: d.paymentMethod,
       status: d.status,
       paymentStatus: d.paymentStatus,
-      orders: [{ id: d.id, status: d.status, items: (itemsByDelivery[d.id] || []).map((i: any) => ({ id: i.id, productName: i.productName, quantity: i.quantity, unitPrice: Number(i.unitPrice), total: Number(i.unitPrice) * i.quantity })) }],
+      orders: [{ id: d.id, status: d.status, items: (itemsByDelivery[d.id] || []).map((i: any) => ({ id: i.id, productName: i.productName, quantity: i.quantity, unitPrice: Number(i.unitPrice), total: Number(i.unitPrice) * i.quantity, note: i.note || null })) }],
     }));
 
     return [...mesaReceipts, ...deliveryReceipts].sort((a, b) =>
@@ -1710,11 +1710,12 @@ export const api = {
     if (dlv) {
       const { data: dlvItems } = await supabase
         .from('DeliveryOrderItem')
-        .select('id,productName,quantity,unitPrice')
+        .select('id,productName,quantity,unitPrice,note')
         .eq('deliveryOrderId', dlv.id);
       const items = (dlvItems || []).map((i) => ({
         id: i.id, productName: i.productName, quantity: i.quantity,
         unitPrice: Number(i.unitPrice), total: Number(i.unitPrice) * i.quantity,
+        note: i.note || null,
       }));
       return {
         id: dlv.id, receiptNumber: dlv.receiptNumber,
