@@ -3276,7 +3276,7 @@ export function App() {
     const grandTotal = cartTotal + publicDeliveryFee;
     const cartCount = publicDeliveryCart.reduce((s, i) => s + i.quantity, 0);
     return (
-      <main style={{ minHeight: '100vh', background: '#f3f4f6', fontFamily: 'system-ui, sans-serif' }}>
+      <main style={{ minHeight: '100vh', background: '#fff', fontFamily: 'system-ui, sans-serif', overflowX: 'hidden', width: '100%', boxSizing: 'border-box' }}>
         <div style={{ background: '#18201d', color: '#fff', padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 12, position: 'sticky', top: 0, zIndex: 100 }}>
           <div style={{ width: 40, height: 40, background: '#f1c44e', borderRadius: 10, display: 'grid', placeItems: 'center', fontWeight: 800, fontSize: 18, color: '#18201d' }}>
             {publicDeliveryCompany?.name?.[0]?.toUpperCase() ?? '?'}
@@ -3292,7 +3292,7 @@ export function App() {
             </button>
           )}
         </div>
-        <div style={{ maxWidth: 640, margin: '0 auto', padding: '20px 16px' }}>
+        <div style={{ maxWidth: 640, margin: '0 auto', padding: '16px 16px', width: '100%', boxSizing: 'border-box' }}>
           {publicDeliveryError && (
             <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 10, padding: '12px 16px', color: '#b91c1c', marginBottom: 16, fontSize: 14 }}>
               {publicDeliveryError}
@@ -3791,7 +3791,7 @@ export function App() {
               <>
                 {/* Banner do cardápio — edge-to-edge, fora do container com padding */}
                 {publicDeliveryCompany?.menuBannerUrl && (
-                  <div style={{ margin: '0 -16px', marginTop: -20 }}>
+                  <div style={{ marginLeft: -16, marginRight: -16, marginTop: -16, overflow: 'hidden' }}>
                     <img src={publicDeliveryCompany.menuBannerUrl} alt="Banner"
                       style={{ width: '100%', maxHeight: 200, objectFit: 'cover', display: 'block' }} />
                   </div>
