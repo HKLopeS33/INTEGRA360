@@ -370,6 +370,8 @@ export function App() {
   const [approvingRefundId, setApprovingRefundId] = useState<string | null>(null);
   const approvingRefundLock = useRef(false); // guard síncrono contra double-click com stale closure
   const approvedOrderIds = useRef<Set<string>>(new Set()); // IDs aprovados — filtrados em qualquer reload
+  const seenDeliveryOrderIds = useRef<Set<string>>(new Set()); // IDs já vistos — evita reimprimir no polling
+  const [autoPrintDelivery, setAutoPrintDelivery] = useState(() => localStorage.getItem('autoPrintDelivery') !== 'false');
   const [nowTick, setNowTick] = useState(() => Date.now());
   useEffect(() => {
     const id = setInterval(() => setNowTick(Date.now()), 30_000);
@@ -1528,6 +1530,7 @@ export function App() {
     localStorage.setItem('printerCashier', printerCashier);
     localStorage.setItem('printingDisabled', String(printingDisabled));
     localStorage.setItem('paperWidth', paperWidth);
+    localStorage.setItem('autoPrintDelivery', String(autoPrintDelivery));
 
     if (currentCompany?.id) {
       try {
@@ -2830,8 +2833,34 @@ export function App() {
       }
       if (!running) return;
       try {
-        const deliveryOrders = await api.listDeliveryOrders('EM_PREPARO');
-        if (running) setKitchenDeliveryOrders(deliveryOrders as DeliveryOrder[]);
+        // Busca ativos (RECEBIDO + EM_PREPARO) para detectar novos pedidos
+        const activeOrders = await api.listDeliveryOrders() as DeliveryOrder[];
+        if (!running) return;
+
+        // Atualiza KDS com os em preparo
+        setKitchenDeliveryOrders(activeOrders.filter((o) => o.status === 'EM_PREPARO'));
+
+        // Detecta pedidos novos (RECEBIDO que ainda não foram vistos)
+        const isFirst = seenDeliveryOrderIds.current.size === 0;
+        for (const order of activeOrders) {
+          if (!seenDeliveryOrderIds.current.has(order.id)) {
+            seenDeliveryOrderIds.current.add(order.id);
+            // Não imprime na primeira carga (apenas marca como visto)
+            if (!isFirst && autoPrintDelivery && order.status === 'RECEBIDO') {
+              showToast(`🚲 Novo delivery: ${order.customerName}`, 'success');
+              void printKitchenTicket({
+                type: 'DELIVERY',
+                customerName: order.customerName,
+                customerAddress: order.customerAddress,
+                customerPhone: order.customerPhone,
+                paymentMethod: order.paymentMethod,
+                items: order.items.map((i) => ({ name: i.productName, quantity: i.quantity, note: i.note || undefined })),
+                notes: order.notes,
+                time: fmtTime(order.createdAt),
+              });
+            }
+          }
+        }
       } catch {
         // usuário sem acesso a delivery — ignora silenciosamente
       }
@@ -8976,6 +9005,13 @@ export function App() {
                   </label>
                   <p style={{ margin: '0 0 10px', fontSize: 12, color: '#9ca3af' }}>
                     Use se não tiver impressora térmica ou não quiser imprimir os pedidos/recibos. Nenhuma tela de impressão será aberta no celular ou computador.
+                  </p>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, flexDirection: 'row', marginBottom: 4 }}>
+                    <input type="checkbox" checked={autoPrintDelivery} onChange={(e) => setAutoPrintDelivery(e.target.checked)} style={{ width: 'auto' }} />
+                    <span>Imprimir ticket automaticamente ao receber delivery</span>
+                  </label>
+                  <p style={{ margin: '0 0 10px', fontSize: 12, color: '#9ca3af' }}>
+                    Quando ativado, ao chegar um novo pedido pelo cardápio digital o ticket da cozinha é impresso automaticamente e um aviso aparece na tela.
                   </p>
                   <label>
                     Largura da bobina de papel
