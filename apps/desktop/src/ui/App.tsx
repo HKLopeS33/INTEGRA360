@@ -3416,6 +3416,28 @@ export function App() {
               <div style={{ color: '#6b7280', fontSize: 13 }}>
                 ⏳ Aguardando confirmação do pagamento... a página atualiza automaticamente.
               </div>
+
+              {/* Ações de escape — voltar ao cardápio ou cancelar */}
+              <div style={{ marginTop: 28, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+                <button type="button"
+                  onClick={() => setPublicDeliveryStep('menu')}
+                  style={{ background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: 10, padding: '10px 22px', fontWeight: 600, fontSize: 14, cursor: 'pointer', width: '100%', maxWidth: 320 }}>
+                  ← Voltar ao cardápio
+                </button>
+                <button type="button"
+                  onClick={() => {
+                    if (!window.confirm('Cancelar o pedido? O QR Code Pix será descartado e você poderá começar um novo pedido.')) return;
+                    setPublicDeliveryStep('menu');
+                    setPublicDeliveryCart([]);
+                    setPublicDeliveryOrderId(null);
+                    setPublicPixCharge(null);
+                    setPublicPixError(null);
+                    setPublicDeliverySnapshot(null);
+                  }}
+                  style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: 13, cursor: 'pointer', textDecoration: 'underline', padding: '4px 8px' }}>
+                  Cancelar pedido e recomeçar
+                </button>
+              </div>
             </div>
           )}
 

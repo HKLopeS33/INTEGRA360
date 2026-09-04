@@ -1,7 +1,7 @@
 {
-  "name": "Cardápio Digital",
-  "short_name": "Cardápio",
-  "description": "Peça online pelo cardápio digital do estabelecimento.",
+  "name": "Integra360",
+  "short_name": "Integra360",
+  "description": "Painel de gestão Integra360 para restaurantes e estabelecimentos.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#18201d",
