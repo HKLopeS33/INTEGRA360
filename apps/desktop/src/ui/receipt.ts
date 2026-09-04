@@ -138,7 +138,8 @@ export function generateThermalHTML(data: ReceiptData) {
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
       width: ${cfg.bodyWidth};
-      margin: 0 auto;
+      margin: 0;
+      padding-left: 2mm;
       font-family: Arial, Helvetica, sans-serif;
       font-size: 12px;
       font-weight: 500;
@@ -156,7 +157,7 @@ export function generateThermalHTML(data: ReceiptData) {
     .bold    { font-weight: 700; }
     .footer  { font-size: 10px; font-weight: 500; line-height: 1.5; text-align: center; margin-top: 6px; }
     @media print {
-      html, body { width: ${cfg.bodyWidth}; margin: 0 auto; }
+      html, body { width: ${cfg.bodyWidth}; margin: 0; padding-left: 2mm; }
     }
   </style>
 </head>
