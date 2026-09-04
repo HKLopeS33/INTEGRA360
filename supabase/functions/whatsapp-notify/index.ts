@@ -73,37 +73,28 @@ Deno.serve(async (req) => {
     if (type === 'SAQUE_SOLICITADO') {
       const SUPORTE_PHONE = '5587999710850';
 
-      // Buscar empresa pelo usuário autenticado (mais confiável que buscar pelo withdrawalId)
-      const { data: companyUser } = await admin
-        .from('User')
-        .select('companyId')
-        .eq('id', user.id)
-        .maybeSingle();
-
-      const companyId = companyUser?.companyId ?? '';
-      const { data: company } = await admin
-        .from('Company')
-        .select('name')
-        .eq('id', companyId)
-        .maybeSingle();
-
       // Buscar dados do saque se withdrawalId fornecido
       let saqueAmountVal = amount ?? 0;
+      let companyName = 'Estabelecimento';
+
       if (withdrawalId) {
         const { data: withdrawal } = await admin
           .from('WalletWithdrawal')
-          .select('amount')
+          .select('amount, companyId')
           .eq('id', withdrawalId)
           .maybeSingle();
         if (withdrawal?.amount) saqueAmountVal = Number(withdrawal.amount);
+        if (withdrawal?.companyId) {
+          const { data: company } = await admin
+            .from('Company')
+            .select('name')
+            .eq('id', withdrawal.companyId)
+            .maybeSingle();
+          if (company?.name) companyName = company.name;
+        }
       }
 
-      const companyName = company?.name ?? 'Estabelecimento';
       const saqueAmount = formatCurrency(Number(saqueAmountVal));
-      const pixKey        = String(withdrawal?.pixKey ?? 'Não informado');
-      const requestedAt   = withdrawal?.requestedAt
-        ? new Date(withdrawal.requestedAt).toLocaleString('pt-BR')
-        : new Date().toLocaleString('pt-BR');
 
       const metaRes = await fetch(
         `https://graph.facebook.com/v20.0/${waPhoneNumberId}/messages`,
