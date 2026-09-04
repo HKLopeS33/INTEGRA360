@@ -238,7 +238,16 @@ export const publicDeliveryApi = {
 
     // Notificação WhatsApp para pedidos em dinheiro (status já é RECEBIDO no insert)
     if (!isOnlinePayment) {
-      fetch(`${SUPABASE_URL}/functions/v1/whatsapp-notify`, { method: 'POST', headers: { 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ orderId, status: 'RECEBIDO' }) }).catch(() => {});
+      fetch(`${SUPABASE_URL}/functions/v1/whatsapp-notify`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId, status: 'RECEBIDO' }),
+      })
+        .then(async (r) => {
+          const data = await r.json().catch(() => ({}));
+          console.log('[whatsapp-notify] status:', r.status, data);
+        })
+        .catch((err) => console.error('[whatsapp-notify] fetch error:', err));
     }
 
     return { id: orderId, receiptNumber };
