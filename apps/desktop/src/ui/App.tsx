@@ -372,6 +372,9 @@ export function App() {
   const approvedOrderIds = useRef<Set<string>>(new Set()); // IDs aprovados — filtrados em qualquer reload
   const seenDeliveryOrderIds = useRef<Set<string>>(new Set()); // IDs já vistos — evita reimprimir no polling
   const [autoPrintDelivery, setAutoPrintDelivery] = useState(() => localStorage.getItem('autoPrintDelivery') !== 'false');
+  const [pwaPrompt, setPwaPrompt] = useState<any>(null);       // evento beforeinstallprompt (Android/Chrome)
+  const [showPwaBanner, setShowPwaBanner] = useState(false);   // banner visível
+  const [pwaIsIos, setPwaIsIos] = useState(false);             // iOS: exibe instruções manuais
   const [nowTick, setNowTick] = useState(() => Date.now());
   useEffect(() => {
     const id = setInterval(() => setNowTick(Date.now()), 30_000);
@@ -2572,6 +2575,32 @@ export function App() {
     return () => subscription.unsubscribe();
   }, []);
 
+  // PWA install prompt — captura o evento no Android/Chrome e detecta iOS
+  useEffect(() => {
+    // Não exibe para usuários do app Electron (já é nativo)
+    if ((window as any).sistema) return;
+    // Não exibe se já instalado como PWA (standalone)
+    if (window.matchMedia('(display-mode: standalone)').matches) return;
+
+    const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent) && !(window as any).MSStream;
+
+    const handler = (e: Event) => {
+      e.preventDefault();
+      setPwaPrompt(e);
+      // Mostra o banner após 3s (dá tempo do usuário ver o cardápio)
+      setTimeout(() => setShowPwaBanner(true), 3000);
+    };
+
+    if (isIos) {
+      // iOS não dispara beforeinstallprompt — exibe banner com instruções após 4s
+      const timer = setTimeout(() => { setPwaIsIos(true); setShowPwaBanner(true); }, 4000);
+      return () => clearTimeout(timer);
+    }
+
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
   // Escuta eventos do auto-updater após a splash para mostrar botão na topbar
   useEffect(() => {
     const sistema = (window as any).sistema;
@@ -4161,6 +4190,46 @@ export function App() {
             </div>
           );
         })()}
+
+        {/* Banner PWA — instalar o cardápio como app */}
+        {showPwaBanner && (
+          <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 99999, background: '#18201d', color: '#fff', padding: '16px 20px', boxShadow: '0 -4px 24px rgba(0,0,0,0.3)', display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+            <div style={{ fontSize: 32, lineHeight: 1 }}>📲</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              {pwaIsIos ? (
+                <>
+                  <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>Adicione ao início</div>
+                  <div style={{ fontSize: 13, color: '#a8b5b0', lineHeight: 1.4 }}>
+                    Toque em <strong style={{ color: '#fff' }}>Compartilhar</strong> <span style={{ fontSize: 15 }}>⎋</span> e depois em <strong style={{ color: '#fff' }}>"Adicionar à Tela de Início"</strong> para abrir sem precisar do link.
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>Instalar o cardápio</div>
+                  <div style={{ fontSize: 13, color: '#a8b5b0', marginBottom: 12, lineHeight: 1.4 }}>
+                    Salve o cardápio na tela inicial para acessar mais rápido, sem precisar do link.
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (pwaPrompt) { pwaPrompt.prompt(); const { outcome } = await pwaPrompt.userChoice; if (outcome === 'accepted') setShowPwaBanner(false); }
+                      }}
+                      style={{ background: '#f1c44e', color: '#18201d', border: 'none', borderRadius: 8, padding: '9px 18px', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+                      Instalar
+                    </button>
+                    <button type="button" onClick={() => setShowPwaBanner(false)}
+                      style={{ background: 'transparent', color: '#a8b5b0', border: '1px solid #3a4a45', borderRadius: 8, padding: '9px 14px', fontSize: 13, cursor: 'pointer' }}>
+                      Agora não
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+            <button type="button" onClick={() => setShowPwaBanner(false)}
+              style={{ background: 'none', border: 'none', color: '#a8b5b0', fontSize: 20, cursor: 'pointer', padding: 0, flexShrink: 0, marginTop: -2 }}>✕</button>
+          </div>
+        )}
       </main>
     );
   }
