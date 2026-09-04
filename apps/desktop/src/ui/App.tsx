@@ -9077,7 +9077,35 @@ export function App() {
                       </p>
                     </>
                   ))}
-                  <button className="primary-button" type="button" style={{ marginTop: 8, width: 'fit-content' }} onClick={saveStoreSettings}>Salvar impressoras</button>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+                    <button className="primary-button" type="button" style={{ width: 'fit-content' }} onClick={saveStoreSettings}>Salvar impressoras</button>
+                    {(window as any).sistema?.printSilent && (
+                      <>
+                        <button type="button" className="secondary-button" style={{ fontSize: 12 }}
+                          onClick={() => {
+                            if (!printerCashier) return showToast('Configure a impressora do caixa primeiro.', 'warning');
+                            const html = `<!doctype html><html><body style="font-family:Arial;font-size:14px;padding:10px"><b>✅ Teste de impressão — Caixa</b><br>${storeName || 'Integra360'}<br>${new Date().toLocaleString('pt-BR')}</body></html>`;
+                            (window as any).sistema.printSilent(html, printerCashier).then((r: any) => {
+                              if (r.success) showToast('Impressão de teste enviada ao Caixa.', 'success');
+                              else showToast(`Falha: ${r.reason}`, 'error');
+                            });
+                          }}>
+                          🖨️ Testar Caixa
+                        </button>
+                        <button type="button" className="secondary-button" style={{ fontSize: 12 }}
+                          onClick={() => {
+                            if (!printerKitchen) return showToast('Configure a impressora da cozinha primeiro.', 'warning');
+                            const html = `<!doctype html><html><body style="font-family:Arial;font-size:14px;padding:10px"><b>✅ Teste de impressão — Cozinha</b><br>${storeName || 'Integra360'}<br>${new Date().toLocaleString('pt-BR')}</body></html>`;
+                            (window as any).sistema.printSilent(html, printerKitchen).then((r: any) => {
+                              if (r.success) showToast('Impressão de teste enviada à Cozinha.', 'success');
+                              else showToast(`Falha: ${r.reason}`, 'error');
+                            });
+                          }}>
+                          🖨️ Testar Cozinha
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
 
                 {/* Segurança — Alterar senha */}
