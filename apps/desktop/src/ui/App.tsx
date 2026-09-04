@@ -2587,13 +2587,13 @@ export function App() {
     const handler = (e: Event) => {
       e.preventDefault();
       setPwaPrompt(e);
-      // Mostra o banner após 3s (dá tempo do usuário ver o cardápio)
-      setTimeout(() => setShowPwaBanner(true), 3000);
+      // Mostra o banner após 5s no painel do gestor (espera o gestor estar logado e orientado)
+      setTimeout(() => setShowPwaBanner(true), 5000);
     };
 
     if (isIos) {
-      // iOS não dispara beforeinstallprompt — exibe banner com instruções após 4s
-      const timer = setTimeout(() => { setPwaIsIos(true); setShowPwaBanner(true); }, 4000);
+      // iOS não dispara beforeinstallprompt — exibe banner com instruções após 6s
+      const timer = setTimeout(() => { setPwaIsIos(true); setShowPwaBanner(true); }, 6000);
       return () => clearTimeout(timer);
     }
 
@@ -4191,45 +4191,6 @@ export function App() {
           );
         })()}
 
-        {/* Banner PWA — instalar o cardápio como app */}
-        {showPwaBanner && (
-          <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 99999, background: '#18201d', color: '#fff', padding: '16px 20px', boxShadow: '0 -4px 24px rgba(0,0,0,0.3)', display: 'flex', alignItems: 'flex-start', gap: 14 }}>
-            <div style={{ fontSize: 32, lineHeight: 1 }}>📲</div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              {pwaIsIos ? (
-                <>
-                  <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>Adicione ao início</div>
-                  <div style={{ fontSize: 13, color: '#a8b5b0', lineHeight: 1.4 }}>
-                    Toque em <strong style={{ color: '#fff' }}>Compartilhar</strong> <span style={{ fontSize: 15 }}>⎋</span> e depois em <strong style={{ color: '#fff' }}>"Adicionar à Tela de Início"</strong> para abrir sem precisar do link.
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>Instalar o cardápio</div>
-                  <div style={{ fontSize: 13, color: '#a8b5b0', marginBottom: 12, lineHeight: 1.4 }}>
-                    Salve o cardápio na tela inicial para acessar mais rápido, sem precisar do link.
-                  </div>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        if (pwaPrompt) { pwaPrompt.prompt(); const { outcome } = await pwaPrompt.userChoice; if (outcome === 'accepted') setShowPwaBanner(false); }
-                      }}
-                      style={{ background: '#f1c44e', color: '#18201d', border: 'none', borderRadius: 8, padding: '9px 18px', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
-                      Instalar
-                    </button>
-                    <button type="button" onClick={() => setShowPwaBanner(false)}
-                      style={{ background: 'transparent', color: '#a8b5b0', border: '1px solid #3a4a45', borderRadius: 8, padding: '9px 14px', fontSize: 13, cursor: 'pointer' }}>
-                      Agora não
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-            <button type="button" onClick={() => setShowPwaBanner(false)}
-              style={{ background: 'none', border: 'none', color: '#a8b5b0', fontSize: 20, cursor: 'pointer', padding: 0, flexShrink: 0, marginTop: -2 }}>✕</button>
-          </div>
-        )}
       </main>
     );
   }
@@ -4576,6 +4537,46 @@ export function App() {
   // Main app screen
   return (
     <main className="app-shell authenticated">
+      {/* ── Banner PWA — instalar o painel do gestor como app ───────── */}
+      {showPwaBanner && (
+        <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 99999, background: '#18201d', color: '#fff', padding: '16px 20px', boxShadow: '0 -4px 24px rgba(0,0,0,0.3)', display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+          <div style={{ fontSize: 32, lineHeight: 1 }}>📲</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            {pwaIsIos ? (
+              <>
+                <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>Instale o painel de gestão</div>
+                <div style={{ fontSize: 13, color: '#a8b5b0', lineHeight: 1.4 }}>
+                  Toque em <strong style={{ color: '#fff' }}>Compartilhar</strong> <span style={{ fontSize: 15 }}>⎋</span> e depois em <strong style={{ color: '#fff' }}>"Adicionar à Tela de Início"</strong> para acessar o painel sem precisar do link.
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>Instalar painel de gestão</div>
+                <div style={{ fontSize: 13, color: '#a8b5b0', marginBottom: 12, lineHeight: 1.4 }}>
+                  Salve o painel na tela inicial para acessar mais rápido, sem precisar do navegador.
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (pwaPrompt) { pwaPrompt.prompt(); const { outcome } = await pwaPrompt.userChoice; if (outcome === 'accepted') setShowPwaBanner(false); }
+                    }}
+                    style={{ background: '#f1c44e', color: '#18201d', border: 'none', borderRadius: 8, padding: '9px 18px', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+                    Instalar
+                  </button>
+                  <button type="button" onClick={() => setShowPwaBanner(false)}
+                    style={{ background: 'transparent', color: '#a8b5b0', border: '1px solid #3a4a45', borderRadius: 8, padding: '9px 14px', fontSize: 13, cursor: 'pointer' }}>
+                    Agora não
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+          <button type="button" onClick={() => setShowPwaBanner(false)}
+            style={{ background: 'none', border: 'none', color: '#a8b5b0', fontSize: 20, cursor: 'pointer', padding: 0, flexShrink: 0, marginTop: -2 }}>✕</button>
+        </div>
+      )}
+
       {/* ── Banner de atualização Android ───────────────────────────── */}
       {androidUpdateAvailable && androidUpdateUrl && (
         <div style={{
