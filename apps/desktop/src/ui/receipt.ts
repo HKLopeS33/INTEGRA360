@@ -6,6 +6,8 @@ export type ReceiptItem = {
   note?: string | null;
 };
 
+export type PaperWidth = '48' | '58' | '80';
+
 export type ReceiptData = {
   companyName?: string;
   cnpj?: string;
@@ -22,6 +24,7 @@ export type ReceiptData = {
   paymentMethod?: string;
   date?: string;
   nota?: string;
+  paperWidth?: PaperWidth;
 };
 
 const formatCurrency = (value: number) =>
@@ -37,10 +40,17 @@ function padLeft(str: string, len: number) {
   return ' '.repeat(len - str.length) + str;
 }
 
-// 58mm térmico — ~32 caracteres por linha em 13px Courier
-const LINE_WIDTH = 32;
+// Configurações por largura de bobina
+const PAPER_CONFIGS: Record<string, { lineWidth: number; pageWidth: string; bodyWidth: string }> = {
+  '48': { lineWidth: 24, pageWidth: '48mm', bodyWidth: '46mm' },
+  '58': { lineWidth: 32, pageWidth: '58mm', bodyWidth: '56mm' },
+  '80': { lineWidth: 48, pageWidth: '80mm', bodyWidth: '78mm' },
+};
 
 export function generateThermalHTML(data: ReceiptData) {
+  const cfg = PAPER_CONFIGS[data.paperWidth ?? '58'] ?? PAPER_CONFIGS['58'];
+  const LINE_WIDTH = cfg.lineWidth;
+
   const now = data.date ? new Date(data.date) : new Date();
   const TZ = 'America/Recife'; // Pernambuco — UTC-3 fixo, sem horário de verão
   const dateStr = `${now.toLocaleDateString('pt-BR', { timeZone: TZ })} ${now.toLocaleTimeString('pt-BR', { timeZone: TZ })}`;
@@ -54,10 +64,10 @@ export function generateThermalHTML(data: ReceiptData) {
     : '000000';
   const tableName = data.tableName ? `MESA: ${data.tableName.toUpperCase()}` : '';
 
-  // Itens: nome (max 18), qtd (3), total (9) — total 32
-  const NAME_W  = 18;
-  const QTY_W   = 3;
+  // Colunas proporcionais à largura: nome / qtd(3) / total(9)
   const TOTAL_W = 9;
+  const QTY_W   = 3;
+  const NAME_W  = LINE_WIDTH - QTY_W - TOTAL_W - 2; // 2 espaços de separação
 
   const itemsLines = data.items
     .flatMap((item) => {
@@ -72,10 +82,19 @@ export function generateThermalHTML(data: ReceiptData) {
       );
       const lines: string[] = [`${name} ${qty} ${total}`];
       if (item.note) {
-        const noteText = `  > ${item.note}`;
-        for (let i = 0; i < noteText.length; i += LINE_WIDTH) {
-          lines.push(noteText.slice(i, i + LINE_WIDTH));
+        // Word-boundary wrap to avoid mid-word cuts
+        const prefix = '  > ';
+        const words = item.note.split(' ');
+        let currentLine = prefix;
+        for (const word of words) {
+          if (currentLine.length + (currentLine === prefix ? 0 : 1) + word.length > LINE_WIDTH) {
+            lines.push(currentLine);
+            currentLine = '     ' + word; // indent continuation lines
+          } else {
+            currentLine += (currentLine === prefix ? '' : ' ') + word;
+          }
         }
+        if (currentLine.trim()) lines.push(currentLine);
       }
       return lines;
     })
@@ -113,12 +132,12 @@ export function generateThermalHTML(data: ReceiptData) {
   <style>
     /* Controla exatamente o tamanho do papel e margens na impressora */
     @page {
-      size: 58mm auto;
+      size: ${cfg.pageWidth} auto;
       margin: 2mm 1mm;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
-      width: 56mm;
+      width: ${cfg.bodyWidth};
       font-family: Arial, Helvetica, sans-serif;
       font-size: 12px;
       font-weight: 500;
@@ -136,7 +155,7 @@ export function generateThermalHTML(data: ReceiptData) {
     .bold    { font-weight: 700; }
     .footer  { font-size: 10px; font-weight: 500; line-height: 1.5; text-align: center; margin-top: 6px; }
     @media print {
-      html, body { width: 56mm; }
+      html, body { width: ${cfg.bodyWidth}; }
     }
   </style>
 </head>
@@ -195,7 +214,9 @@ export function generateKitchenTicketHTML(data: {
   notes?: string;
   paymentMethod?: string;
   time: string;
+  paperWidth?: PaperWidth;
 }): string {
+  const cfg = PAPER_CONFIGS[data.paperWidth ?? '58'] ?? PAPER_CONFIGS['58'];
   const sep = '================================';
   const sepDash = '--------------------------------';
 
@@ -204,15 +225,15 @@ export function generateKitchenTicketHTML(data: {
 <head>
   <meta charset="utf-8" />
   <style>
-    @page { size: 58mm auto; margin: 2mm 1mm; }
+    @page { size: ${cfg.pageWidth} auto; margin: 2mm 1mm; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { width: 56mm; font-family: Arial, Helvetica, sans-serif; font-size: 13px; font-weight: 600; line-height: 1.6; color: #000; background: #fff; }
+    html, body { width: ${cfg.bodyWidth}; font-family: Arial, Helvetica, sans-serif; font-size: 13px; font-weight: 600; line-height: 1.6; color: #000; background: #fff; }
     .center { text-align: center; }
     .big { font-size: 16px; font-weight: 800; }
     .item { font-size: 14px; font-weight: 700; margin: 4px 0; }
     .note { font-size: 11px; font-weight: 500; color: #333; padding-left: 8px; }
     .sep { border-top: 2px solid #000; margin: 5px 0; }
-    @media print { html, body { width: 56mm; } }
+    @media print { html, body { width: ${cfg.bodyWidth}; } }
   </style>
 </head>
 <body>

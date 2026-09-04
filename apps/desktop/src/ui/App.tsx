@@ -351,6 +351,7 @@ export function App() {
   const [printerKitchen, setPrinterKitchen] = useState('');
   const [printerCashier, setPrinterCashier] = useState('');
   const [printingDisabled, setPrintingDisabled] = useState(false);
+  const [paperWidth, setPaperWidth] = useState<'48' | '58' | '80'>('58');
   const [availablePrinters, setAvailablePrinters] = useState<Array<{ name: string; isDefault: boolean }>>([]);
   const [showCategoryForm, setShowCategoryForm] = useState(false);
 
@@ -863,6 +864,8 @@ export function App() {
     setPrinterKitchen(localStorage.getItem('printerKitchen') ?? '');
     setPrinterCashier(localStorage.getItem('printerCashier') ?? '');
     setPrintingDisabled(localStorage.getItem('printingDisabled') === 'true');
+    const savedPaper = localStorage.getItem('paperWidth');
+    if (savedPaper === '48' || savedPaper === '58' || savedPaper === '80') setPaperWidth(savedPaper);
     // Carrega lista de impressoras disponíveis (só no Electron)
     const sistema = (window as any).sistema;
     if (sistema?.listPrinters) {
@@ -1524,6 +1527,7 @@ export function App() {
     localStorage.setItem('printerKitchen', printerKitchen);
     localStorage.setItem('printerCashier', printerCashier);
     localStorage.setItem('printingDisabled', String(printingDisabled));
+    localStorage.setItem('paperWidth', paperWidth);
 
     if (currentCompany?.id) {
       try {
@@ -1896,12 +1900,12 @@ export function App() {
         paymentMethod: publicDeliveryPayment,
         deliveryFee: publicDeliveryFee,
         notes: publicDeliveryNotes || undefined,
-        items: publicDeliveryCart.map((i) => ({
-          productId: i.product.id,
-          productName: i.product.name,
-          quantity: i.quantity,
-          unitPrice: i.product.price,
-          note: i.note || undefined,
+        items: cartSnapshot.map((snap, idx) => ({
+          productId: publicDeliveryCart[idx]?.product.id,
+          productName: snap.name,
+          quantity: snap.quantity,
+          unitPrice: snap.unitPrice,
+          note: snap.note || undefined,
         })),
       });
       setPublicDeliveryOrderId(result.id);
@@ -2922,9 +2926,9 @@ export function App() {
     }
   };
 
-  const printKitchenTicket = async (ticketData: Parameters<typeof generateKitchenTicketHTML>[0]) => {
+  const printKitchenTicket = async (ticketData: Omit<Parameters<typeof generateKitchenTicketHTML>[0], 'paperWidth'>) => {
     if (printingDisabled) return;
-    const html = generateKitchenTicketHTML(ticketData);
+    const html = generateKitchenTicketHTML({ ...ticketData, paperWidth });
     const sistema = (window as any).sistema;
     if (sistema?.printSilent && printerKitchen) {
       const result = await sistema.printSilent(html, printerKitchen);
@@ -2938,15 +2942,16 @@ export function App() {
     }
   };
 
-  const printCashierReceipt = async (data: Parameters<typeof generateThermalHTML>[0]) => {
+  const printCashierReceipt = async (data: Omit<Parameters<typeof generateThermalHTML>[0], 'paperWidth'>) => {
     if (printingDisabled) return;
+    const dataWithPaper = { ...data, paperWidth };
     const sistema = (window as any).sistema;
     if (sistema?.printSilent && printerCashier) {
-      const html = generateThermalHTML(data);
+      const html = generateThermalHTML(dataWithPaper);
       const result = await sistema.printSilent(html, printerCashier);
       if (!result?.success) showToast(`Erro ao imprimir recibo: ${result?.reason ?? ''}`, 'error');
     } else {
-      printReceipt(data);
+      printReceipt(dataWithPaper);
     }
   };
 
@@ -8971,6 +8976,17 @@ export function App() {
                   </label>
                   <p style={{ margin: '0 0 10px', fontSize: 12, color: '#9ca3af' }}>
                     Use se não tiver impressora térmica ou não quiser imprimir os pedidos/recibos. Nenhuma tela de impressão será aberta no celular ou computador.
+                  </p>
+                  <label>
+                    Largura da bobina de papel
+                    <select value={paperWidth} onChange={(e) => setPaperWidth(e.target.value as '48' | '58' | '80')} style={{ marginTop: 4 }}>
+                      <option value="48">48mm — bobina estreita (~24 colunas)</option>
+                      <option value="58">58mm — padrão térmico (~32 colunas)</option>
+                      <option value="80">80mm — bobina larga (~48 colunas)</option>
+                    </select>
+                  </label>
+                  <p style={{ margin: '2px 0 10px', fontSize: 12, color: '#9ca3af' }}>
+                    Ajusta o layout do recibo e do ticket da cozinha para o tamanho da bobina instalada na impressora.
                   </p>
                   {!printingDisabled && ((window as any).sistema?.listPrinters ? (
                     <>
