@@ -371,7 +371,10 @@ export function App() {
   const approvingRefundLock = useRef(false); // guard síncrono contra double-click com stale closure
   const approvedOrderIds = useRef<Set<string>>(new Set()); // IDs aprovados — filtrados em qualquer reload
   const seenDeliveryOrderIds = useRef<Set<string>>(new Set()); // IDs já vistos — evita reimprimir no polling
+  const seenTableOrderIds = useRef<Set<string>>(new Set());   // IDs de pedidos de mesa já vistos
+  const ordersRef = useRef<Order[]>([]);                       // espelho do state orders para o polling
   const [autoPrintDelivery, setAutoPrintDelivery] = useState(() => localStorage.getItem('autoPrintDelivery') !== 'false');
+  const [autoPrintTable, setAutoPrintTable] = useState(() => localStorage.getItem('autoPrintTable') !== 'false');
   const [pwaPrompt, setPwaPrompt] = useState<any>(null);       // evento beforeinstallprompt (Android/Chrome)
   const [showPwaBanner, setShowPwaBanner] = useState(false);   // banner visível
   const [pwaIsIos, setPwaIsIos] = useState(false);             // iOS: exibe instruções manuais
@@ -1534,6 +1537,7 @@ export function App() {
     localStorage.setItem('printingDisabled', String(printingDisabled));
     localStorage.setItem('paperWidth', paperWidth);
     localStorage.setItem('autoPrintDelivery', String(autoPrintDelivery));
+    localStorage.setItem('autoPrintTable', String(autoPrintTable));
 
     if (currentCompany?.id) {
       try {
@@ -2755,7 +2759,7 @@ export function App() {
     ]);
 
     if (tablesResult.status === 'fulfilled') setTables(tablesResult.value);
-    if (ordersResult.status === 'fulfilled') setOrders(ordersResult.value);
+    if (ordersResult.status === 'fulfilled') { setOrders(ordersResult.value); ordersRef.current = ordersResult.value; }
     if (kitchenResult.status === 'fulfilled') setKitchenOrders(kitchenResult.value);
   };
 
@@ -2856,7 +2860,42 @@ export function App() {
     const tick = async () => {
       if (!running || !initialLoadDone.current) return;
       try {
+        const prevOrders = ordersRef.current;
         await reloadTablesAndOrders();
+        const nextOrders = ordersRef.current;
+
+        // Detecta novos pedidos de MESA (ENVIADO que ainda não foram vistos)
+        const isFirstTable = seenTableOrderIds.current.size === 0;
+        for (const order of nextOrders) {
+          if (!seenTableOrderIds.current.has(order.id)) {
+            seenTableOrderIds.current.add(order.id);
+            if (!isFirstTable && autoPrintTable && order.status === 'ENVIADO') {
+              showToast(`🍽️ Novo pedido: ${order.tableName}`, 'success');
+              // Ticket da cozinha
+              void printKitchenTicket({
+                type: 'MESA',
+                tableName: order.tableName,
+                items: order.items.map((i) => ({ name: i.productName, quantity: i.quantity, note: i.note || undefined })),
+                time: fmtTime(order.createdAt),
+              });
+              // Recibo do caixa
+              const tableItems = order.items.map((i) => ({ name: i.productName, quantity: i.quantity, unitPrice: i.unitPrice, total: i.quantity * i.unitPrice, note: i.note || null }));
+              const tableSubtotal = tableItems.reduce((s, i) => s + i.total, 0);
+              void printCashierReceipt({
+                companyName: storeName,
+                cnpj: storeCnpj ? `CNPJ: ${storeCnpj}` : undefined,
+                address: storeAddress,
+                phone: storePhone,
+                tableName: order.tableName,
+                items: tableItems,
+                subtotal: tableSubtotal,
+                total: tableSubtotal,
+                date: order.createdAt,
+              });
+            }
+          }
+        }
+        void prevOrders; // suprime warning de unused
       } catch (e) {
         console.error('[auto-refresh] reloadTablesAndOrders:', e);
       }
@@ -2877,6 +2916,7 @@ export function App() {
             // Não imprime na primeira carga (apenas marca como visto)
             if (!isFirst && autoPrintDelivery && order.status === 'RECEBIDO') {
               showToast(`🚲 Novo delivery: ${order.customerName}`, 'success');
+              // Ticket da cozinha
               void printKitchenTicket({
                 type: 'DELIVERY',
                 customerName: order.customerName,
@@ -2887,6 +2927,8 @@ export function App() {
                 notes: order.notes,
                 time: fmtTime(order.createdAt),
               });
+              // Recibo do caixa (auto)
+              void printDeliveryReceipt(order);
             }
           }
         }
@@ -9100,10 +9142,17 @@ export function App() {
                   </p>
                   <label style={{ display: 'flex', alignItems: 'center', gap: 8, flexDirection: 'row', marginBottom: 4 }}>
                     <input type="checkbox" checked={autoPrintDelivery} onChange={(e) => setAutoPrintDelivery(e.target.checked)} style={{ width: 'auto' }} />
-                    <span>Imprimir ticket automaticamente ao receber delivery</span>
+                    <span>Imprimir automaticamente ao receber delivery</span>
                   </label>
                   <p style={{ margin: '0 0 10px', fontSize: 12, color: '#9ca3af' }}>
-                    Quando ativado, ao chegar um novo pedido pelo cardápio digital o ticket da cozinha é impresso automaticamente e um aviso aparece na tela.
+                    Ao chegar um novo pedido pelo cardápio digital, imprime automaticamente o ticket da cozinha e o recibo do caixa.
+                  </p>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, flexDirection: 'row', marginBottom: 4 }}>
+                    <input type="checkbox" checked={autoPrintTable} onChange={(e) => setAutoPrintTable(e.target.checked)} style={{ width: 'auto' }} />
+                    <span>Imprimir automaticamente ao receber pedido de mesa</span>
+                  </label>
+                  <p style={{ margin: '0 0 10px', fontSize: 12, color: '#9ca3af' }}>
+                    Ao chegar um novo pedido de mesa pelo garçom, imprime automaticamente o ticket da cozinha e o recibo do caixa.
                   </p>
                   <label>
                     Largura da bobina de papel
