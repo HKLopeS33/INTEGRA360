@@ -41,10 +41,10 @@ function padLeft(str: string, len: number) {
 }
 
 // Configurações por largura de bobina
-const PAPER_CONFIGS: Record<string, { lineWidth: number; pageWidth: string; bodyWidth: string }> = {
-  '48': { lineWidth: 24, pageWidth: '48mm', bodyWidth: '46mm' },
-  '58': { lineWidth: 32, pageWidth: '58mm', bodyWidth: '56mm' },
-  '80': { lineWidth: 48, pageWidth: '80mm', bodyWidth: '78mm' },
+const PAPER_CONFIGS: Record<string, { lineWidth: number; pageWidth: string; bodyWidth: string; pageMargin: string }> = {
+  '48': { lineWidth: 22, pageWidth: '48mm', bodyWidth: '44mm', pageMargin: '2mm 2mm' },
+  '58': { lineWidth: 30, pageWidth: '58mm', bodyWidth: '54mm', pageMargin: '2mm 2mm' },
+  '80': { lineWidth: 46, pageWidth: '80mm', bodyWidth: '76mm', pageMargin: '2mm 2mm' },
 };
 
 export function generateThermalHTML(data: ReceiptData) {
@@ -133,7 +133,7 @@ export function generateThermalHTML(data: ReceiptData) {
     /* Controla exatamente o tamanho do papel e margens na impressora */
     @page {
       size: ${cfg.pageWidth} auto;
-      margin: 2mm 1mm;
+      margin: ${cfg.pageMargin};
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
@@ -225,7 +225,7 @@ export function generateKitchenTicketHTML(data: {
 <head>
   <meta charset="utf-8" />
   <style>
-    @page { size: ${cfg.pageWidth} auto; margin: 2mm 1mm; }
+    @page { size: ${cfg.pageWidth} auto; margin: ${cfg.pageMargin}; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { width: ${cfg.bodyWidth}; font-family: Arial, Helvetica, sans-serif; font-size: 13px; font-weight: 600; line-height: 1.6; color: #000; background: #fff; }
     .center { text-align: center; }
