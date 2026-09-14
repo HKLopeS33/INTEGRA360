@@ -9,32 +9,32 @@ import { getCompanyById, getCompanyForCurrentUser, getUserRowById, invalidateUse
 const naturalNameCompare = (a: string, b: string) =>
   (a ?? '').localeCompare(b ?? '', 'pt-BR', { numeric: true, sensitivity: 'base' });
 
-// Cria usuário no Supabase Auth via Admin REST API (service role key).
-// Isso é necessário para aceitar emails com domínios internos (.local, etc.)
-// e confirmar o email automaticamente sem enviar mensagem.
+// Operações de Auth que exigem service role key são delegadas à Edge Function
+// admin-auth — a service role key NUNCA é exposta no bundle do frontend.
 const SUPABASE_URL: string = import.meta.env.VITE_SUPABASE_URL as string;
-const SUPABASE_SERVICE_KEY: string = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY as string;
 const SUPABASE_ANON_KEY: string = (import.meta.env.VITE_SUPABASE_ANON_KEY ?? import.meta.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY) as string;
 
+// Helper para chamar a Edge Function admin-auth com o token do usuário atual
+const adminAuthFetch = async (action: string, payload: Record<string, unknown>) => {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token ?? '';
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/admin-auth`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+      'apikey': SUPABASE_ANON_KEY,
+    },
+    body: JSON.stringify({ action, ...payload }),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((json as any).error || `Erro ${res.status}`);
+  return json;
+};
+
 const createAuthUser = async (email: string, password: string, metadata: Record<string, any>) => {
-  if (SUPABASE_SERVICE_KEY) {
-    const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
-        'apikey': SUPABASE_SERVICE_KEY
-      },
-      body: JSON.stringify({ email, password, email_confirm: true, user_metadata: metadata })
-    });
-    const json = await res.json();
-    if (!res.ok) throw new Error(json.msg || json.message || `Erro ${res.status} ao criar usuário.`);
-    return json as { id: string; email: string };
-  }
-  // Fallback sem service key (requer email real e confirmação)
-  const { data, error } = await supabase.auth.signUp({ email, password, options: { data: metadata } });
-  if (error || !data.user) throw new Error(error?.message || 'Falha ao criar usuário.');
-  return data.user;
+  const data = await adminAuthFetch('create_user', { email, password, metadata });
+  return data as { id: string; email: string };
 };
 
 const throwSupabaseError = (error: any, defaultMessage: string) => {
@@ -2407,17 +2407,12 @@ export const api = {
     await requireSuperUser();
 
     // Busca todos os usuários da empresa para remover do Supabase Auth
+    // A deleção é feita via Edge Function admin-auth (service key server-side)
     const { data: users } = await supabase.from('User').select('id').eq('companyId', companyId);
-    if (users && users.length > 0 && SUPABASE_SERVICE_KEY) {
-      await Promise.all(users.map(async (u) => {
-        await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${u.id}`, {
-          method: 'DELETE',
-          headers: {
-            'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
-            'apikey': SUPABASE_SERVICE_KEY
-          }
-        });
-      }));
+    if (users && users.length > 0) {
+      await adminAuthFetch('delete_users', { userIds: users.map((u) => u.id) }).catch((e) => {
+        console.warn('Falha ao deletar usuários do Auth (empresa será removida do banco):', e);
+      });
     }
 
     const { error } = await supabase.from('Company').delete().eq('id', companyId);
