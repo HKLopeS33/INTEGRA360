@@ -2937,11 +2937,34 @@ export function App() {
       }
     };
 
-    const intervalId = setInterval(() => { void tick(); }, 3000);
+    // ── Supabase Realtime: reage imediatamente a mudanças no banco ──────────
+    // Substitui o polling de 3s — fallback de 30s apenas para resiliência
+    const companyId = currentUser?.companyId ?? null;
+    let realtimeChannel: ReturnType<typeof supabase.channel> | null = null;
+
+    if (companyId) {
+      realtimeChannel = supabase
+        .channel(`orders-realtime-${companyId}`)
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'Order', filter: `companyId=eq.${companyId}` },
+          () => { void tick(); },
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'DeliveryOrder', filter: `companyId=eq.${companyId}` },
+          () => { void tick(); },
+        )
+        .subscribe();
+    }
+
+    // Fallback: polling a cada 30s (só para resiliência se Realtime cair)
+    const intervalId = setInterval(() => { void tick(); }, 30_000);
 
     return () => {
       running = false;
       clearInterval(intervalId);
+      if (realtimeChannel) supabase.removeChannel(realtimeChannel);
     };
   }, [isAuthenticated, currentUser]);
 

@@ -11,6 +11,57 @@ import { corsHeaders } from '../_shared/cors.ts';
 import { getMasterAccessToken } from '../_shared/platformMercadoPago.ts';
 import { creditDeliveryWallet, creditTabWallet } from '../_shared/walletCredit.ts';
 
+// ── Verificação de assinatura do Mercado Pago ──────────────────────────────
+// Docs: https://www.mercadopago.com.br/developers/pt/docs/your-integrations/notifications/webhooks
+async function verifyMpSignature(req: Request, rawBody: string): Promise<boolean> {
+  const secret = Deno.env.get('MP_WEBHOOK_SECRET');
+  // Se não configurado, passa (compatibilidade retroativa — configure o secret!)
+  if (!secret) {
+    console.warn('MP_WEBHOOK_SECRET não configurado — verificação de assinatura desativada!');
+    return true;
+  }
+
+  const xSignature = req.headers.get('x-signature');
+  const xRequestId = req.headers.get('x-request-id');
+  const url        = new URL(req.url);
+  const dataId     = url.searchParams.get('data.id') ?? url.searchParams.get('id');
+
+  if (!xSignature) {
+    console.warn('Webhook sem x-signature rejeitado');
+    return false;
+  }
+
+  // Extrair ts e v1 do header: "ts=123456789,v1=abc123..."
+  const parts: Record<string, string> = {};
+  xSignature.split(',').forEach((p) => {
+    const [k, v] = p.split('=');
+    if (k && v) parts[k.trim()] = v.trim();
+  });
+  const ts = parts['ts'];
+  const v1 = parts['v1'];
+  if (!ts || !v1) return false;
+
+  // Montar template: id:{dataId};request-id:{xRequestId};ts:{ts};
+  const template = [
+    dataId        ? `id:${dataId}`               : null,
+    xRequestId    ? `request-id:${xRequestId}`   : null,
+    `ts:${ts}`,
+  ].filter(Boolean).join(';') + ';';
+
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    'raw', encoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+  );
+  const sigBuffer = await crypto.subtle.sign('HMAC', key, encoder.encode(template));
+  const computed  = Array.from(new Uint8Array(sigBuffer)).map((b) => b.toString(16).padStart(2, '0')).join('');
+
+  if (computed !== v1) {
+    console.warn('Assinatura MP inválida. computed:', computed, 'received:', v1);
+    return false;
+  }
+  return true;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -18,7 +69,15 @@ Deno.serve(async (req) => {
 
   try {
     const url = new URL(req.url);
-    const body = await req.json().catch(() => ({}));
+    const rawBody = await req.text();
+
+    // ── Verificar assinatura antes de qualquer processamento ──────────────
+    const signatureOk = await verifyMpSignature(req, rawBody);
+    if (!signatureOk) {
+      return new Response('invalid signature', { status: 401, headers: corsHeaders });
+    }
+
+    const body = JSON.parse(rawBody || '{}');
 
     // Mercado Pago sends either ?topic=payment&id=123 or { type: 'payment', data: { id } }
     const paymentId =

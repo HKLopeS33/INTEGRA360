@@ -16,7 +16,9 @@
     "preview": "vite preview --host 127.0.0.1 --port 4173",
     "electron:dev": "electron .",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint \"src/**/*.{ts,tsx}\""
+    "lint": "eslint \"src/**/*.{ts,tsx}\"",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.3",
@@ -35,7 +37,8 @@
     "electron-builder": "^25.1.8",
     "eslint": "^9.28.0",
     "typescript": "^5.8.3",
-    "vite": "^6.3.5"
+    "vite": "^6.3.5",
+    "vitest": "^2.1.9"
   },
   "build": {
     "appId": "com.integra360.app",

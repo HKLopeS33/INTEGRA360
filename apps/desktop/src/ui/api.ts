@@ -1299,23 +1299,22 @@ export const api = {
       throwSupabaseError(updateError, 'Falha ao atualizar pedido.');
     }
 
-    const { data: tab } = await supabase.from('Tab').select('id,tableId').eq('id', updated.tabId).single();
-    const { data: table } = await supabase.from('RestaurantTable').select('id,name').eq('id', tab?.tableId).single();
-    const { data: items } = await supabase.from('OrderItem').select('id,orderId,productId,quantity,unitPrice,note').eq('orderId', updated.id);
-    const productIds = (items || []).map((item) => item.productId);
-    const { data: products } = await supabase.from('Product').select('id,name').in('id', productIds);
-    const productMap = (products || []).reduce((acc, product) => {
-      acc[product.id] = product;
-      return acc;
-    }, {} as Record<string, any>);
+    // Uma query com joins aninhados: Tab → RestaurantTable + OrderItem → Product
+    const { data: enriched } = await supabase
+      .from('Order')
+      .select('id,status,createdAt,updatedAt,Tab(id,tableId,RestaurantTable(id,name)),OrderItem(id,productId,quantity,unitPrice,note,Product(id,name))')
+      .eq('id', updated.id)
+      .single();
 
-    const orderItems = (items || []).map((item) => ({
+    const tab = (enriched as any)?.Tab ?? null;
+    const table = tab?.RestaurantTable ?? null;
+    const orderItems = ((enriched as any)?.OrderItem ?? []).map((item: any) => ({
       id: item.id,
       productId: item.productId,
-      productName: productMap[item.productId]?.name ?? '',
+      productName: item.Product?.name ?? '',
       quantity: item.quantity,
       unitPrice: Number(item.unitPrice),
-      note: item.note ?? undefined
+      note: item.note ?? undefined,
     }));
 
     return {
@@ -1325,7 +1324,7 @@ export const api = {
       status: updated.status,
       createdAt: updated.createdAt,
       updatedAt: updated.updatedAt,
-      items: orderItems
+      items: orderItems,
     };
   },
 
@@ -1344,21 +1343,20 @@ export const api = {
       throw new Error('Comanda não encontrada ou já encerrada.');
     }
 
-    const { data: orderItems, error: orderItemError } = await supabase
-      .from('OrderItem')
-      .select('quantity,unitPrice')
-      .in('orderId', (
-        await supabase.from('Order').select('id').eq('tabId', tabId)
-      ).data?.map((order) => order.id) ?? []);
+    // Uma única query para buscar orders + items (evita N+1)
+    const { data: tabOrders, error: ordersError } = await supabase
+      .from('Order')
+      .select('id, OrderItem(quantity, unitPrice)')
+      .eq('tabId', tabId);
+    if (ordersError) throwSupabaseError(ordersError, 'Falha ao carregar pedidos da comanda.');
 
-    if (orderItemError) {
-      throwSupabaseError(orderItemError, 'Falha ao carregar itens do pedido.');
-    }
+    const orderIds = (tabOrders ?? []).map((o) => o.id);
+    const orderItems = (tabOrders ?? []).flatMap((o) => (o as any).OrderItem ?? []);
 
-    const subtotal = (orderItems || []).reduce((sum, item) => sum + Number(item.unitPrice) * item.quantity, 0);
+    const subtotal = orderItems.reduce((sum: number, item: { quantity: number; unitPrice: string | number }) =>
+      sum + Number(item.unitPrice) * item.quantity, 0);
     const total = subtotal;
 
-    const orderIds = (await supabase.from('Order').select('id').eq('tabId', tabId)).data?.map((order) => order.id) ?? [];
     if (orderIds.length > 0) {
       const { error: updateOrdersError } = await supabase
         .from('Order')
