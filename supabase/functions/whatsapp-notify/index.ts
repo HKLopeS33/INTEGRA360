@@ -69,6 +69,58 @@ Deno.serve(async (req) => {
     const serviceKey  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const admin       = createClient(supabaseUrl, serviceKey);
 
+    // ── Diagnóstico da conta WhatsApp (somente SUPER) ─────────────────────
+    // A resposta do envio (ok + wamid) só confirma que a Meta ACEITOU a
+    // mensagem. Este modo consulta se a conta está apta a ENTREGAR:
+    // health_status (pagamento, número, WABA), token e status dos templates.
+    if (type === 'DIAGNOSTICO') {
+      const callerToken = (req.headers.get('Authorization') ?? '').replace('Bearer ', '').trim();
+      const { data: { user: caller } } = await admin.auth.getUser(callerToken);
+      const { data: callerRow } = caller
+        ? await admin.from('User').select('role').eq('id', caller.id).maybeSingle()
+        : { data: null };
+      if (callerRow?.role !== 'SUPER') return json({ error: 'Acesso negado.' }, 403);
+
+      const graph = async (path: string) => {
+        const sep = path.includes('?') ? '&' : '?';
+        const res = await fetch(`https://graph.facebook.com/v20.0/${path}${sep}access_token=${encodeURIComponent(waAccessToken)}`);
+        return res.json().catch(() => ({}));
+      };
+
+      const phone = await graph(
+        `${waPhoneNumberId}?fields=display_phone_number,verified_name,status,quality_rating,name_status,messaging_limit_tier,health_status`,
+      );
+      const tokenInfo = (await graph(`debug_token?input_token=${encodeURIComponent(waAccessToken)}`))?.data ?? {};
+      const wabaIds: string[] = (tokenInfo.granular_scopes ?? [])
+        .filter((s: any) => s.scope === 'whatsapp_business_messaging')
+        .flatMap((s: any) => s.target_ids ?? []);
+
+      const templates: unknown[] = [];
+      for (const wabaId of wabaIds) {
+        const list = await graph(`${wabaId}/message_templates?fields=name,status,category,language,quality_score&limit=200`);
+        for (const t of list?.data ?? []) {
+          if (t.name === 'novo_pedido_delivery' || t.name === 'saque_carteira_solicitado') templates.push({ wabaId, ...t });
+        }
+      }
+
+      // Envio para o próprio número da empresa é aceito pela Meta mas nunca entregue
+      const senderDigits = String(phone?.display_phone_number ?? '').replace(/\D/g, '');
+      const sameAsSupport = senderDigits.length > 0 &&
+        (senderDigits === '5587999710850' || senderDigits === '558799710850');
+
+      return json({
+        numeroQueEnvia: phone,
+        enviaParaSiMesmo: sameAsSupport,
+        token: {
+          valido: tokenInfo.is_valid,
+          expiraEm: tokenInfo.expires_at ? new Date(tokenInfo.expires_at * 1000).toISOString() : 'nunca',
+          escopos: tokenInfo.scopes,
+          wabaIds,
+        },
+        templates,
+      });
+    }
+
     // ── Notificação de saque solicitado (vai para o suporte Integra360) ──
     if (type === 'SAQUE_SOLICITADO') {
       const SUPORTE_PHONE = '5587999710850';
