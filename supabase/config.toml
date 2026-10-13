@@ -11,3 +11,8 @@ verify_jwt = false
 
 [functions.mercado-pago-webhook]
 verify_jwt = false
+
+# Chamada pelo cardápio público com a chave publishable (não é JWT).
+# O modo DIAGNOSTICO valida o usuário SUPER dentro da própria função.
+[functions.whatsapp-notify]
+verify_jwt = false
