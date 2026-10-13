@@ -131,28 +131,46 @@ Deno.serve(async (req) => {
     if (type === 'SAQUE_SOLICITADO') {
       const SUPORTE_PHONE = '5587999710850';
 
-      // Buscar dados do saque se withdrawalId fornecido
-      let saqueAmountVal = amount ?? 0;
-      let companyName = 'Estabelecimento';
+      // Segurança: cada mensagem tem custo na Meta, então só dispara para um
+      // saque real, recém-solicitado, pelo gestor da própria empresa.
+      const callerToken = (req.headers.get('Authorization') ?? '').replace('Bearer ', '').trim();
+      const { data: { user: caller } } = await admin.auth.getUser(callerToken);
+      if (!caller) return json({ error: 'Não autenticado.' }, 401);
+      if (!withdrawalId) return json({ error: 'withdrawalId obrigatório.' }, 400);
 
-      if (withdrawalId) {
-        const { data: withdrawal } = await admin
-          .from('WalletWithdrawal')
-          .select('amount, companyId')
-          .eq('id', withdrawalId)
-          .maybeSingle();
-        if (withdrawal?.amount) saqueAmountVal = Number(withdrawal.amount);
-        if (withdrawal?.companyId) {
-          const { data: company } = await admin
-            .from('Company')
-            .select('name')
-            .eq('id', withdrawal.companyId)
-            .maybeSingle();
-          if (company?.name) companyName = company.name;
-        }
+      const { data: withdrawal } = await admin
+        .from('WalletWithdrawal')
+        .select('amount, companyId, status, requestedAt')
+        .eq('id', withdrawalId)
+        .maybeSingle();
+      if (!withdrawal) return json({ error: 'Saque não encontrado.' }, 404);
+
+      const { data: callerRow } = await admin
+        .from('User')
+        .select('role, companyId')
+        .eq('id', caller.id)
+        .maybeSingle();
+      const isOwnCompanyManager = callerRow?.companyId === withdrawal.companyId &&
+        (callerRow?.role === 'ADMIN' || callerRow?.role === 'GERENTE');
+      if (!isOwnCompanyManager && callerRow?.role !== 'SUPER') {
+        return json({ error: 'Acesso negado.' }, 403);
       }
 
-      const saqueAmount = formatCurrency(Number(saqueAmountVal));
+      // Evita reenvio repetido do mesmo saque (só notifica nos primeiros 10 min)
+      const ageMs = Date.now() - new Date(withdrawal.requestedAt).getTime();
+      if (withdrawal.status !== 'SOLICITADO' || ageMs > 10 * 60 * 1000) {
+        return json({ ok: false, reason: 'saque_ja_notificado_ou_expirado' });
+      }
+
+      const { data: company } = await admin
+        .from('Company')
+        .select('name')
+        .eq('id', withdrawal.companyId)
+        .maybeSingle();
+      const companyName = company?.name ?? 'Estabelecimento';
+
+      // Valor sempre do banco — o "amount" do corpo da requisição é ignorado
+      const saqueAmount = formatCurrency(Number(withdrawal.amount));
 
       const metaRes = await fetch(
         `https://graph.facebook.com/v20.0/${waPhoneNumberId}/messages`,
