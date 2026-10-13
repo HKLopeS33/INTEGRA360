@@ -24,7 +24,8 @@ async function verifyMpSignature(req: Request, rawBody: string): Promise<boolean
   const xSignature = req.headers.get('x-signature');
   const xRequestId = req.headers.get('x-request-id');
   const url        = new URL(req.url);
-  const dataId     = url.searchParams.get('data.id') ?? url.searchParams.get('id');
+  // A doc do MP exige o data.id em minúsculas quando for alfanumérico
+  const dataId     = (url.searchParams.get('data.id') ?? url.searchParams.get('id'))?.toLowerCase() ?? null;
 
   if (!xSignature) {
     console.warn('Webhook sem x-signature rejeitado');
@@ -77,7 +78,10 @@ Deno.serve(async (req) => {
       return new Response('invalid signature', { status: 401, headers: corsHeaders });
     }
 
-    const body = JSON.parse(rawBody || '{}');
+    // Corpo inválido não pode derrubar a notificação: o formato ?topic=payment&id=
+    // traz tudo na URL (mesmo comportamento do antigo req.json().catch(() => ({})))
+    let body: any = {};
+    try { body = JSON.parse(rawBody || '{}'); } catch { body = {}; }
 
     // Mercado Pago sends either ?topic=payment&id=123 or { type: 'payment', data: { id } }
     const paymentId =
